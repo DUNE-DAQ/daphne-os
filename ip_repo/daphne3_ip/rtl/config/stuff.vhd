@@ -41,7 +41,19 @@ port(
     stat_led: out std_logic_vector(5 downto 0); -- general purpose LEDs
     version: in std_logic_vector(27 downto 0); -- GIT version number
     core_chan_enable: out std_logic_vector(39 downto 0); -- channel enables for self-trig core
-  
+    adhoc: out std_logic_vector(7 downto 0); -- command for adhoc trigger
+    st_config: out std_logic_vector(13 downto 0); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+    signal_delay: out std_logic_vector(4 downto 0); -- amount of delays to set for Self Trigger Latency (8 x signal_delay, signal delay is from 0 to 31 tics)
+    threshold_xc: out std_logic_vector(41 downto 0); -- cross correlation trigger threshold 
+    filter_output_selector: out std_logic_vector(1 downto 0); --Esteban 
+    -- ti_trigger: out std_logic_vector(7 downto 0); -------------------------
+    -- ti_trigger_stbr: out std_logic;  -------------------------
+    reset_st_counters: out std_logic; -- reset for self trigger counter flags
+    afe_comp_enable: out std_logic_vector(39 downto 0); -- enable digital afe compensator
+    invert_enable: out std_logic_vector(39 downto 0); -- invert signal polarity
+    TCount: in array_40x64_type; -- array of number of trigger in self trigger mode per channel
+    Pcount: in array_40x64_type; -- array of total self trigger frames per channel
+
     -- AXI-LITE interface
 
 	S_AXI_ACLK	    : in std_logic; -- assume this is 100MHz
@@ -86,6 +98,17 @@ architecture stuff_arch of stuff is
 	signal reg_wren: std_logic;
 	signal reg_data_out:std_logic_vector(31 downto 0);
 	signal aw_en: std_logic;
+
+  signal adhoc_reg: std_logic_vector(7 downto 0) := (others => '0'); -- command for ad hoc trigger
+  signal st_config_reg: std_logic_vector(13 downto 0) := (others => '0'); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+  signal signal_delay_reg: std_logic_vector(4 downto 0) := (others => '0');
+  signal threshold_xc_reg: std_logic_vector(41 downto 0) := (others => '0'); -- trig threshold relative to calculated baseline
+  signal filter_output_selector_reg: std_logic_vector(1 downto 0) := (others => '0'); --Esteban
+  signal reset_st_counters_reg: std_logic := '0';
+  signal afe_comp_enable_reg: std_logic_vector(39 downto 0) := (others => '0');
+  signal invert_enable_reg: std_logic_vector(39 downto 0) := (others => '0');
+  signal TCount_reg: array_40x64_type := (others => (others => '0')); 
+  signal Pcount_reg: array_40x64_type := (others => (others => '0')); 
    
     component fanmon is
     port(
@@ -108,16 +131,188 @@ architecture stuff_arch of stuff is
 
     -- register offsets are relative to the base address specified for this AXI-LITE slave instance
 
-    constant FANCTRL_OFFSET:    std_logic_vector(5 downto 0) := "000000"; -- base+0
-    constant FAN0SPD_OFFSET:    std_logic_vector(5 downto 0) := "000100"; -- base+4
-    constant FAN1SPD_OFFSET:    std_logic_vector(5 downto 0) := "001000"; -- base+8
-    constant HVBIAS_OFFSET:     std_logic_vector(5 downto 0) := "001100"; -- base+12
-    constant MUXEN_OFFSET:      std_logic_vector(5 downto 0) := "010000"; -- base+16
-    constant MUXA_OFFSET:       std_logic_vector(5 downto 0) := "010100"; -- base+20
-    constant LED_OFFSET:        std_logic_vector(5 downto 0) := "011000"; -- base+24
-    constant VER_OFFSET:        std_logic_vector(5 downto 0) := "011100"; -- base+28
-    constant CORE_EN_LO_OFFSET: std_logic_vector(5 downto 0) := "100000"; -- base+32
-    constant CORE_EN_HI_OFFSET: std_logic_vector(5 downto 0) := "100100"; -- base+36
+    constant FANCTRL_OFFSET:                   std_logic_vector(6 downto 0) := "0000000"; -- base+0
+    constant FAN0SPD_OFFSET:                   std_logic_vector(6 downto 0) := "0000100"; -- base+4
+    constant FAN1SPD_OFFSET:                   std_logic_vector(6 downto 0) := "0001000"; -- base+8
+    constant HVBIAS_OFFSET:                    std_logic_vector(6 downto 0) := "0001100"; -- base+12
+    constant MUXEN_OFFSET:                     std_logic_vector(6 downto 0) := "0010000"; -- base+16
+    constant MUXA_OFFSET:                      std_logic_vector(6 downto 0) := "0010100"; -- base+20
+    constant LED_OFFSET:                       std_logic_vector(6 downto 0) := "0011000"; -- base+24
+    constant VER_OFFSET:                       std_logic_vector(6 downto 0) := "0011100"; -- base+28
+    constant CORE_EN_LO_OFFSET:                std_logic_vector(6 downto 0) := "0100000"; -- base+32
+    constant CORE_EN_HI_OFFSET:                std_logic_vector(6 downto 0) := "0100100"; -- base+36
+
+    constant ST_ADHOC_OFFSET:                  std_logic_vector(6 downto 0) := "0101000"; --base+40
+    constant ST_CONFIG_OFFSET:                 std_logic_vector(6 downto 0) := "0101100"; -- base+44
+    constant ST_DELAY_OFFSET:                  std_logic_vector(6 downto 0) := "0110000"; -- base+48
+    constant ST_THRESHOLD_XC_LO_OFFSET:        std_logic_vector(6 downto 0) := "0110100"; -- base+52
+    constant ST_THRESHOLD_XC_HI_OFFSET:        std_logic_vector(6 downto 0) := "0111000"; -- base+56
+    constant ST_FILTER_OUTPUT_SELECTOR_OFFSET: std_logic_vector(6 downto 0) := "0111100"; -- base+60
+    constant ST_RESET_COUNTERS_OFFSET:         std_logic_vector(6 downto 0) := "1000000"; -- base+64
+    constant ST_AFE_COMP_ENABLE_LO_OFFSET:     std_logic_vector(6 downto 0) := "1000100"; -- base+68
+    constant ST_AFE_COMP_ENABLE_HI_OFFSET:     std_logic_vector(6 downto 0) := "1001000"; -- base+72
+    constant ST_INVERT_ENABLE_LO_OFFSET:       std_logic_vector(6 downto 0) := "1001100"; -- base+76
+    constant ST_INVERT_ENABLE_HI_OFFSET:       std_logic_vector(6 downto 0) := "1010000"; -- base+80
+    constant ST_PCOUNT_CH00_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001010100"; -- base+84
+    constant ST_PCOUNT_CH00_HI_OFFSET:         std_logic_vector(9 downto 0) := "0001011000"; -- base+88
+    constant ST_PCOUNT_CH01_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001011100"; -- base+92
+    constant ST_PCOUNT_CH01_HI_OFFSET:         std_logic_vector(9 downto 0) := "0001100000"; -- base+96
+    constant ST_PCOUNT_CH02_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001100100"; -- base+100
+    constant ST_PCOUNT_CH02_HI_OFFSET:         std_logic_vector(9 downto 0) := "0001101000"; -- base+104
+    constant ST_PCOUNT_CH03_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001101100"; -- base+108
+    constant ST_PCOUNT_CH03_HI_OFFSET:         std_logic_vector(9 downto 0) := "0001110000"; -- base+112
+    constant ST_PCOUNT_CH04_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001110100"; -- base+116
+    constant ST_PCOUNT_CH04_HI_OFFSET:         std_logic_vector(9 downto 0) := "0001111000"; -- base+120
+    constant ST_PCOUNT_CH05_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001111100"; -- base+124
+    constant ST_PCOUNT_CH05_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010000000"; -- base+128
+    constant ST_PCOUNT_CH06_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010000100"; -- base+132
+    constant ST_PCOUNT_CH06_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010001000"; -- base+136
+    constant ST_PCOUNT_CH07_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010001100"; -- base+140
+    constant ST_PCOUNT_CH07_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010010000"; -- base+144
+    constant ST_PCOUNT_CH08_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010010100"; -- base+148
+    constant ST_PCOUNT_CH08_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010011000"; -- base+152
+    constant ST_PCOUNT_CH09_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010011100"; -- base+156
+    constant ST_PCOUNT_CH09_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010100000"; -- base+160
+    constant ST_PCOUNT_CH10_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010100100"; -- base+164
+    constant ST_PCOUNT_CH10_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010101000"; -- base+168
+    constant ST_PCOUNT_CH11_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010101100"; -- base+172
+    constant ST_PCOUNT_CH11_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010110000"; -- base+176
+    constant ST_PCOUNT_CH12_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010110100"; -- base+180
+    constant ST_PCOUNT_CH12_HI_OFFSET:         std_logic_vector(9 downto 0) := "0010111000"; -- base+184
+    constant ST_PCOUNT_CH13_LO_OFFSET:         std_logic_vector(9 downto 0) := "0010111100"; -- base+188
+    constant ST_PCOUNT_CH13_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011000000"; -- base+192
+    constant ST_PCOUNT_CH14_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011000100"; -- base+196
+    constant ST_PCOUNT_CH14_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011001000"; -- base+200
+    constant ST_PCOUNT_CH15_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011001100"; -- base+204
+    constant ST_PCOUNT_CH15_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011010000"; -- base+208
+    constant ST_PCOUNT_CH16_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011010100"; -- base+212
+    constant ST_PCOUNT_CH16_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011011000"; -- base+216
+    constant ST_PCOUNT_CH17_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011011100"; -- base+220
+    constant ST_PCOUNT_CH17_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011100000"; -- base+224
+    constant ST_PCOUNT_CH18_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011100100"; -- base+228
+    constant ST_PCOUNT_CH18_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011101000"; -- base+232
+    constant ST_PCOUNT_CH19_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011101100"; -- base+236
+    constant ST_PCOUNT_CH19_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011110000"; -- base+240
+    constant ST_PCOUNT_CH20_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011110100"; -- base+244
+    constant ST_PCOUNT_CH20_HI_OFFSET:         std_logic_vector(9 downto 0) := "0011111000"; -- base+248
+    constant ST_PCOUNT_CH21_LO_OFFSET:         std_logic_vector(9 downto 0) := "0011111100"; -- base+252
+    constant ST_PCOUNT_CH21_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100000000"; -- base+256
+    constant ST_PCOUNT_CH22_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100000100"; -- base+260
+    constant ST_PCOUNT_CH22_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100001000"; -- base+264
+    constant ST_PCOUNT_CH23_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100001100"; -- base+268
+    constant ST_PCOUNT_CH23_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100010000"; -- base+272
+    constant ST_PCOUNT_CH24_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100010100"; -- base+276
+    constant ST_PCOUNT_CH24_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100011000"; -- base+280
+    constant ST_PCOUNT_CH25_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100011100"; -- base+284
+    constant ST_PCOUNT_CH25_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100100000"; -- base+288
+    constant ST_PCOUNT_CH26_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100100100"; -- base+292
+    constant ST_PCOUNT_CH26_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100101000"; -- base+296
+    constant ST_PCOUNT_CH27_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100101100"; -- base+300
+    constant ST_PCOUNT_CH27_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100110000"; -- base+304
+    constant ST_PCOUNT_CH28_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100110100"; -- base+308
+    constant ST_PCOUNT_CH28_HI_OFFSET:         std_logic_vector(9 downto 0) := "0100111000"; -- base+312
+    constant ST_PCOUNT_CH29_LO_OFFSET:         std_logic_vector(9 downto 0) := "0100111100"; -- base+316
+    constant ST_PCOUNT_CH29_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101000000"; -- base+320
+    constant ST_PCOUNT_CH30_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101000100"; -- base+324
+    constant ST_PCOUNT_CH30_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101001000"; -- base+328
+    constant ST_PCOUNT_CH31_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101001100"; -- base+332
+    constant ST_PCOUNT_CH31_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101010000"; -- base+336
+    constant ST_PCOUNT_CH32_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101010100"; -- base+340
+    constant ST_PCOUNT_CH32_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101011000"; -- base+344
+    constant ST_PCOUNT_CH33_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101011100"; -- base+348
+    constant ST_PCOUNT_CH33_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101100000"; -- base+352
+    constant ST_PCOUNT_CH34_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101100100"; -- base+356
+    constant ST_PCOUNT_CH34_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101101000"; -- base+360
+    constant ST_PCOUNT_CH35_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101101100"; -- base+364
+    constant ST_PCOUNT_CH35_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101110000"; -- base+368
+    constant ST_PCOUNT_CH36_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101110100"; -- base+372
+    constant ST_PCOUNT_CH36_HI_OFFSET:         std_logic_vector(9 downto 0) := "0101111000"; -- base+376
+    constant ST_PCOUNT_CH37_LO_OFFSET:         std_logic_vector(9 downto 0) := "0101111100"; -- base+380
+    constant ST_PCOUNT_CH37_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110000000"; -- base+384
+    constant ST_PCOUNT_CH38_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110000100"; -- base+388
+    constant ST_PCOUNT_CH38_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110001000"; -- base+392
+    constant ST_PCOUNT_CH39_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110001100"; -- base+396
+    constant ST_PCOUNT_CH39_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110010000"; -- base+400
+    constant ST_TCOUNT_CH00_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110010100"; -- base+404
+    constant ST_TCOUNT_CH00_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110011000"; -- base+408
+    constant ST_TCOUNT_CH01_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110011100"; -- base+412
+    constant ST_TCOUNT_CH01_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110100000"; -- base+416
+    constant ST_TCOUNT_CH02_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110100100"; -- base+420
+    constant ST_TCOUNT_CH02_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110101000"; -- base+424
+    constant ST_TCOUNT_CH03_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110101100"; -- base+428
+    constant ST_TCOUNT_CH03_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110110000"; -- base+432
+    constant ST_TCOUNT_CH04_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110110100"; -- base+436
+    constant ST_TCOUNT_CH04_HI_OFFSET:         std_logic_vector(9 downto 0) := "0110111000"; -- base+440
+    constant ST_TCOUNT_CH05_LO_OFFSET:         std_logic_vector(9 downto 0) := "0110111100"; -- base+444
+    constant ST_TCOUNT_CH05_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111000000"; -- base+448
+    constant ST_TCOUNT_CH06_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111000100"; -- base+452
+    constant ST_TCOUNT_CH06_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111001000"; -- base+456
+    constant ST_TCOUNT_CH07_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111001100"; -- base+460
+    constant ST_TCOUNT_CH07_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111010000"; -- base+464
+    constant ST_TCOUNT_CH08_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111010100"; -- base+468
+    constant ST_TCOUNT_CH08_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111011000"; -- base+472
+    constant ST_TCOUNT_CH09_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111011100"; -- base+476
+    constant ST_TCOUNT_CH09_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111100000"; -- base+480
+    constant ST_TCOUNT_CH10_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111100100"; -- base+484
+    constant ST_TCOUNT_CH10_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111101000"; -- base+488
+    constant ST_TCOUNT_CH11_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111101100"; -- base+492
+    constant ST_TCOUNT_CH11_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111110000"; -- base+496
+    constant ST_TCOUNT_CH12_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111110100"; -- base+500
+    constant ST_TCOUNT_CH12_HI_OFFSET:         std_logic_vector(9 downto 0) := "0111111000"; -- base+504
+    constant ST_TCOUNT_CH13_LO_OFFSET:         std_logic_vector(9 downto 0) := "0111111100"; -- base+508
+    constant ST_TCOUNT_CH13_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000000000"; -- base+512
+    constant ST_TCOUNT_CH14_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000000100"; -- base+516
+    constant ST_TCOUNT_CH14_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000001000"; -- base+520
+    constant ST_TCOUNT_CH15_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000001100"; -- base+524
+    constant ST_TCOUNT_CH15_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000010000"; -- base+528
+    constant ST_TCOUNT_CH16_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000010100"; -- base+532
+    constant ST_TCOUNT_CH16_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000011000"; -- base+536
+    constant ST_TCOUNT_CH17_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000011100"; -- base+540
+    constant ST_TCOUNT_CH17_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000100000"; -- base+544
+    constant ST_TCOUNT_CH18_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000100100"; -- base+548
+    constant ST_TCOUNT_CH18_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000101000"; -- base+552
+    constant ST_TCOUNT_CH19_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000101100"; -- base+556
+    constant ST_TCOUNT_CH19_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000110000"; -- base+560
+    constant ST_TCOUNT_CH20_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000110100"; -- base+564
+    constant ST_TCOUNT_CH20_HI_OFFSET:         std_logic_vector(9 downto 0) := "1000111000"; -- base+568
+    constant ST_TCOUNT_CH21_LO_OFFSET:         std_logic_vector(9 downto 0) := "1000111100"; -- base+572
+    constant ST_TCOUNT_CH21_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001000000"; -- base+576
+    constant ST_TCOUNT_CH22_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001000100"; -- base+580
+    constant ST_TCOUNT_CH22_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001001000"; -- base+584
+    constant ST_TCOUNT_CH23_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001001100"; -- base+588
+    constant ST_TCOUNT_CH23_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001010000"; -- base+592
+    constant ST_TCOUNT_CH24_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001010100"; -- base+596
+    constant ST_TCOUNT_CH24_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001011000"; -- base+600
+    constant ST_TCOUNT_CH25_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001011100"; -- base+604
+    constant ST_TCOUNT_CH25_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001100000"; -- base+608
+    constant ST_TCOUNT_CH26_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001100100"; -- base+612
+    constant ST_TCOUNT_CH26_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001101000"; -- base+616
+    constant ST_TCOUNT_CH27_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001101100"; -- base+620
+    constant ST_TCOUNT_CH27_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001110000"; -- base+624
+    constant ST_TCOUNT_CH28_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001110100"; -- base+628
+    constant ST_TCOUNT_CH28_HI_OFFSET:         std_logic_vector(9 downto 0) := "1001111000"; -- base+632
+    constant ST_TCOUNT_CH29_LO_OFFSET:         std_logic_vector(9 downto 0) := "1001111100"; -- base+636
+    constant ST_TCOUNT_CH29_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010000000"; -- base+640
+    constant ST_TCOUNT_CH30_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010000100"; -- base+644
+    constant ST_TCOUNT_CH30_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010001000"; -- base+648
+    constant ST_TCOUNT_CH31_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010001100"; -- base+652
+    constant ST_TCOUNT_CH31_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010010000"; -- base+656
+    constant ST_TCOUNT_CH32_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010010100"; -- base+660
+    constant ST_TCOUNT_CH32_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010011000"; -- base+664
+    constant ST_TCOUNT_CH33_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010011100"; -- base+668
+    constant ST_TCOUNT_CH33_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010100000"; -- base+672
+    constant ST_TCOUNT_CH34_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010100100"; -- base+676
+    constant ST_TCOUNT_CH34_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010101000"; -- base+680
+    constant ST_TCOUNT_CH35_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010101100"; -- base+684
+    constant ST_TCOUNT_CH35_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010110000"; -- base+688
+    constant ST_TCOUNT_CH36_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010110100"; -- base+692
+    constant ST_TCOUNT_CH36_HI_OFFSET:         std_logic_vector(9 downto 0) := "1010111000"; -- base+696
+    constant ST_TCOUNT_CH37_LO_OFFSET:         std_logic_vector(9 downto 0) := "1010111100"; -- base+700
+    constant ST_TCOUNT_CH37_HI_OFFSET:         std_logic_vector(9 downto 0) := "1011000000"; -- base+704
+    constant ST_TCOUNT_CH38_LO_OFFSET:         std_logic_vector(9 downto 0) := "1011000100"; -- base+708
+    constant ST_TCOUNT_CH38_HI_OFFSET:         std_logic_vector(9 downto 0) := "1011001000"; -- base+712
+    constant ST_TCOUNT_CH39_LO_OFFSET:         std_logic_vector(9 downto 0) := "1011001100"; -- base+716
+    constant ST_TCOUNT_CH39_HI_OFFSET:         std_logic_vector(9 downto 0) := "1011010000"; -- base+720
 
 begin
 
@@ -274,7 +469,7 @@ begin
         -- treat all of these register writes as if they are full 32 bits
         -- e.g. the four write strobe bits should be high
 
-        case ( axi_awaddr(5 downto 0) ) is
+        case ( axi_awaddr(6 downto 0) ) is
 
           when FANCTRL_OFFSET => 
             fan_speed_reg <= S_AXI_WDATA(7 downto 0);
@@ -296,6 +491,39 @@ begin
 
           when CORE_EN_HI_OFFSET => 
             core_enable_reg(39 downto 32) <= S_AXI_WDATA(7 downto 0);
+
+          when ST_ADHOC_OFFSET =>
+            adhoc_reg <= S_AXI_WDATA(7 downto 0);
+
+          when ST_CONFIG_OFFSET =>
+            st_config_reg <= S_AXI_WDATA(13 downto 0);
+
+          when ST_DELAY_OFFSET => 
+            signal_delay_reg <= S_AXI_WDATA(4 downto 0);
+
+          when ST_THRESHOLD_XC_LO_OFFSET => 
+            threshold_xc_reg(31 downto 0) <= S_AXI_WDATA(31 downto 0);
+
+          when ST_THRESHOLD_XC_HI_OFFSET =>
+            threshold_xc_reg(41 downto 32) <= S_AXI_WDATA(9 downto 0);
+
+          when ST_FILTER_OUTPUT_SELECTOR_OFFSET => 
+            filter_output_selector_reg <= S_AXI_WDATA(1 downto 0);
+
+          when ST_RESET_COUNTERS_OFFSET => 
+            reset_st_counters_reg <= S_AXI_WDATA(0);
+
+          when ST_AFE_COMP_ENABLE_LO_OFFSET => 
+            afe_comp_enable_reg(31 downto 0) <= S_AXI_WDATA(31 downto 0);
+
+          when ST_AFE_COMP_ENABLE_HI_OFFSET =>
+            afe_comp_enable_reg(39 downto 32) <= S_AXI_WDATA(7 downto 0);
+
+          when ST_INVERT_ENABLE_LO_OFFSET => 
+            invert_enable_reg(31 downto 0) <= S_AXI_WDATA(31 downto 0);
+
+          when ST_INVERT_ENABLE_HI_OFFSET =>
+            invert_enable_reg(39 downto 32) <= S_AXI_WDATA(7 downto 0);        
 
           when others =>
             null;
@@ -391,16 +619,190 @@ end process;
 
 reg_rden <= axi_arready and S_AXI_ARVALID and (not axi_rvalid) ;
 
-reg_data_out <= (X"000000" & fan_speed_reg)                    when (axi_araddr(5 downto 0)=FANCTRL_OFFSET) else
-                (X"00000" & fan0_rpm)                          when (axi_araddr(5 downto 0)=FAN0SPD_OFFSET) else
-                (X"00000" & fan1_rpm)                          when (axi_araddr(5 downto 0)=FAN1SPD_OFFSET) else
-                (X"0000000" & "000" & hvbias_en_reg)           when (axi_araddr(5 downto 0)=HVBIAS_OFFSET) else
-                (X"0000000" & "00" & mux_en_reg)               when (axi_araddr(5 downto 0)=MUXEN_OFFSET) else
-                (X"0000000" & "00" & mux_a_reg)                when (axi_araddr(5 downto 0)=MUXA_OFFSET) else
-                (X"000000" & "00" & stat_led_reg)              when (axi_araddr(5 downto 0)=LED_OFFSET) else
-                ("0000" & version)                             when (axi_araddr(5 downto 0)=VER_OFFSET) else
-                core_enable_reg(31 downto 0)                   when (axi_araddr(5 downto 0)=CORE_EN_LO_OFFSET) else
-                (X"000000" & core_enable_reg(39 downto 32))    when (axi_araddr(5 downto 0)=CORE_EN_HI_OFFSET) else
+reg_data_out <= (X"000000" & fan_speed_reg)                        when (axi_araddr(5 downto 0)=FANCTRL_OFFSET) else
+                (X"00000" & fan0_rpm)                              when (axi_araddr(5 downto 0)=FAN0SPD_OFFSET) else
+                (X"00000" & fan1_rpm)                              when (axi_araddr(5 downto 0)=FAN1SPD_OFFSET) else
+                (X"0000000" & "000" & hvbias_en_reg)               when (axi_araddr(5 downto 0)=HVBIAS_OFFSET) else
+                (X"0000000" & "00" & mux_en_reg)                   when (axi_araddr(5 downto 0)=MUXEN_OFFSET) else
+                (X"0000000" & "00" & mux_a_reg)                    when (axi_araddr(5 downto 0)=MUXA_OFFSET) else
+                (X"000000" & "00" & stat_led_reg)                  when (axi_araddr(5 downto 0)=LED_OFFSET) else
+                ("0000" & version)                                 when (axi_araddr(5 downto 0)=VER_OFFSET) else
+                core_enable_reg(31 downto 0)                       when (axi_araddr(5 downto 0)=CORE_EN_LO_OFFSET) else
+                (X"000000" & core_enable_reg(39 downto 32))        when (axi_araddr(5 downto 0)=CORE_EN_HI_OFFSET) else
+                (X"000000" & adhoc_reg)                            when (axi_araddr(6 downto 0)=ST_ADHOC_OFFSET) else
+                (X"0000" & "00" & st_config_reg)                   when (axi_araddr(6 downto 0)=ST_CONFIG_OFFSET) else
+                (X"000000" & "000" & signal_delay_reg)             when (axi_araddr(6 downto 0)=ST_DELAY_OFFSET) else
+                (threshold_xc_reg(31 downto 0))                    when (axi_araddr(6 downto 0)=ST_THRESHOLD_XC_LO_OFFSET) else
+                (X"00000" & "00" & threshold_xc_reg(41 downto 32)) when (axi_araddr(6 downto 0)=ST_THRESHOLD_XC_HI_OFFSET) else
+                (X"0000000" & "00" & filter_output_selector_reg)   when (axi_araddr(6 downto 0)=ST_FILTER_OUTPUT_SELECTOR_OFFSET) else
+                (X"0000000" & "000" & reset_st_counters_reg)       when (axi_araddr(6 downto 0)=ST_RESET_COUNTERS_OFFSET) else
+                (afe_comp_enable_reg(31 downto 0))                 when (axi_araddr(6 downto 0)=ST_AFE_COMP_ENABLE_LO_OFFSET) else
+                (X"000000" & afe_comp_enable_reg(39 downto 32))    when (axi_araddr(6 downto 0)=ST_AFE_COMP_ENABLE_HI_OFFSET) else
+                (invert_enable_reg(31 downto 0))                   when (axi_araddr(6 downto 0)=ST_INVERT_ENABLE_LO_OFFSET) else
+                (X"000000" & invert_enable_reg(39 downto 32))      when (axi_araddr(6 downto 0)=ST_INVERT_ENABLE_HI_OFFSET) else
+                
+                (PCount_reg(0)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH00_LO_OFFSET) else
+                (PCount_reg(0)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH00_HI_OFFSET) else
+                (PCount_reg(1)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH01_LO_OFFSET) else
+                (PCount_reg(1)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH01_HI_OFFSET) else
+                (PCount_reg(2)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH02_LO_OFFSET) else
+                (PCount_reg(2)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH02_HI_OFFSET) else
+                (PCount_reg(3)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH03_LO_OFFSET) else
+                (PCount_reg(3)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH03_HI_OFFSET) else
+                (PCount_reg(4)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH04_LO_OFFSET) else
+                (PCount_reg(4)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH04_HI_OFFSET) else
+                (PCount_reg(5)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH05_LO_OFFSET) else
+                (PCount_reg(5)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH05_HI_OFFSET) else
+                (PCount_reg(6)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH06_LO_OFFSET) else
+                (PCount_reg(6)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH06_HI_OFFSET) else
+                (PCount_reg(7)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH07_LO_OFFSET) else
+                (PCount_reg(7)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH07_HI_OFFSET) else
+                (PCount_reg(8)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH08_LO_OFFSET) else
+                (PCount_reg(8)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH08_HI_OFFSET) else
+                (PCount_reg(9)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH09_LO_OFFSET) else
+                (PCount_reg(9)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH09_HI_OFFSET) else
+                (PCount_reg(10)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH10_LO_OFFSET) else
+                (PCount_reg(10)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH10_HI_OFFSET) else
+                (PCount_reg(11)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH11_LO_OFFSET) else
+                (PCount_reg(11)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH11_HI_OFFSET) else
+                (PCount_reg(12)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH12_LO_OFFSET) else
+                (PCount_reg(12)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH12_HI_OFFSET) else
+                (PCount_reg(13)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH13_LO_OFFSET) else
+                (PCount_reg(13)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH13_HI_OFFSET) else
+                (PCount_reg(14)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH14_LO_OFFSET) else
+                (PCount_reg(14)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH14_HI_OFFSET) else
+                (PCount_reg(15)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH15_LO_OFFSET) else
+                (PCount_reg(15)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH15_HI_OFFSET) else
+                (PCount_reg(16)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH16_LO_OFFSET) else
+                (PCount_reg(16)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH16_HI_OFFSET) else
+                (PCount_reg(17)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH17_LO_OFFSET) else
+                (PCount_reg(17)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH17_HI_OFFSET) else
+                (PCount_reg(18)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH18_LO_OFFSET) else
+                (PCount_reg(18)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH18_HI_OFFSET) else
+                (PCount_reg(19)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH19_LO_OFFSET) else
+                (PCount_reg(19)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH19_HI_OFFSET) else
+                (PCount_reg(20)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH20_LO_OFFSET) else
+                (PCount_reg(20)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH20_HI_OFFSET) else
+                (PCount_reg(21)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH21_LO_OFFSET) else
+                (PCount_reg(21)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH21_HI_OFFSET) else
+                (PCount_reg(22)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH22_LO_OFFSET) else
+                (PCount_reg(22)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH22_HI_OFFSET) else
+                (PCount_reg(23)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH23_LO_OFFSET) else
+                (PCount_reg(23)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH23_HI_OFFSET) else
+                (PCount_reg(24)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH24_LO_OFFSET) else
+                (PCount_reg(24)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH24_HI_OFFSET) else
+                (PCount_reg(25)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH25_LO_OFFSET) else
+                (PCount_reg(25)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH25_HI_OFFSET) else
+                (PCount_reg(26)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH26_LO_OFFSET) else
+                (PCount_reg(26)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH26_HI_OFFSET) else
+                (PCount_reg(27)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH27_LO_OFFSET) else
+                (PCount_reg(27)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH27_HI_OFFSET) else
+                (PCount_reg(28)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH28_LO_OFFSET) else
+                (PCount_reg(28)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH28_HI_OFFSET) else
+                (PCount_reg(29)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH29_LO_OFFSET) else
+                (PCount_reg(29)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH29_HI_OFFSET) else
+                (PCount_reg(30)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH30_LO_OFFSET) else
+                (PCount_reg(30)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH30_HI_OFFSET) else
+                (PCount_reg(31)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH31_LO_OFFSET) else
+                (PCount_reg(31)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH31_HI_OFFSET) else
+                (PCount_reg(32)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH32_LO_OFFSET) else
+                (PCount_reg(32)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH32_HI_OFFSET) else
+                (PCount_reg(33)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH33_LO_OFFSET) else
+                (PCount_reg(33)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH33_HI_OFFSET) else
+                (PCount_reg(34)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH34_LO_OFFSET) else
+                (PCount_reg(34)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH34_HI_OFFSET) else
+                (PCount_reg(35)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH35_LO_OFFSET) else
+                (PCount_reg(35)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH35_HI_OFFSET) else
+                (PCount_reg(36)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH36_LO_OFFSET) else
+                (PCount_reg(36)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH36_HI_OFFSET) else
+                (PCount_reg(37)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH37_LO_OFFSET) else
+                (PCount_reg(37)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH37_HI_OFFSET) else
+                (PCount_reg(38)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH38_LO_OFFSET) else
+                (PCount_reg(38)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH38_HI_OFFSET) else
+                (PCount_reg(39)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH39_LO_OFFSET) else
+                (PCount_reg(39)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_PCOUNT_CH39_HI_OFFSET) else
+                
+                (TCount_reg(0)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH00_LO_OFFSET) else
+                (TCount_reg(0)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH00_HI_OFFSET) else
+                (TCount_reg(1)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH01_LO_OFFSET) else
+                (TCount_reg(1)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH01_HI_OFFSET) else
+                (TCount_reg(2)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH02_LO_OFFSET) else
+                (TCount_reg(2)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH02_HI_OFFSET) else
+                (TCount_reg(3)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH03_LO_OFFSET) else
+                (TCount_reg(3)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH03_HI_OFFSET) else
+                (TCount_reg(4)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH04_LO_OFFSET) else
+                (TCount_reg(4)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH04_HI_OFFSET) else
+                (TCount_reg(5)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH05_LO_OFFSET) else
+                (TCount_reg(5)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH05_HI_OFFSET) else
+                (TCount_reg(6)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH06_LO_OFFSET) else
+                (TCount_reg(6)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH06_HI_OFFSET) else
+                (TCount_reg(7)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH07_LO_OFFSET) else
+                (TCount_reg(7)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH07_HI_OFFSET) else
+                (TCount_reg(8)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH08_LO_OFFSET) else
+                (TCount_reg(8)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH08_HI_OFFSET) else
+                (TCount_reg(9)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_TCOUNT_CH09_LO_OFFSET) else
+                (TCount_reg(9)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH09_HI_OFFSET) else
+                (TCount_reg(10)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH10_LO_OFFSET) else
+                (TCount_reg(10)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH10_HI_OFFSET) else
+                (TCount_reg(11)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH11_LO_OFFSET) else
+                (TCount_reg(11)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH11_HI_OFFSET) else
+                (TCount_reg(12)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH12_LO_OFFSET) else
+                (TCount_reg(12)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH12_HI_OFFSET) else
+                (TCount_reg(13)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH13_LO_OFFSET) else
+                (TCount_reg(13)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH13_HI_OFFSET) else
+                (TCount_reg(14)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH14_LO_OFFSET) else
+                (TCount_reg(14)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH14_HI_OFFSET) else
+                (TCount_reg(15)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH15_LO_OFFSET) else
+                (TCount_reg(15)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH15_HI_OFFSET) else
+                (TCount_reg(16)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH16_LO_OFFSET) else
+                (TCount_reg(16)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH16_HI_OFFSET) else
+                (TCount_reg(17)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH17_LO_OFFSET) else
+                (TCount_reg(17)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH17_HI_OFFSET) else
+                (TCount_reg(18)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH18_LO_OFFSET) else
+                (TCount_reg(18)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH18_HI_OFFSET) else
+                (TCount_reg(19)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH19_LO_OFFSET) else
+                (TCount_reg(19)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH19_HI_OFFSET) else
+                (TCount_reg(20)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH20_LO_OFFSET) else
+                (TCount_reg(20)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH20_HI_OFFSET) else
+                (TCount_reg(21)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH21_LO_OFFSET) else
+                (TCount_reg(21)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH21_HI_OFFSET) else
+                (TCount_reg(22)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH22_LO_OFFSET) else
+                (TCount_reg(22)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH22_HI_OFFSET) else
+                (TCount_reg(23)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH23_LO_OFFSET) else
+                (TCount_reg(23)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH23_HI_OFFSET) else
+                (TCount_reg(24)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH24_LO_OFFSET) else
+                (TCount_reg(24)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH24_HI_OFFSET) else
+                (TCount_reg(25)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH25_LO_OFFSET) else
+                (TCount_reg(25)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH25_HI_OFFSET) else
+                (TCount_reg(26)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH26_LO_OFFSET) else
+                (TCount_reg(26)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH26_HI_OFFSET) else
+                (TCount_reg(27)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH27_LO_OFFSET) else
+                (TCount_reg(27)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH27_HI_OFFSET) else
+                (TCount_reg(28)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH28_LO_OFFSET) else
+                (TCount_reg(28)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH28_HI_OFFSET) else
+                (TCount_reg(29)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH29_LO_OFFSET) else
+                (TCount_reg(29)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH29_HI_OFFSET) else
+                (TCount_reg(30)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH30_LO_OFFSET) else
+                (TCount_reg(30)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH30_HI_OFFSET) else
+                (TCount_reg(31)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH31_LO_OFFSET) else
+                (TCount_reg(31)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH31_HI_OFFSET) else
+                (TCount_reg(32)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH32_LO_OFFSET) else
+                (TCount_reg(32)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH32_HI_OFFSET) else
+                (TCount_reg(33)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH33_LO_OFFSET) else
+                (TCount_reg(33)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH33_HI_OFFSET) else
+                (TCount_reg(34)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH34_LO_OFFSET) else
+                (TCount_reg(34)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH34_HI_OFFSET) else
+                (TCount_reg(35)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH35_LO_OFFSET) else
+                (TCount_reg(35)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH35_HI_OFFSET) else
+                (TCount_reg(36)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH36_LO_OFFSET) else
+                (TCount_reg(36)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH36_HI_OFFSET) else
+                (TCount_reg(37)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH37_LO_OFFSET) else
+                (TCount_reg(37)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH37_HI_OFFSET) else
+                (TCount_reg(38)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH38_LO_OFFSET) else
+                (TCount_reg(38)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH38_HI_OFFSET) else
+                (TCount_reg(39)(31 downto 0))                      when (axi_araddr(9 downto 0)=ST_TCOUNT_CH39_LO_OFFSET) else
+                (TCount_reg(39)(63 downto 32))                     when (axi_araddr(9 downto 0)=ST_TCOUNT_CH39_HI_OFFSET) else
+                
                 X"00000000";
 
 -- Output register or memory read data
@@ -429,5 +831,16 @@ mux_en <= mux_en_reg;
 hvbias_en <= hvbias_en_reg;
 stat_led <= stat_led_reg; -- PL general board LEDs active high
 core_chan_enable <= core_enable_reg;
+
+adhoc <= adhoc_reg;
+st_config <= st_config_reg;
+signal_delay <= signal_delay_reg;
+threshold_xc <= threshold_xc_reg;
+filter_output_selector <= filter_output_selector_reg;
+reset_st_counters <= reset_st_counters_reg;
+afe_comp_enable <= afe_comp_enable_reg;
+invert_enable <= invert_enable_reg;
+TCount_reg <= TCount;
+PCount_reg <= PCount;
 
 end stuff_arch;

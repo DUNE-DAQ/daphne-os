@@ -22,8 +22,21 @@ port(
     timestamp: in std_logic_vector(63 downto 0); -- timestamp sync to clock
     enable: in std_logic_vector(39 downto 0); -- self trig sender channel enables
     forcetrig: in std_logic; -- momentary pulse to force all enabled senders to trigger
-    threshold: in std_logic_vector(9 downto 0); -- counts below calculated baseline
-
+    -- threshold: in std_logic_vector(9 downto 0); -- counts below calculated baseline
+    adhoc: in std_logic_vector(7 downto 0); -- command for adhoc trigger
+    st_config: in std_logic_vector(13 downto 0); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+    signal_delay: in std_logic_vector(4 downto 0);
+    threshold_xc: in std_logic_vector(41 downto 0); -- cross correlation trigger threshold 
+    filter_output_selector: in std_logic_vector(1 downto 0); --Esteban 
+    ti_trigger: in std_logic_vector(7 downto 0); -------------------------
+    ti_trigger_stbr: in std_logic;  -------------------------
+    reset_st_counters: in std_logic;
+    afe_comp_enable: in std_logic_vector(39 downto 0);
+    invert_enable: in std_logic_vector(39 downto 0);
+    afe_dat_filtered: out array_40x14_type; -- aligned AFE data filtered
+    TCount: out array_40x64_type;
+    Pcount: out array_40x64_type;
+    
     afe_data0: in std_logic_vector(13 downto 0);
     afe_data1: in std_logic_vector(13 downto 0);
     afe_data2: in std_logic_vector(13 downto 0);
@@ -107,14 +120,14 @@ end core;
 architecture core_arch of core is
 
 component st40_top
-generic( baseline_runlength: integer := 256 );
+-- generic( baseline_runlength: integer := 256 );
 port(
     link_id: std_logic_vector(5 downto 0);
     slot_id: in std_logic_vector(3 downto 0);
     crate_id: in std_logic_vector(9 downto 0);
     detector_id: in std_logic_vector(5 downto 0);
     version_id: in std_logic_vector(5 downto 0);
-    threshold: in std_logic_vector(9 downto 0);
+    -- threshold: in std_logic_vector(9 downto 0);
 
     clock: in std_logic; -- main clock 62.5 MHz
     reset: in std_logic;
@@ -122,6 +135,20 @@ port(
     enable: in std_logic_vector(39 downto 0);
     forcetrig: in std_logic;
 	din: in array_40x14_type; -- ALL AFE channels feed into this module
+    adhoc: in std_logic_vector(7 downto 0); -- command for adhoc trigger
+    st_config: in std_logic_vector(13 downto 0); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+    signal_delay: in std_logic_vector(4 downto 0);
+    threshold_xc: in std_logic_vector(41 downto 0); -- cross correlation trigger threshold 
+    filter_output_selector: in std_logic_vector(1 downto 0); --Esteban 
+    ti_trigger: in std_logic_vector(7 downto 0); -------------------------
+    ti_trigger_stbr: in std_logic;  -------------------------
+    reset_st_counters: in std_logic;
+    afe_comp_enable: in std_logic_vector(39 downto 0);
+    invert_enable: in std_logic_vector(39 downto 0);
+    afe_dat_filtered: out array_40x14_type; -- aligned AFE data filtered
+    TCount: out array_40x64_type;
+    Pcount: out array_40x64_type;
+
     d0: out std_logic_vector(63 downto 0); -- output to single channel 10G sender
     d0_valid: out std_logic;
     d0_last: out std_logic
@@ -232,14 +259,14 @@ din(39) <= afe_data39;
 -- 40 self-triggered sender machines + selection logic
 
 st40_top_inst: st40_top
-generic map ( baseline_runlength => DEFAULT_runlength )
+-- generic map ( baseline_runlength => DEFAULT_runlength )
 port map(
     link_id => link_id,
     slot_id => slot_id,
     crate_id => crate_id,
     detector_id => detector_id,
     version_id => version_id,
-    threshold => threshold,
+    -- threshold => threshold,
 
     clock => clock,
     reset => reset,
@@ -247,6 +274,19 @@ port map(
     enable => enable,
     forcetrig => forcetrig,
 	din => din,
+    adhoc => adhoc, -- command for adhoc trigger
+    st_config => st_config,
+    signal_delay => signal_delay,
+    threshold_xc => threshold_xc, -- cross correlation trigger threshold 
+    filter_output_selector => filter_output_selector,
+    ti_trigger => ti_trigger,
+    ti_trigger_stbr => ti_trigger_stbr,
+    reset_st_counters => reset_st_counters,
+    afe_comp_enable => afe_comp_enable,
+    invert_enable => invert_enable,
+    afe_dat_filtered => afe_dat_filtered, -- aligned AFE data filtered
+    TCount => TCount,
+    Pcount => PCount,
 
     d0 => d0,
     d0_valid => d0_valid,

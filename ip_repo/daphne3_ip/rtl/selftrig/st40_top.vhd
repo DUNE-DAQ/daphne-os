@@ -15,14 +15,14 @@ library work;
 use work.daphne3_package.all;
 
 entity st40_top is
-generic( baseline_runlength: integer := 256 ); -- options 32, 64, 128, or 256
+-- generic( baseline_runlength: integer := 256 ); -- options 32, 64, 128, or 256
 port(
     link_id: std_logic_vector(5 downto 0);
     slot_id: in std_logic_vector(3 downto 0);
     crate_id: in std_logic_vector(9 downto 0);
     detector_id: in std_logic_vector(5 downto 0);
     version_id: in std_logic_vector(5 downto 0);
-    threshold: in std_logic_vector(9 downto 0); -- counts relative to the calculated baseline
+    -- threshold: in std_logic_vector(9 downto 0); -- counts relative to the calculated baseline
 
     clock: in std_logic; -- main clock 62.5 MHz
     reset: in std_logic;
@@ -30,6 +30,19 @@ port(
     enable: in std_logic_vector(39 downto 0);
     forcetrig: in std_logic;
 	din: in array_40x14_type; -- ALL AFE channels feed into this module
+    adhoc: in std_logic_vector(7 downto 0); -- command for adhoc trigger
+    st_config: in std_logic_vector(13 downto 0); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+    signal_delay: in std_logic_vector(4 downto 0);
+    threshold_xc: in std_logic_vector(41 downto 0); -- cross correlation trigger threshold 
+    filter_output_selector: in std_logic_vector(1 downto 0); --Esteban 
+    ti_trigger: in std_logic_vector(7 downto 0); -------------------------
+    ti_trigger_stbr: in std_logic;  -------------------------
+    reset_st_counters: in std_logic;
+    afe_comp_enable: in std_logic_vector(39 downto 0);
+    invert_enable: in std_logic_vector(39 downto 0);
+    afe_dat_filtered: out array_40x14_type; -- aligned AFE data filtered
+    TCount: out array_40x64_type;
+    Pcount: out array_40x64_type;
 
     d0: out std_logic_vector(63 downto 0); -- output to single channel 10G sender
     d0_valid: out std_logic;
@@ -49,7 +62,7 @@ architecture st40_top_arch of st40_top is
     signal fifo_dout_mux: std_logic_vector(71 downto 0);
 
     component stc3 is
-    generic( baseline_runlength: integer := 256 ); -- options 32, 64, 128, or 256
+    -- generic( baseline_runlength: integer := 256 ); -- options 32, 64, 128, or 256
     port(
         link_id: std_logic_vector(5 downto 0);
         ch_id: std_logic_vector(5 downto 0);
@@ -57,17 +70,31 @@ architecture st40_top_arch of st40_top is
         crate_id: std_logic_vector(9 downto 0);
         detector_id: std_logic_vector(5 downto 0);
         version_id: std_logic_vector(5 downto 0);
-        threshold: std_logic_vector(9 downto 0); -- trig threshold relative to calculated baseline
+        -- threshold: std_logic_vector(9 downto 0); -- trig threshold relative to calculated baseline
 
         clock: in std_logic; -- master clock 62.5MHz
         reset: in std_logic;
         enable: in std_logic;
+        adhoc: in std_logic_vector(7 downto 0); -- command for adhoc trigger
+        st_config: in std_logic_vector(13 downto 0); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+        signal_delay: in std_logic_vector(4 downto 0);
+        threshold_xc: in std_logic_vector(41 downto 0); -- cross correlation trigger threshold 
+        filter_output_selector: in std_logic_vector(1 downto 0); --Esteban
+        ti_trigger: in std_logic_vector(7 downto 0); -------------------------
+        ti_trigger_stbr: in std_logic;  -------------------------
+        reset_st_counters: in std_logic;
         forcetrig: in std_logic; -- force a trigger
         timestamp: in std_logic_vector(63 downto 0);
     	din: in std_logic_vector(13 downto 0); -- aligned AFE data
+        afe_comp_enable: in std_logic;
+        invert_enable: in std_logic;
+        st_afe_dat_filtered: out std_logic_vector(13 downto 0); -- aligned AFE data filtered
+        trigger_signal: out std_logic;
         rd_en: in std_logic; -- output FIFO read enable
         dout: out std_logic_vector(71 downto 0); -- output FIFO data
-        ready: out std_logic -- got something in the output FIFO yo
+        ready: out std_logic; -- got something in the output FIFO yo
+        TCount: out std_logic_vector(63 downto 0);
+        PCount: out std_logic_vector(63 downto 0)
     );
     end component;
 
@@ -78,7 +105,7 @@ begin
     gen_stc: for i in 39 downto 0 generate
 
             stc3_inst: stc3
-            generic map ( baseline_runlength => baseline_runlength )
+            -- generic map ( baseline_runlength => baseline_runlength )
             port map(   
                 link_id => link_id,
                 ch_id => std_logic_vector( to_unsigned(i,6) ),
@@ -86,17 +113,31 @@ begin
                 crate_id => crate_id,
                 detector_id => detector_id,
                 version_id => version_id,
-                threshold => threshold,
+                -- threshold => threshold,
 
                 clock => clock,
                 reset => reset,
                 enable => enable(i),
+                adhoc => adhoc, -- command for adhoc trigger
+                st_config => st_config, -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+                signal_delay => signal_delay,
+                threshold_xc => threshold_xc, -- cross correlation trigger threshold 
+                filter_output_selector => filter_output_selector, --Esteban
+                ti_trigger => ti_trigger, -------------------------
+                ti_trigger_stbr => ti_trigger_stbr,  -------------------------
+                reset_st_counters => reset_st_counters,
                 forcetrig => forcetrig,
                 timestamp => timestamp,
             	din => din(i),
+                afe_comp_enable => afe_comp_enable(i),
+                invert_enable => invert_enable(i),
+                st_afe_dat_filtered => afe_dat_filtered(i), -- aligned AFE data filtered
+                trigger_signal => open,
                 rd_en => fifo_rd_en(i),
                 dout => fifo_dout(i),
-                ready => ready(i)
+                ready => ready(i),
+                TCount => TCount(i),
+                PCount => PCount(i)
               );
 
     end generate gen_stc;

@@ -21,7 +21,8 @@ generic(
     slot_id: std_logic_vector(3 downto 0) := X"2";
     crate_id: std_logic_vector(9 downto 0) := "0000000011";
     detector_id: std_logic_vector(5 downto 0) := "000010";
-    threshold: in std_logic_vector(9 downto 0):= "1000000000";
+    -- threshold: in std_logic_vector(9 downto 0):= "1000000000";
+    -- threshold_xc: std_logic_vector(41 downto 0) := "100000000000010000000000000000010001111110";
     version_id: std_logic_vector(5 downto 0) := "000001");  -- build virsion - to be updated everytime we build a new image
 port(
             
@@ -545,6 +546,18 @@ port(
     stat_led        : out std_logic_vector(5 downto 0);
     version         : in std_logic_vector(27 downto 0);
     core_chan_enable: out std_logic_vector(39 downto 0);
+    adhoc: out std_logic_vector(7 downto 0); -- command for adhoc trigger
+    st_config: out std_logic_vector(13 downto 0); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+    signal_delay: out std_logic_vector(4 downto 0);
+    threshold_xc: out std_logic_vector(41 downto 0); -- cross correlation trigger threshold 
+    filter_output_selector: out std_logic_vector(1 downto 0); --Esteban 
+    -- ti_trigger: out std_logic_vector(7 downto 0); -------------------------
+    -- ti_trigger_stbr: out std_logic;  -------------------------
+    reset_st_counters: out std_logic;
+    afe_comp_enable: out std_logic_vector(39 downto 0);
+    invert_enable: out std_logic_vector(39 downto 0);
+    TCount: in array_40x64_type;
+    Pcount: in array_40x64_type;
 	S_AXI_ACLK	    : in std_logic;
 	S_AXI_ARESETN	: in std_logic;
 	S_AXI_AWADDR	: in std_logic_vector(31 downto 0);
@@ -584,7 +597,20 @@ port(
     timestamp: in std_logic_vector(63 downto 0); -- timestamp sync to clock
     enable: in std_logic_vector(39 downto 0); -- self trig sender channel enables
     forcetrig: in std_logic; -- momentary pulse to force all enabled senders to trigger
-    threshold: in std_logic_vector(9 downto 0); -- counts below calculated baseline
+    -- threshold: in std_logic_vector(9 downto 0); -- counts below calculated baseline
+    adhoc: in std_logic_vector(7 downto 0); -- command for adhoc trigger
+    st_config: in std_logic_vector(13 downto 0); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+    signal_delay: in std_logic_vector(4 downto 0);
+    threshold_xc: in std_logic_vector(41 downto 0); -- cross correlation trigger threshold 
+    filter_output_selector: in std_logic_vector(1 downto 0); --Esteban 
+    ti_trigger: in std_logic_vector(7 downto 0); -------------------------
+    ti_trigger_stbr: in std_logic;  -------------------------
+    reset_st_counters: in std_logic;
+    afe_comp_enable: in std_logic_vector(39 downto 0);
+    invert_enable: in std_logic_vector(39 downto 0);
+    afe_dat_filtered: out array_40x14_type; -- aligned AFE data filtered
+    TCount: out array_40x64_type;
+    Pcount: out array_40x64_type;
 
     afe_data0: in std_logic_vector(13 downto 0);
     afe_data1: in std_logic_vector(13 downto 0);
@@ -672,6 +698,19 @@ signal trig: std_logic;
 signal timestamp: std_logic_vector(63 downto 0);
 signal clock, clk125, clk500: std_logic;
 signal core_chan_enable: std_logic_vector(39 downto 0);
+
+signal adhoc: std_logic_vector(7 downto 0) := (others => '0');
+signal st_config: std_logic_vector(13 downto 0) := (others => '0');
+signal signal_delay: std_logic_vector(4 downto 0) := (others => '0');
+signal threshold_xc: std_logic_vector(41 downto 0) := (others => '0');
+signal filter_output_selector: std_logic_vector(1 downto 0) := (others => '0');
+signal ti_trigger: std_logic_vector(7 downto 0) := (others => '0'); -------------------------
+signal ti_trigger_stbr: std_logic := '0';  -------------------------
+signal reset_st_counters: std_logic := '0';
+signal afe_comp_enable: std_logic_vector(39 downto 0) := (others => '0');
+signal invert_enable: std_logic_vector(39 downto 0) := (others => '0');
+signal TCount: array_40x64_type;
+signal Pcount: array_40x64_type;
 
 signal S_AXI_ACLK:    std_logic;
 signal S_AXI_ARESETN: std_logic;
@@ -1252,6 +1291,18 @@ port map(
     stat_led        => stat_led,
     version         => version,
     core_chan_enable => core_chan_enable,
+    adhoc => adhoc, -------------------------
+    st_config => st_config,
+    signal_delay => signal_delay,
+    threshold_xc => threshold_xc,
+    filter_output_selector => filter_output_selector,
+    -- ti_trigger => ti_trigger, -------------------------
+    -- ti_trigger_stbr => ti_trigger_stbr,  -------------------------
+    reset_st_counters => reset_st_counters,
+    afe_comp_enable => afe_comp_enable,
+    invert_enable => invert_enable,
+    TCount => TCount,
+    Pcount => PCount,
     S_AXI_ACLK	    => STUFF_S_AXI_ACLK,
 	S_AXI_ARESETN	=> STUFF_S_AXI_ARESETN,
 	S_AXI_AWADDR	=> STUFF_AXI_AWADDR,
@@ -1293,7 +1344,7 @@ port map(
     slot_id => slot_id,
     crate_id => crate_id,
     detector_id => detector_id,
-    threshold  => threshold,
+    -- threshold  => threshold,
     version_id => version_id,
     clock => clock,
     reset => '0', 
@@ -1301,6 +1352,19 @@ port map(
     
     enable => core_chan_enable, 
     forcetrig =>  FORCE_TRIG,
+    adhoc => adhoc, 
+    st_config => st_config,
+    signal_delay => signal_delay,
+    threshold_xc => threshold_xc,
+    filter_output_selector => filter_output_selector,
+    ti_trigger => ti_trigger, -------------------------
+    ti_trigger_stbr => ti_trigger_stbr,  -------------------------
+    reset_st_counters => reset_st_counters,
+    afe_comp_enable => afe_comp_enable,
+    invert_enable => invert_enable,
+    afe_dat_filtered => open,
+    TCount => TCount,
+    Pcount => PCount,
     S_AXI_ACLK	    => TRIRG_S_AXI_ACLK,
 	S_AXI_ARESETN	=> TRIRG_S_AXI_ARESETN,
 	S_AXI_AWADDR	=> CORE_AXI_AWADDR,

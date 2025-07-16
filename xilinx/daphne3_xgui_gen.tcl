@@ -24,7 +24,7 @@ proc init_gui { IPINST } {
   ipgui::add_param $IPINST -name "slot_id" -parent ${Page_0}
   ipgui::add_param $IPINST -name "crate_id" -parent ${Page_0}
   ipgui::add_param $IPINST -name "detector_id" -parent ${Page_0}
-  ipgui::add_param $IPINST -name "threshold" -parent ${Page_0}
+#   ipgui::add_param $IPINST -name "threshold_xc" -parent ${Page_0}
   ipgui::add_param $IPINST -name "version_id" -parent ${Page_0}
 
 
@@ -75,14 +75,14 @@ proc validate_PARAM_VALUE.detector_id { PARAM_VALUE.detector_id } {
 	return true
 }
 
-proc update_PARAM_VALUE.threshold { PARAM_VALUE.threshold } {
-	# Procedure called to update threshold when any of the dependent parameters in the arguments change
-}
+# proc update_PARAM_VALUE.threshold_xc { PARAM_VALUE.threshold_xc } {
+# 	# Procedure called to update threshold_xc when any of the dependent parameters in the arguments change
+# }
 
-proc validate_PARAM_VALUE.threshold { PARAM_VALUE.threshold } {
-	# Procedure called to validate threshold
-	return true
-}
+# proc validate_PARAM_VALUE.threshold_xc { PARAM_VALUE.threshold_xc } {
+# 	# Procedure called to validate threshold_xc
+# 	return true
+# }
 
 proc update_PARAM_VALUE.version_id { PARAM_VALUE.version_id } {
 	# Procedure called to update version_id when any of the dependent parameters in the arguments change
@@ -119,10 +119,10 @@ proc update_MODELPARAM_VALUE.detector_id { MODELPARAM_VALUE.detector_id PARAM_VA
 	set_property value [get_property value ${PARAM_VALUE.detector_id}] ${MODELPARAM_VALUE.detector_id}
 }
 
-proc update_MODELPARAM_VALUE.threshold { MODELPARAM_VALUE.threshold PARAM_VALUE.threshold } {
-	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value
-	set_property value [get_property value ${PARAM_VALUE.threshold}] ${MODELPARAM_VALUE.threshold}
-}
+# proc update_MODELPARAM_VALUE.threshold_xc { MODELPARAM_VALUE.threshold_xc PARAM_VALUE.threshold_xc } {
+# 	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value
+# 	set_property value [get_property value ${PARAM_VALUE.threshold_xc}] ${MODELPARAM_VALUE.threshold_xc}
+# }
 
 proc update_MODELPARAM_VALUE.version_id { MODELPARAM_VALUE.version_id PARAM_VALUE.version_id } {
 	# Procedure called to set VHDL generic/Verilog parameter value(s) based on TCL parameter value

@@ -234,7 +234,7 @@ set xciDAQFiles_aux [get_files_recursive $rtlDAQDir "*.xci"]
 set xciDAQFiles [ignore_files $xciDAQFiles_aux "xxv_ethernet_0_gt.xci"]
 
 set vhdlFiles_aux [get_files_recursive $rtlDir "*.vhd"]
-set vhdlFiles [ignore_files $vhdlFiles_aux {"daphne3.vhd" "auto_afe.vhd" "auto_fsm.vhd" "i2cm.vhd" "spim_cm.vhd" "DAQ_CLOCKS.vhd" }]
+set vhdlFiles [ignore_files $vhdlFiles_aux {"daphne3.vhd" "auto_afe.vhd" "auto_fsm.vhd" "i2cm.vhd" "spim_cm.vhd" "DAQ_CLOCKS.vhd" "trig.vhd" "baseline.vhd"}]
 set verilogFiles [get_files_recursive $rtlDir "*.v"]
 
 set tbFilesVhdl [get_files_recursive $tbDir "*.vhd"]
@@ -386,8 +386,8 @@ set_property DISPLAY_NAME {Crate ID} [ipx::get_hdl_parameters -of_objects $daphn
 set_property VALUE_RESOLVE_TYPE user [ipx::get_hdl_parameters -of_objects $daphne crate_id]
 set_property DISPLAY_NAME {Detector ID} [ipx::get_hdl_parameters -of_objects $daphne detector_id]
 set_property VALUE_RESOLVE_TYPE user [ipx::get_hdl_parameters -of_objects $daphne detector_id]
-set_property DISPLAY_NAME Threshold [ipx::get_hdl_parameters -of_objects $daphne threshold]
-set_property VALUE_RESOLVE_TYPE user [ipx::get_hdl_parameters -of_objects $daphne threshold]
+# set_property DISPLAY_NAME {Cross Correlation Threshold} [ipx::get_hdl_parameters -of_objects $daphne threshold_xc]
+# set_property VALUE_RESOLVE_TYPE user [ipx::get_hdl_parameters -of_objects $daphne threshold_xc]
 set_property DISPLAY_NAME {Version ID} [ipx::get_hdl_parameters -of_objects $daphne version_id]
 set_property VALUE_RESOLVE_TYPE user [ipx::get_hdl_parameters -of_objects $daphne version_id]
 
@@ -431,13 +431,13 @@ set_property VALUE_FORMAT bitString $detector_id_param
 set_property VALUE_RESOLVE_TYPE user $detector_id_param
 set_property VALUE_PERMISSION user $detector_id_param
 
-set threshold_param [ipx::add_user_parameter threshold $daphne]
-set_property DISPLAY_NAME {Threshold} $threshold_param
-set_property VALUE 1000000000 $threshold_param
-set_property VALUE_BIT_STRING_LENGTH 10 $threshold_param
-set_property VALUE_FORMAT bitString $threshold_param
-set_property VALUE_RESOLVE_TYPE user $threshold_param
-set_property VALUE_PERMISSION user $threshold_param
+# set threshold_param [ipx::add_user_parameter threshold_xc $daphne]
+# set_property DISPLAY_NAME {Cross Correlation Threshold} $threshold_param
+# set_property VALUE 100000000000010000000000000000010001111110 $threshold_param
+# set_property VALUE_BIT_STRING_LENGTH 42 $threshold_param
+# set_property VALUE_FORMAT bitString $threshold_param
+# set_property VALUE_RESOLVE_TYPE user $threshold_param
+# set_property VALUE_PERMISSION user $threshold_param
 
 set version_id_param [ipx::add_user_parameter version_id $daphne]
 set_property DISPLAY_NAME {Version ID} $version_id_param
