@@ -19,7 +19,7 @@ if { [string first $scriptsVivadoVersion $currentVivadoVersion] == -1 } {
 }
 
 # general setup stuff
-set_param general.maxThreads 12
+set_param general.maxThreads 4
 set outputDir ./output
 file mkdir $outputDir 
 set_part xck26-sfvc784-2LV-c
