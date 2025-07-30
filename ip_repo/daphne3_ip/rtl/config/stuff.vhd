@@ -131,28 +131,28 @@ architecture stuff_arch of stuff is
 
     -- register offsets are relative to the base address specified for this AXI-LITE slave instance
 
-    constant FANCTRL_OFFSET:                   std_logic_vector(6 downto 0) := "0000000"; -- base+0
-    constant FAN0SPD_OFFSET:                   std_logic_vector(6 downto 0) := "0000100"; -- base+4
-    constant FAN1SPD_OFFSET:                   std_logic_vector(6 downto 0) := "0001000"; -- base+8
-    constant HVBIAS_OFFSET:                    std_logic_vector(6 downto 0) := "0001100"; -- base+12
-    constant MUXEN_OFFSET:                     std_logic_vector(6 downto 0) := "0010000"; -- base+16
-    constant MUXA_OFFSET:                      std_logic_vector(6 downto 0) := "0010100"; -- base+20
-    constant LED_OFFSET:                       std_logic_vector(6 downto 0) := "0011000"; -- base+24
-    constant VER_OFFSET:                       std_logic_vector(6 downto 0) := "0011100"; -- base+28
-    constant CORE_EN_LO_OFFSET:                std_logic_vector(6 downto 0) := "0100000"; -- base+32
-    constant CORE_EN_HI_OFFSET:                std_logic_vector(6 downto 0) := "0100100"; -- base+36
+    constant FANCTRL_OFFSET:                   std_logic_vector(9 downto 0) := "0000000000"; -- base+0
+    constant FAN0SPD_OFFSET:                   std_logic_vector(9 downto 0) := "0000000100"; -- base+4
+    constant FAN1SPD_OFFSET:                   std_logic_vector(9 downto 0) := "0000001000"; -- base+8
+    constant HVBIAS_OFFSET:                    std_logic_vector(9 downto 0) := "0000001100"; -- base+12
+    constant MUXEN_OFFSET:                     std_logic_vector(9 downto 0) := "0000010000"; -- base+16
+    constant MUXA_OFFSET:                      std_logic_vector(9 downto 0) := "0000010100"; -- base+20
+    constant LED_OFFSET:                       std_logic_vector(9 downto 0) := "0000011000"; -- base+24
+    constant VER_OFFSET:                       std_logic_vector(9 downto 0) := "0000011100"; -- base+28
+    constant CORE_EN_LO_OFFSET:                std_logic_vector(9 downto 0) := "0000100000"; -- base+32
+    constant CORE_EN_HI_OFFSET:                std_logic_vector(9 downto 0) := "0000100100"; -- base+36
 
-    constant ST_ADHOC_OFFSET:                  std_logic_vector(6 downto 0) := "0101000"; --base+40
-    constant ST_CONFIG_OFFSET:                 std_logic_vector(6 downto 0) := "0101100"; -- base+44
-    constant ST_DELAY_OFFSET:                  std_logic_vector(6 downto 0) := "0110000"; -- base+48
-    constant ST_THRESHOLD_XC_LO_OFFSET:        std_logic_vector(6 downto 0) := "0110100"; -- base+52
-    constant ST_THRESHOLD_XC_HI_OFFSET:        std_logic_vector(6 downto 0) := "0111000"; -- base+56
-    constant ST_FILTER_OUTPUT_SELECTOR_OFFSET: std_logic_vector(6 downto 0) := "0111100"; -- base+60
-    constant ST_RESET_COUNTERS_OFFSET:         std_logic_vector(6 downto 0) := "1000000"; -- base+64
-    constant ST_AFE_COMP_ENABLE_LO_OFFSET:     std_logic_vector(6 downto 0) := "1000100"; -- base+68
-    constant ST_AFE_COMP_ENABLE_HI_OFFSET:     std_logic_vector(6 downto 0) := "1001000"; -- base+72
-    constant ST_INVERT_ENABLE_LO_OFFSET:       std_logic_vector(6 downto 0) := "1001100"; -- base+76
-    constant ST_INVERT_ENABLE_HI_OFFSET:       std_logic_vector(6 downto 0) := "1010000"; -- base+80
+    constant ST_ADHOC_OFFSET:                  std_logic_vector(9 downto 0) := "0000101000"; -- base+40
+    constant ST_CONFIG_OFFSET:                 std_logic_vector(9 downto 0) := "0000101100"; -- base+44
+    constant ST_DELAY_OFFSET:                  std_logic_vector(9 downto 0) := "0000110000"; -- base+48
+    constant ST_THRESHOLD_XC_LO_OFFSET:        std_logic_vector(9 downto 0) := "0000110100"; -- base+52
+    constant ST_THRESHOLD_XC_HI_OFFSET:        std_logic_vector(9 downto 0) := "0000111000"; -- base+56
+    constant ST_FILTER_OUTPUT_SELECTOR_OFFSET: std_logic_vector(9 downto 0) := "0000111100"; -- base+60
+    constant ST_RESET_COUNTERS_OFFSET:         std_logic_vector(9 downto 0) := "0001000000"; -- base+64
+    constant ST_AFE_COMP_ENABLE_LO_OFFSET:     std_logic_vector(9 downto 0) := "0001000100"; -- base+68
+    constant ST_AFE_COMP_ENABLE_HI_OFFSET:     std_logic_vector(9 downto 0) := "0001001000"; -- base+72
+    constant ST_INVERT_ENABLE_LO_OFFSET:       std_logic_vector(9 downto 0) := "0001001100"; -- base+76
+    constant ST_INVERT_ENABLE_HI_OFFSET:       std_logic_vector(9 downto 0) := "0001010000"; -- base+80
     constant ST_PCOUNT_CH00_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001010100"; -- base+84
     constant ST_PCOUNT_CH00_HI_OFFSET:         std_logic_vector(9 downto 0) := "0001011000"; -- base+88
     constant ST_PCOUNT_CH01_LO_OFFSET:         std_logic_vector(9 downto 0) := "0001011100"; -- base+92
@@ -469,7 +469,7 @@ begin
         -- treat all of these register writes as if they are full 32 bits
         -- e.g. the four write strobe bits should be high
 
-        case ( axi_awaddr(6 downto 0) ) is
+        case ( axi_awaddr(9 downto 0) ) is
 
           when FANCTRL_OFFSET => 
             fan_speed_reg <= S_AXI_WDATA(7 downto 0);
@@ -619,27 +619,27 @@ end process;
 
 reg_rden <= axi_arready and S_AXI_ARVALID and (not axi_rvalid) ;
 
-reg_data_out <= (X"000000" & fan_speed_reg)                        when (axi_araddr(5 downto 0)=FANCTRL_OFFSET) else
-                (X"00000" & fan0_rpm)                              when (axi_araddr(5 downto 0)=FAN0SPD_OFFSET) else
-                (X"00000" & fan1_rpm)                              when (axi_araddr(5 downto 0)=FAN1SPD_OFFSET) else
-                (X"0000000" & "000" & hvbias_en_reg)               when (axi_araddr(5 downto 0)=HVBIAS_OFFSET) else
-                (X"0000000" & "00" & mux_en_reg)                   when (axi_araddr(5 downto 0)=MUXEN_OFFSET) else
-                (X"0000000" & "00" & mux_a_reg)                    when (axi_araddr(5 downto 0)=MUXA_OFFSET) else
-                (X"000000" & "00" & stat_led_reg)                  when (axi_araddr(5 downto 0)=LED_OFFSET) else
-                ("0000" & version)                                 when (axi_araddr(5 downto 0)=VER_OFFSET) else
-                core_enable_reg(31 downto 0)                       when (axi_araddr(5 downto 0)=CORE_EN_LO_OFFSET) else
-                (X"000000" & core_enable_reg(39 downto 32))        when (axi_araddr(5 downto 0)=CORE_EN_HI_OFFSET) else
-                (X"000000" & adhoc_reg)                            when (axi_araddr(6 downto 0)=ST_ADHOC_OFFSET) else
-                (X"0000" & "00" & st_config_reg)                   when (axi_araddr(6 downto 0)=ST_CONFIG_OFFSET) else
-                (X"000000" & "000" & signal_delay_reg)             when (axi_araddr(6 downto 0)=ST_DELAY_OFFSET) else
-                (threshold_xc_reg(31 downto 0))                    when (axi_araddr(6 downto 0)=ST_THRESHOLD_XC_LO_OFFSET) else
-                (X"00000" & "00" & threshold_xc_reg(41 downto 32)) when (axi_araddr(6 downto 0)=ST_THRESHOLD_XC_HI_OFFSET) else
-                (X"0000000" & "00" & filter_output_selector_reg)   when (axi_araddr(6 downto 0)=ST_FILTER_OUTPUT_SELECTOR_OFFSET) else
-                (X"0000000" & "000" & reset_st_counters_reg)       when (axi_araddr(6 downto 0)=ST_RESET_COUNTERS_OFFSET) else
-                (afe_comp_enable_reg(31 downto 0))                 when (axi_araddr(6 downto 0)=ST_AFE_COMP_ENABLE_LO_OFFSET) else
-                (X"000000" & afe_comp_enable_reg(39 downto 32))    when (axi_araddr(6 downto 0)=ST_AFE_COMP_ENABLE_HI_OFFSET) else
-                (invert_enable_reg(31 downto 0))                   when (axi_araddr(6 downto 0)=ST_INVERT_ENABLE_LO_OFFSET) else
-                (X"000000" & invert_enable_reg(39 downto 32))      when (axi_araddr(6 downto 0)=ST_INVERT_ENABLE_HI_OFFSET) else
+reg_data_out <= (X"000000" & fan_speed_reg)                        when (axi_araddr(9 downto 0)=FANCTRL_OFFSET) else
+                (X"00000" & fan0_rpm)                              when (axi_araddr(9 downto 0)=FAN0SPD_OFFSET) else
+                (X"00000" & fan1_rpm)                              when (axi_araddr(9 downto 0)=FAN1SPD_OFFSET) else
+                (X"0000000" & "000" & hvbias_en_reg)               when (axi_araddr(9 downto 0)=HVBIAS_OFFSET) else
+                (X"0000000" & "00" & mux_en_reg)                   when (axi_araddr(9 downto 0)=MUXEN_OFFSET) else
+                (X"0000000" & "00" & mux_a_reg)                    when (axi_araddr(9 downto 0)=MUXA_OFFSET) else
+                (X"000000" & "00" & stat_led_reg)                  when (axi_araddr(9 downto 0)=LED_OFFSET) else
+                ("0000" & version)                                 when (axi_araddr(9 downto 0)=VER_OFFSET) else
+                core_enable_reg(31 downto 0)                       when (axi_araddr(9 downto 0)=CORE_EN_LO_OFFSET) else
+                (X"000000" & core_enable_reg(39 downto 32))        when (axi_araddr(9 downto 0)=CORE_EN_HI_OFFSET) else
+                (X"000000" & adhoc_reg)                            when (axi_araddr(9 downto 0)=ST_ADHOC_OFFSET) else
+                (X"0000" & "00" & st_config_reg)                   when (axi_araddr(9 downto 0)=ST_CONFIG_OFFSET) else
+                (X"000000" & "000" & signal_delay_reg)             when (axi_araddr(9 downto 0)=ST_DELAY_OFFSET) else
+                (threshold_xc_reg(31 downto 0))                    when (axi_araddr(9 downto 0)=ST_THRESHOLD_XC_LO_OFFSET) else
+                (X"00000" & "00" & threshold_xc_reg(41 downto 32)) when (axi_araddr(9 downto 0)=ST_THRESHOLD_XC_HI_OFFSET) else
+                (X"0000000" & "00" & filter_output_selector_reg)   when (axi_araddr(9 downto 0)=ST_FILTER_OUTPUT_SELECTOR_OFFSET) else
+                (X"0000000" & "000" & reset_st_counters_reg)       when (axi_araddr(9 downto 0)=ST_RESET_COUNTERS_OFFSET) else
+                (afe_comp_enable_reg(31 downto 0))                 when (axi_araddr(9 downto 0)=ST_AFE_COMP_ENABLE_LO_OFFSET) else
+                (X"000000" & afe_comp_enable_reg(39 downto 32))    when (axi_araddr(9 downto 0)=ST_AFE_COMP_ENABLE_HI_OFFSET) else
+                (invert_enable_reg(31 downto 0))                   when (axi_araddr(9 downto 0)=ST_INVERT_ENABLE_LO_OFFSET) else
+                (X"000000" & invert_enable_reg(39 downto 32))      when (axi_araddr(9 downto 0)=ST_INVERT_ENABLE_HI_OFFSET) else
                 
                 (PCount_reg(0)(31 downto 0))                       when (axi_araddr(9 downto 0)=ST_PCOUNT_CH00_LO_OFFSET) else
                 (PCount_reg(0)(63 downto 32))                      when (axi_araddr(9 downto 0)=ST_PCOUNT_CH00_HI_OFFSET) else
