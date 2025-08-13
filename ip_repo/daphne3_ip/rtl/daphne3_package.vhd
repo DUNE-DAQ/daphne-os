@@ -50,6 +50,11 @@ package daphne3_package is
     constant DEFAULT_threshold: std_logic_vector(13 downto 0) := "00010000000000";
     constant DEFAULT_runlength: integer := 256;
     constant DEFAULT_core_enable: std_logic_vector(39 downto 0) := X"0000000000";
+    constant DEFAULT_st_adhoc_command: std_logic_vector(7 downto 0) := X"07";
+    constant DEFAULT_threshold_xc: std_logic_vector(41 downto 0) := "100000000000010000000000000000010001111110";
+    constant DEFAULT_st_config_command: std_logic_vector(31 downto 0) := X"0010DB34";
+    constant DEFAULT_st_comp_command: std_logic_vector(39 downto 0) := X"0000000000";
+    constant DEFAULT_st_invert_command: std_logic_vector(39 downto 0) := X"0000000000";
 
     -- default values for 10G Ethernet sender
 

@@ -99,14 +99,14 @@ architecture stuff_arch of stuff is
 	signal reg_data_out:std_logic_vector(31 downto 0);
 	signal aw_en: std_logic;
 
-  signal adhoc_reg: std_logic_vector(7 downto 0) := (others => '0'); -- command for ad hoc trigger
-  signal st_config_reg: std_logic_vector(13 downto 0) := (others => '0'); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
-  signal signal_delay_reg: std_logic_vector(4 downto 0) := (others => '0');
-  signal threshold_xc_reg: std_logic_vector(41 downto 0) := (others => '0'); -- trig threshold relative to calculated baseline
-  signal filter_output_selector_reg: std_logic_vector(1 downto 0) := (others => '0'); --Esteban
+  signal adhoc_reg: std_logic_vector(7 downto 0) := DEFAULT_st_adhoc_command; -- command for ad hoc trigger
+  signal st_config_reg: std_logic_vector(13 downto 0) := DEFAULT_st_config_command(15 downto 2); -- Config param for Self-Trigger and Local Primitive Calculation, CIEMAT (Nacho)
+  signal signal_delay_reg: std_logic_vector(4 downto 0) := DEFAULT_st_config_command(20 downto 16);
+  signal threshold_xc_reg: std_logic_vector(41 downto 0) := DEFAULT_threshold_xc; -- trig threshold relative to calculated baseline
+  signal filter_output_selector_reg: std_logic_vector(1 downto 0) := DEFAULT_st_config_command(1 downto 0); --Esteban
   signal reset_st_counters_reg: std_logic := '0';
-  signal afe_comp_enable_reg: std_logic_vector(39 downto 0) := (others => '0');
-  signal invert_enable_reg: std_logic_vector(39 downto 0) := (others => '0');
+  signal afe_comp_enable_reg: std_logic_vector(39 downto 0) := DEFAULT_st_comp_command;
+  signal invert_enable_reg: std_logic_vector(39 downto 0) := DEFAULT_st_invert_command;
   signal TCount_reg: array_40x64_type := (others => (others => '0')); 
   signal Pcount_reg: array_40x64_type := (others => (others => '0')); 
    
@@ -463,6 +463,14 @@ begin
         mux_a_reg <= "00";
         stat_led_reg <= "000000";
         core_enable_reg <= DEFAULT_core_enable;
+        adhoc_reg <= DEFAULT_st_adhoc_command;
+        st_config_reg <= DEFAULT_st_config_command(15 downto 2);
+        signal_delay_reg <= DEFAULT_st_config_command(20 downto 16);
+        threshold_xc_reg <= DEFAULT_threshold_xc;
+        filter_output_selector_reg <= DEFAULT_st_config_command(1 downto 0);
+        reset_st_counters_reg <= '0';
+        afe_comp_enable_reg <= DEFAULT_st_comp_command;
+        invert_enable_reg <= DEFAULT_st_invert_command;
     else
       if (reg_wren = '1' and S_AXI_WSTRB = "1111") then
 
