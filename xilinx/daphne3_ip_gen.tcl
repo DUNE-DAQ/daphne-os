@@ -46,6 +46,28 @@ proc ignore_files {listToVerify itemsToIgnore} {
     return $newList
 }
 
+# create a proc in order to find the latest version of an IP definition int he catalog
+# that matche the IP that is intended to be created
+proc get_latest_ip_vlnv {ipSel} {
+    # get all the IP definitions that match
+    set ipDefs [get_ipdefs -all $ipSel]
+    set latestIPVersion ""
+    set latestIPvlnv ""
+
+    # get versions and compare
+    foreach ipdef $ipDefs {
+        # find the version element of each IP definition that matches the search
+        set ipVersion [lindex [split $ipdef ":"] 3]
+
+        # set the latest version available for this IP
+        if { $latestIPvlnv eq "" || [expr {[string compare -nocase $ipVersion $latestIPVersion] > 0}]} {
+            set latestIPvlnv $ipdef
+            set latestIPVersion $ipVersion
+        }
+    }
+    return $latestIPvlnv
+}
+
 # set DAPHNE IP parameters
 set componentVendor dune.pds
 set componentLibrary user
@@ -54,29 +76,29 @@ set componentVersion 1.0
 set daphneDescription {IP Version of DAPHNEv3 PL Firmware for the PDS in the DUNE Project}
 
 # set repository for the DAPHNE IP
-set ipRepoDir ../daphne3_ip_repo
+set ipRepoDir ../ip_repo/daphne3_ip
 
 # # set repository for the AXI Quad SPI IP Unused
-# set axiQuadDir ../daphne3_ip_repo/ips/cm
-# set axiQuadXCIDir ../daphne3_ip_repo/ips/cm/axi_quad_spi_0.xci
+# set axiQuadDir ../ip_repo/daphne3_ip/ips/cm
+# set axiQuadXCIDir ../ip_repo/daphne3_ip/ips/cm/axi_quad_spi_0.xci
 
 # # set repository for the AXI IIC IP Unused
-# set axiIICDir ../daphne3_ip_repo/ips/i2c
-# set axiIICXCIDir ../daphne3_ip_repo/ips/i2c/axi_iic_0.xci
+# set axiIICDir ../ip_repo/daphne3_ip/ips/i2c
+# set axiIICXCIDir ../ip_repo/daphne3_ip/ips/i2c/axi_iic_0.xci
 
 # set repository for BRAM controller IP axi4_lite_bram_ctrl_0
-set bramRepoDir ../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src
-set bramXCIDir ../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src/axi4_lite_bram_ctrl_0/axi4_lite_bram_ctrl_0.xci
+set bramRepoDir ../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src
+set bramXCIDir ../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src/axi4_lite_bram_ctrl_0/axi4_lite_bram_ctrl_0.xci
 
 # set repository for Ethernet IP
-set ethernetRepoDir ../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src
-set ethXCIDir ../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src/xxv_ethernet_0/xxv_ethernet_0.xci
+set ethernetRepoDir ../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src
+set ethXCIDir ../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src/xxv_ethernet_0/xxv_ethernet_0.xci
 
 # # build the internal sub IPs used in the design
 # # axi quad SPI IP
 # if {![file exists $axiQuadXCIDir]} {
 #     puts "Creating IP AXI Quad SPI..."
-#     set axiQuadIP [create_ip -vlnv xilinx.com:ip:axi_quad_spi:3.2 -module_name axi_quad_spi_0 -dir $axiQuadDir]
+#     set axiQuadIP [create_ip -vlnv xilinx.com:ip:axi_quad_spi:* -module_name axi_quad_spi_0 -dir $axiQuadDir]
 #     # configure IP properties
 #     set_property -dict [list \
 #         CONFIG.C_NUM_TRANSFER_BITS {32} \
@@ -89,17 +111,20 @@ set ethXCIDir ../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src/xxv_eth
 # # axi iic IP
 # if {![file exists $axiIICXCIDir]} {
 #     puts "Creating IP AXI IIC..."
-#     set axiIICIP [create_ip -vlnv xilinx.com:ip:axi_iic:2.1 -module_name axi_iic_0 -dir $axiIICDir]
+#     set axiIICIP [create_ip -vlnv xilinx.com:ip:axi_iic:* -module_name axi_iic_0 -dir $axiIICDir]
 #     # configure IP properties
 #     set_property CONFIG.AXI_ACLK_FREQ_MHZ {100} [get_ips axi_iic_0]
 # } else {
 #     puts "IP 'AXI IIC' already exists at $axiIICXCIDir. Skipping creation."
 # }
 
+set axi_bram_ctrl_vlnv [get_latest_ip_vlnv xilinx.com:ip:axi_bram_ctrl:*]
+set xxv_ethernet_vlnv [get_latest_ip_vlnv xilinx.com:ip:xxv_ethernet:*]
+
 # block RAM IP
 if {![file exists $bramXCIDir]} {
     puts "Creating IP AXI BRAM Control..."
-    set axi4LitBramIP [create_ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 -module_name axi4_lite_bram_ctrl_0 -dir $bramRepoDir]
+    set axi4LitBramIP [create_ip -vlnv $axi_bram_ctrl_vlnv -module_name axi4_lite_bram_ctrl_0 -dir $bramRepoDir]
     # configure IP properties  
     set_property -dict [list \
         CONFIG.PROTOCOL {AXI4LITE} \
@@ -113,7 +138,7 @@ if {![file exists $bramXCIDir]} {
 # ethernet IP
 if {![file exists $ethXCIDir]} {
     puts "Creating IP XXV Ethernet..."
-    set xxvEthernetIP [create_ip -vlnv xilinx.com:ip:xxv_ethernet:4.1 -module_name xxv_ethernet_0 -dir $ethernetRepoDir]
+    set xxvEthernetIP [create_ip -vlnv $xxv_ethernet_vlnv -module_name xxv_ethernet_0 -dir $ethernetRepoDir]
     # configure IP properties
     set_property -dict [list \
         CONFIG.CORE {Ethernet PCS/PMA 64-bit} \
@@ -174,10 +199,7 @@ set xpgui_files [ipx::add_file_group xilinx_xpgui $daphne]
 # set miscExternalFiles [ipx::add_file_group xilinx_externalfiles $daphne]
 
 # list IP VLNVs
-set ipVlnv {
-    {xilinx.com:ip:xxv_ethernet:4.1}
-    {xilinx.com:ip:axi_bram_ctrl:4.1}
-}
+set ipVlnv [list $axi_bram_ctrl_vlnv $xxv_ethernet_vlnv]
 
 # Sub IP file groups
 foreach ipChoice $ipVlnv {
@@ -196,13 +218,13 @@ foreach ipChoice $ipVlnv {
 }
 
 # set the path to sources
-set rtlDir [file normalize "../daphne3_ip_repo/rtl"]
-set tbDir [file normalize "../daphne3_ip_repo/sim"]
-set constDir [file normalize "../daphne3_ip_repo/constraints"]
-set xciDir [file normalize "../daphne3_ip_repo/ips"]
-set rtlDAQDir [file normalize "../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src"]
-set constDAQDir [file normalize "../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src"]
-set tclConstDir [file normalize "../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src"]
+set rtlDir [file normalize "../ip_repo/daphne3_ip/rtl"]
+set tbDir [file normalize "../ip_repo/daphne3_ip/sim"]
+set constDir [file normalize "../ip_repo/daphne3_ip/constraints"]
+set xciDir [file normalize "../ip_repo/daphne3_ip/ips"]
+set rtlDAQDir [file normalize "../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src"]
+set constDAQDir [file normalize "../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src"]
+set tclConstDir [file normalize "../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src"]
 
 # obtain all of the rtl files (.vhdl .vhd .v .sv) of the project for later inclusion in the IP design
 
@@ -270,7 +292,7 @@ foreach daqIPType $xciDAQFiles {
 }
 
 # ethernet sub core must be in implementation files group
-ipx::add_file -name [file normalize "../daphne3_ip_repo/src/dune.daq_user_hermes_daphne_1.0/src/xxv_ethernet_0/xxv_ethernet_0.xci"] -file_group $impl_files
+ipx::add_file -name [file normalize "../ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src/xxv_ethernet_0/xxv_ethernet_0.xci"] -file_group $impl_files
 
 # # obtain the specific .xci files
 set anylanguageSynthFg [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects $daphne]
@@ -336,8 +358,8 @@ foreach daqVerilogType $verilogDAQFiles {
 
 # remember DAPHNE's top file is VHDL!
 # must be added last in order to let Vivado packager know it is top
-ipx::add_file -name [file normalize "../daphne3_ip_repo/rtl/daphne3.vhd"] -file_group $lang_synth
-ipx::add_file -name [file normalize "../daphne3_ip_repo/rtl/daphne3.vhd"] -file_group $lang_sim
+ipx::add_file -name [file normalize "../ip_repo/daphne3_ip/rtl/daphne3.vhd"] -file_group $lang_synth
+ipx::add_file -name [file normalize "../ip_repo/daphne3_ip/rtl/daphne3.vhd"] -file_group $lang_sim
 # make it top in hierarchy, just in case
 set_property TOP daphne3 [current_fileset]
 
@@ -345,10 +367,10 @@ set_property TOP daphne3 [current_fileset]
 ipx::update_checksums $daphne
 
 # create the ports based on the TOP level design and the subcores
-set daphne_ports [ipx::add_ports_from_hdl -top_level_hdl_file [file normalize "../daphne3_ip_repo/rtl/daphne3.vhd"] -top_module_name DAPHNE3 -include_dirs [file normalize "../daphne3_ip_repo/rtl"] $daphne]
+set daphne_ports [ipx::add_ports_from_hdl -top_level_hdl_file [file normalize "../ip_repo/daphne3_ip/rtl/daphne3.vhd"] -top_module_name DAPHNE3 -include_dirs [file normalize "../ip_repo/daphne3_ip/rtl"] $daphne]
 
 # create the generic parameters of the design based on the TOP level generic
-set daphne_generics [ipx::add_model_parameters_from_hdl -top_level_hdl_file [file normalize "../daphne3_ip_repo/rtl/daphne3.vhd"] -top_module_name DAPHNE3 -include_dirs [file normalize "../daphne3_ip_repo/rtl"] $daphne]
+set daphne_generics [ipx::add_model_parameters_from_hdl -top_level_hdl_file [file normalize "../ip_repo/daphne3_ip/rtl/daphne3.vhd"] -top_module_name DAPHNE3 -include_dirs [file normalize "../ip_repo/daphne3_ip/rtl"] $daphne]
 set_property DISPLAY_NAME Version [ipx::get_hdl_parameters -of_objects $daphne]
 set_property VALUE_RESOLVE_TYPE user [ipx::get_hdl_parameters -of_objects $daphne]
 
@@ -738,7 +760,7 @@ foreach memoryMapBus $daphne_bus_interfaces {
 # upgrade IP elements to avoid locked IPs or wrong config
 ipx::upgrade_core $daphne
 
-set XGUILoc ../daphne3_ip_repo/xgui/DAPHNE3_v1_0.tcl
+set XGUILoc ../ip_repo/daphne3_ip/xgui/DAPHNE3_v1_0.tcl
 # check if XGUI file already exists
 if {![file exists $XGUILoc]} {
     puts "Generating XGUI file..."
@@ -759,10 +781,6 @@ ipx::update_checksums $daphne
 if {[ipx::check_integrity $daphne]} {
     # save and package IP since it is properly finished
     ipx::save_core
-
-    # update IP catalog
-    set_property IP_REPO_PATHS ../daphne3_ip_repo [current_project]
-    update_ip_catalog 
 
     puts "Successfully packaged DAPHNE3 IP."
 } else {

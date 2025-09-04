@@ -5,10 +5,10 @@
 # <daniel.avila@eia.edu.co - daniel.avila.gomez@cern.ch>
 
 # create the folder where the file will be located
-file mkdir ../daphne3_ip_repo/xgui
+file mkdir ../ip_repo/daphne3_ip/xgui
 
 # set the file path
-set xgui_file_path "../daphne3_ip_repo/xgui/DAPHNE3_v1_0.tcl"
+set xgui_file_path "../ip_repo/daphne3_ip/xgui/DAPHNE3_v1_0.tcl"
 
 # create/open the file 
 set fileId [open $xgui_file_path "w"]

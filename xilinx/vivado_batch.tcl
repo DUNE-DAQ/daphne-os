@@ -1,5 +1,5 @@
-# simple TCL script to build DAPHNE3 vivado design
-# Daniel Avila Gomez <daniel.avila@eia.edu.co - daniel.avila.gomez@cern.ch>
+# TCL script to build DAPHNE3 vivado design
+# Daniel Avila Gomez <daniel.avila@eia.edu.co - daniel.avila.gomez@cern.ch> and Jamieson Olsen <jamieson@fnal.gov>
 #
 # run: vivado -mode tcl -source vivado_batch.tcl
 
@@ -11,10 +11,11 @@ if { [string first $scriptsVivadoVersion $currentVivadoVersion] == -1 } {
     puts ""
     if { [string compare $scriptsVivadoVersion $currentVivadoVersion] > 0 } {
         catch {common::send_gid_msg -ssname BD::TCL -id 2042 -severity "ERROR" "This script was written using Vivado <$scriptsVivadoVersion> and is being run in <$currentVivadoVersion> of Vivado. Sourcing the script failed since it was created with a future version of Vivado."}
+        return 1
     } else {
-        catch {common::send_gid_msg -ssname BD::TCL -id 2041 -severity "ERROR" "This script was written using Vivado <$scriptsVivadoVersion> and is being run in <$currentVivadoVersion> of Vivado. Please run the script in Vivado <$scriptsVivadoVersion> or update the script according to Vivado <$currentVivadoVersion> version commands using -help."}
+        catch {common::send_gid_msg -ssname BD::TCL -id 2041 -severity "WARNING" "This script was written using Vivado <$scriptsVivadoVersion> and is being run in <$currentVivadoVersion> of Vivado. Please run the script in Vivado <$scriptsVivadoVersion> or update the script according to Vivado <$currentVivadoVersion> version commands using -help."}
+        puts "WARNING: Running script built with Vivado $scriptsVivadoVersion in newer version Vivado $currentVivadoVersion."
     }
-    return 1
 }
 
 # general setup stuff
@@ -49,13 +50,17 @@ if {![file exists $bdFile]} {
     # this ensures that the block design is properly read
     source daphne3_ip_gen.tcl
 
+    # update IP catalog
+    set_property IP_REPO_PATHS ../ip_repo [current_project]
+    update_ip_catalog 
+
     # read the block design
     read_bd ../bd/DAPHNE_V3_F4_3/DAPHNE_V3_F4_3.bd
 
     # open the block design
     open_bd_design ../bd/DAPHNE_V3_F4_3/DAPHNE_V3_F4_3.bd
 
-    # update the DAPHNE IP
+    # upgrade the DAPHNE IP
     upgrade_ip [get_ips DAPHNE_V3_F4_3_DAPHNE3_0]
 
     # re configure the version parameter of the IP with the current git commit number

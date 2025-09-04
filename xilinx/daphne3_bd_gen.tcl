@@ -16,6 +16,10 @@ set_property DEFAULT_LIB work [current_project]
 # this helps to avoid errors or not finding the IP
 source daphne3_ip_gen.tcl
 
+# update IP catalog
+set_property IP_REPO_PATHS ../ip_repo [current_project]
+update_ip_catalog 
+
 # set design name here
 variable designName 
 set designName DAPHNE_V3_F4_3
