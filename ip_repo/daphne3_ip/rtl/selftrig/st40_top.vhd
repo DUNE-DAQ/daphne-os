@@ -23,6 +23,7 @@ port(
     detector_id: in std_logic_vector(5 downto 0);
     version_id: in std_logic_vector(5 downto 0);
     -- threshold: in std_logic_vector(9 downto 0); -- counts relative to the calculated baseline
+    version: in std_logic_vector(3 downto 0);
 
     clock: in std_logic; -- main clock 62.5 MHz
     reset: in std_logic;
@@ -65,7 +66,8 @@ architecture st40_top_arch of st40_top is
     -- generic( baseline_runlength: integer := 256 ); -- options 32, 64, 128, or 256
     port(
         link_id: std_logic_vector(5 downto 0);
-        ch_id: std_logic_vector(5 downto 0);
+        ch_id: std_logic_vector(7 downto 0);
+        version: std_logic_vector(3 downto 0);
         slot_id: std_logic_vector(3 downto 0);
         crate_id: std_logic_vector(9 downto 0);
         detector_id: std_logic_vector(5 downto 0);
@@ -108,7 +110,8 @@ begin
             -- generic map ( baseline_runlength => baseline_runlength )
             port map(   
                 link_id => link_id,
-                ch_id => std_logic_vector( to_unsigned(i,6) ),
+                ch_id => std_logic_vector( to_unsigned(i,8) ), -- now 8 bits
+                version => version,
                 slot_id => slot_id,
                 crate_id => crate_id,
                 detector_id => detector_id,
@@ -210,11 +213,12 @@ begin
     outreg_proc: process(clock)
     begin
         if rising_edge(clock) then
-            d0 <= fifo_dout_mux(63 downto 0); -- strip off marker byte
 
             if ( state=dump ) then
+                d0 <= fifo_dout_mux(63 downto 0); -- note strip off marker byte
                 d0_valid <= '1';
             else
+                d0 <= (others => '0'); -- do a better job masking off the data bus while switching between STC3 modules
                 d0_valid <= '0';
             end if;
 
