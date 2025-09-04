@@ -24,7 +24,8 @@ use unisim.vcomponents.all;
 entity stc3 is
 generic( 
     link_id: std_logic_vector(5 downto 0) := "000000"; 
-    ch_id: std_logic_vector(5 downto 0) := "000000";
+    ch_id: std_logic_vector(7 downto 0) := "00000000";
+    version: std_logic_vector(3 downto 0) := "1010";
     slot_id: std_logic_vector(3 downto 0) := "0010";
     crate_id: std_logic_vector(9 downto 0) := "0000000011";
     detector_id: std_logic_vector(5 downto 0) := "000010";
@@ -332,9 +333,9 @@ end process builder_fsm_proc;
 
 -- mux to determine what is written into the output buffer, note this is 72 bits to match ultraram bus
 
-DIN_A <= X"0000000000" & link_id & slot_id & crate_id & detector_id & version_id when (state=h0) else
+DIN_A <= --X"0000000000" & link_id & slot_id & crate_id & detector_id & version_id when (state=h0) else
          X"00" & sample0_timestamp when (state=h1) else
-         X"00" & "0000000000" & ch_id & "00" & bline & "00" & threshold & "00" & trigsample when (state=h2) else
+         X"00" & ch_id(7 downto 0) & version(3 downto 0) & "000000" & bline(13 downto 0) & "00" & threshold(13 downto 0) & "00" & trigsample(13 downto 0) when (state=h2) else
          -- add header 3 through header 8 assignments here...
          X"00" & R0(7 downto 0) & R1 & R2 & R3 & R4                    when (state=d0) else -- sample4l ... sample0
          X"00" & R0(1 downto 0) & R1 & R2 & R3 & R4 & R5(13 downto 8)  when (state=d5) else -- sample9l ... sample4h
@@ -345,7 +346,7 @@ DIN_A <= X"0000000000" & link_id & slot_id & crate_id & detector_id & version_id
          X"00" & R0 & R1 & R2 & R3 & R4(13 downto 6)                   when (state=d27) else -- sample31 ... sample27h
          X"000000000000000000";
 
-BWE_A <= "111111111" when (state=h0) else  -- port A write enable
+BWE_A <= --"111111111" when (state=h0) else  -- port A write enable
          "111111111" when (state=h1) else
          "111111111" when (state=h2) else
          "111111111" when (state=h3) else

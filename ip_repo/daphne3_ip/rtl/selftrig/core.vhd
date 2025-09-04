@@ -75,7 +75,8 @@ architecture core_arch of core is
 component stc3 -- single channel self-triggered sender
 generic( 
     link_id: std_logic_vector(5 downto 0) := "000000"; 
-    ch_id: std_logic_vector(5 downto 0) := "000000";
+    ch_id: std_logic_vector(7 downto 0) := "00000000";
+    version: std_logic_vector(3 downto 0) := "1010";
     slot_id: std_logic_vector(3 downto 0) := "0010";
     crate_id: std_logic_vector(9 downto 0) := "0000000011";
     detector_id: std_logic_vector(5 downto 0) := "000010";
@@ -309,7 +310,8 @@ gena_stc3: for a in 4 downto 0 generate -- 5 AFE chips
         stc3_inst: stc3 
         generic map( 
             link_id => link_id,
-            ch_id => std_logic_vector( to_unsigned(8*a+c, 6) ),
+            ch_id => std_logic_vector( to_unsigned(8*a+c, 8) ), -- now 8 bits
+            version => "1010",
             slot_id => slot_id,
             crate_id => crate_id,
             detector_id => detector_id,

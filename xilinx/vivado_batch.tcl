@@ -19,7 +19,7 @@ if { [string first $scriptsVivadoVersion $currentVivadoVersion] == -1 } {
 }
 
 # general setup stuff
-set_param general.maxThreads 4
+set_param general.maxThreads 12
 set outputDir ./output
 file mkdir $outputDir 
 set_part xck26-sfvc784-2LV-c
@@ -129,7 +129,23 @@ write_bitstream -force -bin_file $outputDir/daphne3_$git_sha.bit
 write_debug_probes -force $outputDir/probes.ltx
 
 # export the implemented hardware system to the Vitis environment
-write_hw_platform -fixed -force -file $outputDir/daphne3_$git_sha.xsa
+write_hw_platform -fixed -force -include_bit -file $outputDir/daphne3_$git_sha.xsa
 # write_hw_platform -fixed -force -file $outputDir/daphne3.xsa
+
+# now package the overlay needed files
+set overlayDir [file join $outputDir "daphne3_OL_$git_sha"]
+
+# check if vitis is on PATH
+if {![info exists ::env(XILINX_VITIS)]} {
+    error "XILINX_VITIS is not set. Please source settings64.bat/.sh first."
+}
+set vitis_path $::env(XILINX_VITIS)
+puts "INFO: Found Vitis at $vitis_path."
+
+# set the XSCT path
+set xsct_exe [file join $vitis_path bin xsct]
+
+# run the XSCT script
+exec $xsct_exe daphne3_dtbo_gen.tcl "$outptDir/daphne3_$git_sha.xsa" $overlayDir $git_sha
 
 exit

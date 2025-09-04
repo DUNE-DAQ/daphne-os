@@ -781,7 +781,6 @@ ipx::update_checksums $daphne
 if {[ipx::check_integrity $daphne]} {
     # save and package IP since it is properly finished
     ipx::save_core
-
     puts "Successfully packaged DAPHNE3 IP."
 } else {
     # there was an error!
