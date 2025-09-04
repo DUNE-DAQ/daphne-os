@@ -28,7 +28,8 @@ entity stc3 is
 generic( baseline_runlength: integer := 256 ); -- options 32, 64, 128, or 256
 port(
     link_id: std_logic_vector(5 downto 0);
-    ch_id: std_logic_vector(5 downto 0);
+    ch_id: std_logic_vector(7 downto 0);
+    version: std_logic_vector(3 downto 0);
     slot_id: std_logic_vector(3 downto 0);
     crate_id: std_logic_vector(9 downto 0);
     detector_id: std_logic_vector(5 downto 0);
@@ -287,16 +288,16 @@ sample0_ts <= std_logic_vector( unsigned(trig_sample_ts) - 64 );
 -- the upper byte of the FIFO is used for a marker to indicate the first and last words of the 
 -- output record. this is done to make the next stage selector logic easier.
 
-marker <= X"BE" when (state=h0) else  -- mark first word
+marker <= X"BE" when (state=h1) else  -- mark first word
           X"ED" when (state=d27 and block_count=31) else -- mark the last word
           X"00";
 
 -- mux to determine what is written into the output FIFO, note this is 72 bits to match ultraram bus
 -- this output FIFO is deep enough to hold MANY output records.
 
-FIFO_din <= marker & X"00000000" & link_id & slot_id & crate_id & detector_id & version_id when (state=h0) else
+FIFO_din <= --marker & X"00000000" & link_id & slot_id & crate_id & detector_id & version_id when (state=h0) else
             marker & sample0_ts when (state=h1) else -- timestamp of sample0 (NOT the trigger sample!)
-            marker & ("0000000000" & ch_id) & ("00" & calculated_baseline) & ("000000" & threshold) & ("00" & trig_sample_dat) when (state=h2) else
+            marker & ch_id(7 downto 0) & version(3 downto 0) & "000000" & calculated_baseline(13 downto 0) & "000000" & threshold(9 downto 0) & "00" & trig_sample_dat(13 downto 0) when (state=h2) else
             marker & X"000000000000" & "000" & fifo_word_count when (state=h3) else -- report how many words are currently in the FIFO
             -- reserved for header 4 (all zeros)
             -- reserved for header 5 (all zeros)
@@ -314,7 +315,7 @@ FIFO_din <= marker & X"00000000" & link_id & slot_id & crate_id & detector_id & 
 
 -- output FIFO write enable
 
-FIFO_wr_en <= '1' when (state=h0) else  
+FIFO_wr_en <= -- '1' when (state=h0) else  
               '1' when (state=h1) else
               '1' when (state=h2) else
               '1' when (state=h3) else

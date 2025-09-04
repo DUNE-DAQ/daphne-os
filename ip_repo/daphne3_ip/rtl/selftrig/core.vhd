@@ -115,6 +115,7 @@ port(
     detector_id: in std_logic_vector(5 downto 0);
     version_id: in std_logic_vector(5 downto 0);
     threshold: in std_logic_vector(9 downto 0);
+    version: in std_logic_vector(3 downto 0);
 
     clock: in std_logic; -- main clock 62.5 MHz
     reset: in std_logic;
@@ -240,6 +241,7 @@ port map(
     detector_id => detector_id,
     version_id => version_id,
     threshold => threshold,
+    version => "1010",
 
     clock => clock,
     reset => reset,

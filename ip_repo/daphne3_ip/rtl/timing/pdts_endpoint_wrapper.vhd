@@ -76,7 +76,7 @@ pdts_endpoint_inst: pdts_endpoint
 		USE_EXT_PLL => false, -- Use external PLL or clock source
 		--EXT_PLL_DIV => 2. -- External PLL division ratio, not used
 		FORCE_TX => false, -- Turn on transmit permanently, don't do this....!
-		SKIP_FREQ => false, -- Skip the frequency check step (e.g. for simulation)
+		SKIP_FREQ => true, -- Skip the frequency check step (e.g. for simulation)
 		EXT_ADDR => true, -- Skip the address setting step
 		SKIP_DESKEW => false, -- Skip the phase adjustment step
 		SKIP_TSTAMP => false )
