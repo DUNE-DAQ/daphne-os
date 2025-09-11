@@ -9,6 +9,7 @@ ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src/axi4_lite_bram_ctrl_0
 ip_repo/daphne3_ip/src/dune.daq_user_hermes_daphne_1.0/src/xxv_ethernet_0/
 ip_repo/daphne3_ip/xgui/
 ip_repo/daphne3_ip/*.xml
+xilinx/.cache
 xilinx/.Xil/
 xilinx/output/
 xilinx/*.jou
