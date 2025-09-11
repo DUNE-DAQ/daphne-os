@@ -54,6 +54,7 @@ Once you clone the repository for the first time, you will see a repository stru
     ├── 📂 xilinx/
     │   ├── 📄 daphne3_bd_gen.tcl
     │   ├── 📄 daphne3_ip_gen.tcl
+    │   ├── 📄 daphne3_dtbo_gen.tcl
     │   ├── 📄 DAPHNE_V3_PIN_MAP.xdc
     │   ├── 📄 vivado_batch.tcl
     │   └── ...
@@ -84,6 +85,7 @@ After you run the `src/xilinx/vivado_batch.tcl` script, there will be a few new 
     │   │   └── ...
     │   ├── 📄 daphne3_bd_gen.tcl
     │   ├── 📄 daphne3_ip_gen.tcl
+    │   ├── 📄 daphne3_dtbo_gen.tcl
     │   ├── 📄 DAPHNE_V3_PIN_MAP.xdc
     │   ├── 📄 vivado_batch.tcl
     │   └── ...
@@ -126,6 +128,7 @@ Here are stored all of the tcl files that the project uses in order to generate 
 
 - 📄 <code>daphne3_ip_gen.tcl</code>: Creates a custom IP for the DAPHNE3 PL Side.  
 - 📄 <code>daphne3_bd_gen.tcl</code>: Creates a Block Design that connects DAPHNE3's PL and PS.  
+- 📄 <code>daphne3_dtbo_gen.tcl</code>: Creates the Device Tree Overlay of the firmware.
 - 📄 <code>daphne3_xgui_gen.tcl</code>: Creates a GUI file for the custom DAPHNE3 PL IP core.  
 - 📄 <code>DAPHNE_V3_PIN_MAP.xdc</code>: Main constraints file.  
 - 📄 <code>vivado_batch.tcl</code>: Main script, generates EVERYTHING.  
@@ -145,7 +148,7 @@ Defines which files and directories Git should ignore (e.g., xilinx IP files, te
 
 <details>
 <summary>📄 <code>Memory_Map.md</code></summary>
-Map of registers in the device's memory that are used by the design, since there is a bunch of AXI interfaces and AXI Address spaces, this file actually contains a lot of registers, so whenever you're gonna make modifications to the device behaviour, make sure to check for help on this file.
+This file defines the memory map of registers accessible through the device’s AXI interfaces. It documents the register addresses and their functions. Review this file before making modifications to the device’s behavior.
 </details>
 
 <details>
@@ -186,7 +189,7 @@ It is strongly recommended to NOT use the Vivado GUI (Project Mode) to build thi
 
     You can see if the IP contains the files/sources that you want by:
 
-    1. If you already run the `src/xilinx/vivado_batch.tcl`:
+    1. If you have already run the `src/xilinx/vivado_batch.tcl`:
 
         1. Run Vivado in TCL mode.
         2. Navigate to the location of the xilinx directory of the folder where the repo was cloned.
@@ -231,7 +234,7 @@ It is strongly recommended to NOT use the Vivado GUI (Project Mode) to build thi
 
     You can check the created Block Design by following these steps:
 
-    1. If you already run the `src/xilinx/vivado_batch.tcl`:
+    1. If you have already run the `src/xilinx/vivado_batch.tcl`:
 
         1. Run Vivado in TCL mode.
         2. Navigate to the location of the xilinx directory of the folder where the repo was cloned.
