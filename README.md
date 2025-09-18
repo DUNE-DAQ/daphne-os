@@ -29,10 +29,14 @@ $ source vivado_batch.tcl
 
 On Linux:
 
-1. Navigate to the location of the xilinx directory of the folder where the repo was cloned.
-2. Run the source command for the TCL batch file in TCL mode.
+1. Make sure to source Vitis settings first, as this is necessary to generate Overlay files. Use Vitis, as this one already contains the Vivado set of configurations.
+2. Also, make sure to source Petalinux settings too, as they might me also needed.
+3. Navigate to the location of the xilinx directory of the folder where the repo was cloned.
+4. Run the source command for the TCL batch file in TCL mode.
 
 ```bash
+$ source <install_path_to>/Vitis/<version>/settings64.sh
+4 source <install_path_to_petalinux>/settings64.sh
 $ cd src/xilinx
 $ vivado -mode tcl -source vivado_batch.tcl
 ```
@@ -52,6 +56,7 @@ Once you clone the repository for the first time, you will see a repository stru
     │   │   └── 📂 src/
     │   └── ...
     ├── 📂 xilinx/
+    │   ├── 📂 scripts/
     │   ├── 📄 daphne3_bd_gen.tcl
     │   ├── 📄 daphne3_ip_gen.tcl
     │   ├── 📄 daphne3_dtbo_gen.tcl
@@ -83,6 +88,7 @@ After you run the `src/xilinx/vivado_batch.tcl` script, there will be a few new 
     │   │   ├── 📄 daphne3.bit
     │   │   ├── 📦 daphne3.xsa
     │   │   └── ...
+    │   ├── 📂 scripts/
     │   ├── 📄 daphne3_bd_gen.tcl
     │   ├── 📄 daphne3_ip_gen.tcl
     │   ├── 📄 daphne3_dtbo_gen.tcl
@@ -139,6 +145,11 @@ You might also find other IP generation files related to more custom IPs here, h
 <details>
 <summary>📂 <code>xilinx/output/</code></summary>
 This folder contains all of the output files, including reports, binaries, Xilinx Support Archive (<code>.xsa</code>) or hardware handoff files, all of the Device Tree Overlay files needed to generate the <code>.dtbo</code> files and so on. This folder should be ZIPPED UP and commented on each commit of the repository, as it is also ignored to keep the repository clean.
+</details>
+
+<details>
+<summary>📂 <code>xilinx/scripts/</code></summary>
+This folder contains small helper scripts that complement the execution of the main file. Currently, it only contains one sed script that adds missing lines to the AXI Quad SPI module inside the <code>pl.dtsi</code> file.
 </details>
 
 <details>
@@ -287,12 +298,12 @@ Output files are usually ZIPPED up and attached to each commit in the comments s
 
 ## What are we missing?
 
-The design was pretty much written for a Windows version, so we still need to add lines of code that allow for a full automatic generation of device tree overlay in Linux. Windows does not allow the process to run fully automatic, as the `vivado_batch.tcl` script generates up to the `pl.dts - pl.dtsi` files, the user must run the `dtc` command by either using a Windows Subsystem for Linux installation (safer way), or a Machine that runs Linux as its OS, in order to generate both `pl.dtbo` and `shell.json` files.
+The design was pretty much written for a Windows version, but fully automatic generation of device tree overlay on Linux is available too. Windows does not allow the process to run fully automatic, as the `vivado_batch.tcl` script generates up to the `pl.dts - pl.dtsi` files, the user must run the `dtc` command by either using a Windows Subsystem for Linux installation (safer way), or a Machine that runs Linux as its OS, in order to generate both `pl.dtbo` and `shell.json` files.
 
 - [x] Create Bitstream and Platform Files (`.bit .bin .xsa .dts .dtsi`).
 - [x] Manually generate Device Tree Overlay Files (`.dtbo`) using WSL.
-- [ ] Automatically generate Device Tree Overlay Files (`.dtbo`) using Linux.
-- [ ] Automatically wrap everything up in a single folder so that DAPHNE's Petalinux xmultapp can load it.
+- [x] Automatically generate Device Tree Overlay Files (`.dtbo`) using Linux.
+- [x] Automatically wrap everything up in a single folder so that DAPHNE's Petalinux `xmultapp` can load it.
 - [ ] Automatically detect and add new sub IP cores (Current strategy is to reverse engineer `.xci` files).
 
 <daniel.avila@eia.edu.co - daniel.avila.gomez@cern.ch>
