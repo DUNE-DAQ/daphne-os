@@ -135,21 +135,78 @@ write_debug_probes -force $outputDir/probes.ltx
 # export the implemented hardware system to the Vitis environment
 write_hw_platform -fixed -force -include_bit -file $outputDir/daphne3_$git_sha.xsa
 # write_hw_platform -fixed -force -file $outputDir/daphne3.xsa
-
-# now package the overlay needed files
-set overlayDir [file join $outputDir "daphne3_OL_$git_sha"]
  
-# check if vitis is on PATH
-if {![info exists ::env(XILINX_VITIS)]} {
-    error "XILINX_VITIS is not set. Please source settings64.bat/.sh first."
+# define if the script is running on Windows or Linux
+if {$tcl_platform(os) eq "Linux"} {
+    puts "INFO: Running current TCL script on $tcl_platform(os)."
+ 
+    # since we are running on Linux, we can generate everything up to the overlay folder
+    # including .bin .dtbo and .json files
+    # now package the overlay needed files
+    set overlayDir [file join $outputDir "daphne3_OL_$git_sha"]
+    file mkdir $overlayDir
+ 
+    # check if vitis is on PATH
+    if {![info exists ::env(XILINX_VITIS)]} {
+        # tell the user that vitis is not on PATH and must source its environment first
+        puts "ERROR: XILINX_VITIS is not set. Please source settings64.bat/.sh first."
+    } else {
+        # as vitis is on PATH, we can do everything
+        set vitis_path $::env(XILINX_VITIS)
+        puts "INFO: Found Vitis at $vitis_path."
+ 
+        # set the XSCT path
+        set xsct_exe [file join $vitis_path bin xsct]
+ 
+        # run the XSCT script
+        puts "INFO: Generating Device Tree files."
+        if {[catch {exec $xsct_exe daphne3_dtbo_gen.tcl "$outputDir/daphne3_$git_sha.xsa" $outputDir $git_sha 2>@1} result]} {
+            error "ERROR: xsct command failed:\n$result"
+        }
+        puts "INFO: Device Tree files have been generated."
+ 
+        # locate the DTSI file
+        set pl_dtsi_path [glob -nocomplain -types f "$outputDir/daphne3_$git_sha/*/*/*/*/*/*/pl.dtsi"]
+ 
+        # add missing lines for AXI Quad SPI module
+        puts "INFO: Adding missing lines for AXI Quad SPI module in the dtsi file."
+        exec sed -i -f ./scripts/axi_quad_spi_dtbo_patch.sed $pl_dtsi_path
+        puts "INFO: Finished adding missing lines for dtsi file."
+ 
+        # compile the Device Tree
+        puts "INFO: Compiling Device Tree."
+        if {[catch {exec dtc -@ -O dtb -o $outputDir/daphne3_$git_sha.dtbo $pl_dtsi_path 2>@1} result]} {
+            error "ERROR: dtc command failed:\n$result"
+        }        
+        puts "INFO: Device Tree files have been compiled."
+ 
+        # create the shell.json file
+        puts "INFO: Creating json file."
+        exec echo { { "shell_type" : "XRT_FLAT", "num_slots": "1" } } > $outputDir/shell.json
+        puts "INFO: Json file has been generated."
+ 
+        # now, move all the necessary files to the overlay folder
+        puts "INFO: Creating Overlay folder."
+        file rename -force $outputDir/daphne3_$git_sha.dtbo $overlayDir/daphne3_OL_$git_sha.dtbo
+        file rename -force $outputDir/daphne3_$git_sha.bin $overlayDir/daphne3_OL_$git_sha.bin
+        file rename -force $outputDir/shell.json $overlayDir/shell.json
+ 
+        # zip the resulting folder 
+        cd $outputDir
+        exec zip -r daphne3_OL_$git_sha.zip daphne3_OL_$git_sha
+        puts "INFO: Successfully generated Device Tree Overlay folder."
+ 
+        # finally, we're ready to go, so we can exit Vivado
+        puts "INFO: Finished design building."
+        exit
+    }
+} elseif {$tcl_platform(os) eq "Windows NT"} {
+    puts "INFO: Running current TCL script on $tcl_platform(os)."
+ 
+    # since we are running on Windows, we cannot generate everything up to the overlay folder
+    # we would need to do everything on a separate script using WSL commands
+    puts "WARNING: Device Tree Overlay can not be automatically produced on Windows."
+    puts "WARNING: Please make sure to use the .xsa File to manually generate the necessary outputs."
+} else {
+    puts "WARNING: Unknown OS $tcl_platform(os)."
 }
-set vitis_path $::env(XILINX_VITIS)
-puts "INFO: Found Vitis at $vitis_path."
- 
-# set the XSCT path
-set xsct_exe [file join $vitis_path bin xsct]
- 
-# run the XSCT script
-exec $xsct_exe daphne3_dtbo_gen.tcl "$outputDir/daphne3_$git_sha.xsa" $overlayDir $git_sha
-
-exit
