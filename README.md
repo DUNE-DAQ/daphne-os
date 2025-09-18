@@ -149,7 +149,7 @@ This folder contains all of the output files, including reports, binaries, Xilin
 
 <details>
 <summary>📂 <code>xilinx/scripts/</code></summary>
-This folder contains small helper scripts that complement the execution of the main file. Currently, it only contains one sed script that adds missing lines to the AXI Quad SPI module inside the <code>pl.dtsi</code> file.
+This folder contains small helper scripts that complement the execution of the main file. Currently, it only contains one <code>sed</code> script that adds missing lines to the AXI Quad SPI module inside the <code>pl.dtsi</code> file.
 </details>
 
 <details>

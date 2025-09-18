@@ -196,7 +196,7 @@ if {$tcl_platform(os) eq "Linux"} {
         puts "INFO: Finished design building."
         exit
     }
-} elseif {$tcl_platform(os) eq "Windows"} {
+} elseif {$tcl_platform(os) eq "Windows NT"} {
     puts "INFO: Running current TCL script on $tcl_platform(os)."
  
     # since we are running on Windows, we cannot generate everything up to the overlay folder
