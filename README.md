@@ -2,7 +2,7 @@
 
 ## Documentation
 
-The documentation related to the DAPHNE V3/MEZZ board is still under development and whenever there is a wiki that explains everything you will find the link pointing to it here.
+The documentation related to the DAPHNE V3/MEZZ board is still under development and whenever there is a wiki that explains everything you will find the link pointing to it here. However, a very detailed explanation of how each module that builds the DAPHNE firmware (a firmware overview) can be found in Jamieson's DAPHNE V3/MEZZ repo, [here](https://github.com/jamieson-olsen/daphne3).
 
 The memory map can be found inside the `src/` directory. Since this design contains PS-PL features, it is actually very large and is still under constant modification.
 
