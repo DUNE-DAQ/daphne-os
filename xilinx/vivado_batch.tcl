@@ -149,7 +149,7 @@ if {$tcl_platform(os) eq "Linux"} {
     # check if vitis is on PATH
     if {![info exists ::env(XILINX_VITIS)]} {
         # tell the user that vitis is not on PATH and must source its environment first
-        puts "ERROR: XILINX_VITIS is not set. Please source settings64.bat/.sh first."
+        error "ERROR: XILINX_VITIS is not set. Please source settings64.bat/.sh first."
     } else {
         # as vitis is on PATH, we can do everything
         set vitis_path $::env(XILINX_VITIS)
@@ -207,6 +207,30 @@ if {$tcl_platform(os) eq "Linux"} {
     # we would need to do everything on a separate script using WSL commands
     puts "WARNING: Device Tree Overlay can not be automatically produced on Windows."
     puts "WARNING: Please make sure to use the .xsa File to manually generate the necessary outputs."
+
+    # check if vitis is on PATH
+    if {![info exists ::env(XILINX_VITIS)]} {
+        # tell the user that vitis is not on PATH and must source its environment first
+        error "ERROR: XILINX_VITIS is not set. Please source settings64.bat/.sh first."
+    } else {
+        # as vitis is on PATH, we can generate .dts .dtsi files
+        set vitis_path $::env(XILINX_VITIS)
+        puts "INFO: Found Vitis at $vitis_path."
+ 
+        # set the XSCT path
+        set xsct_exe [file join $vitis_path bin xsct]
+ 
+        # run the XSCT script
+        puts "INFO: Generating Device Tree files."
+        if {[catch {exec $xsct_exe -eval "hsi::open_hw_design $outputDir/daphne3_$git_sha.xsa; createdts -hw $outputDir/daphne3_$git_sha.xsa -zocl -platform-name daphne3_$git_sha -git-branch xlnx_rel_v2022.2 -overlay -out $outputDir/daphne3_$git_sha; exit" 2>@1} result]} {
+            error "ERROR: xsct command failed:\n$result"
+        }
+        puts "INFO: Device Tree files have been generated."
+ 
+        # tell the user that from this point, everything must be run manually
+        puts "INFO: Please make sure to edit .dtsi file with the proper lines for AXI Quad SPI Module, and run the dtc command to compile the design."
+        exit
+    } 
 } else {
     puts "WARNING: Unknown OS $tcl_platform(os)."
 }
