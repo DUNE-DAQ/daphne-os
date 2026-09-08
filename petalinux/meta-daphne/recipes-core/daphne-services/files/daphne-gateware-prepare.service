@@ -1,0 +1,9 @@
+[Unit]
+Description=Select the default DAPHNE gateware profile
+Before=firmware.service daphne-gateware-verify.service
+PartOf=daphne-runtime.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/daphne-gateware prepare-default
+RemainAfterExit=yes

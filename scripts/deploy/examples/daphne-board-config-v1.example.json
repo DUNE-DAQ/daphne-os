@@ -1,0 +1,30 @@
+{
+  "contract": "daphne.board-config",
+  "version": 1,
+  "asset": {
+    "asset_id": "DAPHNE-EXAMPLE-001",
+    "carrier_revision": "DAPHNE-V2"
+  },
+  "som": {
+    "uuid": "00000000-0000-4000-8000-000000000001",
+    "serial": "SOM-EXAMPLE-001",
+    "product": "SM-K26-XCL2GC-ED",
+    "factory_mac_id_0": "02:00:00:00:00:01"
+  },
+  "network": {
+    "mac_source": "som_eeprom",
+    "production_mac": "02:00:00:00:00:01",
+    "ipv4_address": "192.0.2.10",
+    "hostname": "daphne-example-001.example",
+    "vlan": 100,
+    "authorized": false
+  },
+  "runtime": {
+    "timing_endpoint": "0x001",
+    "firmware_release": "dual-gateware-2026.08.31-rc1"
+  },
+  "source": {
+    "assignment_revision": 1,
+    "asset_record_revision": 1
+  }
+}

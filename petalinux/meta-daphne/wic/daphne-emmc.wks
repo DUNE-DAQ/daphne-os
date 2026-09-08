@@ -1,0 +1,7 @@
+# DAPHNE factory eMMC image.
+#
+# Keep the boot partition large enough for BOOT.bin, Image, device trees, and
+# one update margin, but avoid the 512 MiB padding in xilinx-default-sd.wks.
+# The smaller raw image materially reduces JTAG provisioning time.
+part /boot --source rootfs --change-directory=boot --fixed-size=128M --fstype=vfat --use-label --label boot --active --align 4
+part /     --source rootfs --exclude-path=boot/                     --fstype=ext4 --use-label --label root          --align 4

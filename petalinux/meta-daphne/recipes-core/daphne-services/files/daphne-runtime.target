@@ -1,0 +1,10 @@
+[Unit]
+Description=DAPHNE gateware and userspace runtime
+Requires=daphne-gateware-prepare.service firmware.service daphne-gateware-verify.service
+Requires=clockchip.service endpoint.service hermes.service daphne.service
+After=daphne-gateware-prepare.service firmware.service daphne-gateware-verify.service
+After=clockchip.service endpoint.service hermes.service daphne.service
+AllowIsolate=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,4 @@
+# Common, board-neutral DAPHNE runtime defaults.
+# Endpoint address, timing profile, IP and hostname are provisioned from the
+# enrollment database after the SOM UUID and factory MAC are registered.
+APP=daphne

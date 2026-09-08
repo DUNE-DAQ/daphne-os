@@ -1,0 +1,17 @@
+[Unit]
+Description=Configure DAPHNE endpoint timing path
+After=clockchip.service firmware.service
+Requires=clockchip.service firmware.service
+PartOf=firmware.service daphne-runtime.target
+Before=hermes.service daphne.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/firmware
+EnvironmentFile=-/etc/daphne-board.env
+EnvironmentFile=/run/daphne-gateware/active.env
+ExecStart=/usr/local/bin/daphne-endpoint-init.py
+RemainAfterExit=yes
+
+[Install]
+WantedBy=daphne-runtime.target

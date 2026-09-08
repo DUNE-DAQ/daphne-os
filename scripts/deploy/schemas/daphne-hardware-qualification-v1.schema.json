@@ -1,0 +1,980 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dune-daq.github.io/daphne/schemas/daphne-hardware-qualification-v1.schema.json",
+  "title": "DAPHNE per-board hardware qualification record v1",
+  "description": "A fail-closed qualification record bound to one deployment campaign board and one frozen dual-gateware release.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contract",
+    "version",
+    "created_utc",
+    "qualification_status",
+    "release_qualified",
+    "binding",
+    "acceptance",
+    "gates",
+    "review"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/daphne-hardware-qualification-v1.schema.json"
+    },
+    "contract": {
+      "const": "daphne.hardware-qualification"
+    },
+    "version": {
+      "const": 1
+    },
+    "created_utc": {
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "qualification_status": {
+      "enum": ["NOT_RUN", "IN_PROGRESS", "FAIL", "PASS"]
+    },
+    "release_qualified": {
+      "type": "boolean"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["campaign", "deployment", "release"],
+      "properties": {
+        "campaign": {
+          "$ref": "#/$defs/campaignBinding"
+        },
+        "deployment": {
+          "$ref": "#/$defs/deploymentIdentity"
+        },
+        "release": {
+          "$ref": "#/$defs/releaseBinding"
+        }
+      }
+    },
+    "acceptance": {
+      "$ref": "#/$defs/acceptance"
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "$ref": "#/$defs/gate"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "properties": {"id": {"const": "postboot_identity"}},
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {"id": {"const": "switch_cycle_1_self_full_self"}},
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {"id": {"const": "switch_cycle_2_self_full_self"}},
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {"id": {"const": "failed_load_rollback"}},
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {"id": {"const": "self_trigger_data"}},
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {"id": {"const": "full_stream_data_channel_mapping"}},
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "properties": {"id": {"const": "four_link_ethernet"}},
+            "required": ["id"]
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    },
+    "review": {
+      "$ref": "#/$defs/review"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {"release_qualified": {"const": true}},
+            "required": ["release_qualified"]
+          },
+          {
+            "properties": {"qualification_status": {"const": "PASS"}},
+            "required": ["qualification_status"]
+          }
+        ]
+      },
+      "then": {
+        "allOf": [
+          {"$ref": "#/$defs/qualificationClaim"},
+          {"$ref": "#/$defs/qualificationPrerequisites"}
+        ]
+      }
+    },
+    {
+      "if": {"$ref": "#/$defs/qualificationPrerequisites"},
+      "then": {"$ref": "#/$defs/qualificationClaim"}
+    },
+    {
+      "if": {
+        "properties": {"qualification_status": {"const": "NOT_RUN"}},
+        "required": ["qualification_status"]
+      },
+      "then": {
+        "properties": {
+          "release_qualified": {"const": false},
+          "gates": {
+            "items": {
+              "properties": {"status": {"const": "NOT_RUN"}},
+              "required": ["status"]
+            }
+          },
+          "review": {
+            "properties": {"status": {"const": "NOT_RUN"}},
+            "required": ["status"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"qualification_status": {"const": "FAIL"}},
+        "required": ["qualification_status"]
+      },
+      "then": {
+        "properties": {"release_qualified": {"const": false}},
+        "anyOf": [
+          {
+            "properties": {
+              "gates": {
+                "contains": {
+                  "properties": {"status": {"const": "FAIL"}},
+                  "required": ["status"]
+                },
+                "minContains": 1
+              }
+            }
+          },
+          {
+            "properties": {
+              "review": {
+                "properties": {"status": {"const": "FAIL"}},
+                "required": ["status"]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {"qualification_status": {"const": "IN_PROGRESS"}},
+        "required": ["qualification_status"]
+      },
+      "then": {
+        "properties": {
+          "release_qualified": {"const": false},
+          "gates": {
+            "items": {
+              "properties": {"status": {"enum": ["NOT_RUN", "PASS"]}},
+              "required": ["status"]
+            }
+          },
+          "review": {
+            "properties": {"status": {"enum": ["NOT_RUN", "PASS"]}},
+            "required": ["status"]
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "gates": {
+                "contains": {
+                  "properties": {"status": {"const": "PASS"}},
+                  "required": ["status"]
+                },
+                "minContains": 1
+              }
+            }
+          },
+          {
+            "properties": {
+              "review": {
+                "properties": {"status": {"const": "PASS"}},
+                "required": ["status"]
+              }
+            }
+          }
+        ],
+        "not": {"$ref": "#/$defs/qualificationPrerequisites"}
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "buildId": {
+      "type": "string",
+      "pattern": "^0x[0-9A-Fa-f]{8}$"
+    },
+    "hostFingerprint": {
+      "type": "string",
+      "pattern": "^SHA256:[A-Za-z0-9+/]{43}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "hashMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/sha256"
+      }
+    },
+    "campaignBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "contract",
+        "version",
+        "mode",
+        "status",
+        "firmware_release",
+        "completed_utc",
+        "campaign_csv_sha256",
+        "deploy_script_sha256",
+        "bundle_manifest_sha256",
+        "bundle_artifact_sha256"
+      ],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "contract": {"const": "daphne.deploy-campaign"},
+        "version": {"const": 1},
+        "mode": {"const": "execute"},
+        "status": {"const": "staged"},
+        "firmware_release": {"type": "string", "minLength": 1},
+        "completed_utc": {"$ref": "#/$defs/utcTimestamp"},
+        "campaign_csv_sha256": {"$ref": "#/$defs/sha256"},
+        "deploy_script_sha256": {"$ref": "#/$defs/sha256"},
+        "bundle_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "bundle_artifact_sha256": {"$ref": "#/$defs/hashMap"}
+      }
+    },
+    "deploymentIdentity": {
+      "type": "object",
+      "required": [
+        "board",
+        "host",
+        "host_key_sha256",
+        "firmware_release",
+        "board_config_sha256",
+        "status",
+        "return_code",
+        "log",
+        "log_sha256",
+        "release_qualified"
+      ],
+      "properties": {
+        "board": {"type": "string", "minLength": 1},
+        "host": {"type": "string", "minLength": 1},
+        "host_key_sha256": {"$ref": "#/$defs/hostFingerprint"},
+        "firmware_release": {"type": "string", "minLength": 1},
+        "board_config_sha256": {"$ref": "#/$defs/hashMap"},
+        "status": {"const": "staged"},
+        "return_code": {"const": 0},
+        "log": {"type": "string", "minLength": 1},
+        "log_sha256": {"$ref": "#/$defs/sha256"},
+        "release_qualified": {"const": false}
+      }
+    },
+    "releaseBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "contract",
+        "contract_version",
+        "release_id",
+        "lifecycle",
+        "self_trigger_build_id",
+        "full_stream_build_id",
+        "petalinux_rootfs_ext4_sha256",
+        "petalinux_bundle_manifest_sha256",
+        "artifact_sha256"
+      ],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "contract": {"const": "daphne.dual-gateware-release"},
+        "contract_version": {"const": 1},
+        "release_id": {"type": "string", "minLength": 1},
+        "lifecycle": {"type": "string", "minLength": 1},
+        "self_trigger_build_id": {"$ref": "#/$defs/buildId"},
+        "full_stream_build_id": {"$ref": "#/$defs/buildId"},
+        "petalinux_rootfs_ext4_sha256": {"$ref": "#/$defs/sha256"},
+        "petalinux_bundle_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "artifact_sha256": {
+          "allOf": [
+            {"$ref": "#/$defs/hashMap"},
+            {
+              "required": [
+                "petalinux_image",
+                "self_trigger_build",
+                "full_stream_build",
+                "server_runtime",
+                "client_install"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "nullableEvidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "sha256": {
+          "anyOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "path": {"type": "null"},
+            "sha256": {"type": "null"}
+          }
+        },
+        {
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      ]
+    },
+    "evidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "thresholdMapOrNull": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"minLength": 1},
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      ]
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["daq", "ethernet"],
+      "properties": {
+        "daq": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command_argv", "config"],
+          "properties": {
+            "command_argv": {
+              "oneOf": [
+                {"type": "null"},
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {"type": "string", "minLength": 1}
+                }
+              ]
+            },
+            "config": {"$ref": "#/$defs/nullableEvidenceReference"}
+          }
+        },
+        "ethernet": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimum_duration_seconds",
+            "minimum_counter_deltas",
+            "maximum_error_deltas"
+          ],
+          "properties": {
+            "minimum_duration_seconds": {
+              "type": ["number", "null"],
+              "exclusiveMinimum": 0
+            },
+            "minimum_counter_deltas": {
+              "$ref": "#/$defs/thresholdMapOrNull"
+            },
+            "maximum_error_deltas": {
+              "$ref": "#/$defs/thresholdMapOrNull"
+            }
+          }
+        }
+      }
+    },
+    "commandArgv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "profileIdentitySelfTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "build_id", "server_mode", "service_active"],
+      "properties": {
+        "profile": {"const": "self-trigger"},
+        "build_id": {"$ref": "#/$defs/buildId"},
+        "server_mode": {"const": "self-trigger"},
+        "service_active": {"const": true}
+      }
+    },
+    "profileIdentityFullStream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "build_id", "server_mode", "service_active"],
+      "properties": {
+        "profile": {"const": "full-stream"},
+        "build_id": {"$ref": "#/$defs/buildId"},
+        "server_mode": {"const": "full-stream"},
+        "service_active": {"const": true}
+      }
+    },
+    "switchIdentitySelfTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "build_id",
+        "server_mode",
+        "service_active",
+        "switch_exit_code"
+      ],
+      "properties": {
+        "profile": {"const": "self-trigger"},
+        "build_id": {"$ref": "#/$defs/buildId"},
+        "server_mode": {"const": "self-trigger"},
+        "service_active": {"const": true},
+        "switch_exit_code": {"const": 0}
+      }
+    },
+    "switchIdentityFullStream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "build_id",
+        "server_mode",
+        "service_active",
+        "switch_exit_code"
+      ],
+      "properties": {
+        "profile": {"const": "full-stream"},
+        "build_id": {"$ref": "#/$defs/buildId"},
+        "server_mode": {"const": "full-stream"},
+        "service_active": {"const": true},
+        "switch_exit_code": {"const": 0}
+      }
+    },
+    "postbootObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profiles"],
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "oneOf": [
+              {"$ref": "#/$defs/profileIdentitySelfTrigger"},
+              {"$ref": "#/$defs/profileIdentityFullStream"}
+            ]
+          },
+          "allOf": [
+            {
+              "contains": {"$ref": "#/$defs/profileIdentitySelfTrigger"},
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {"$ref": "#/$defs/profileIdentityFullStream"},
+              "minContains": 1,
+              "maxContains": 1
+            }
+          ]
+        }
+      }
+    },
+    "switchCycleObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence"],
+      "properties": {
+        "sequence": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            {"$ref": "#/$defs/switchIdentitySelfTrigger"},
+            {"$ref": "#/$defs/switchIdentityFullStream"},
+            {"$ref": "#/$defs/switchIdentitySelfTrigger"}
+          ],
+          "items": false
+        }
+      }
+    },
+    "rollbackObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempted_profile",
+        "failure_observed",
+        "switch_exit_code",
+        "restored_profile",
+        "restored_build_id",
+        "server_mode",
+        "service_active"
+      ],
+      "properties": {
+        "attempted_profile": {"const": "full-stream"},
+        "failure_observed": {"const": true},
+        "switch_exit_code": {
+          "type": "integer",
+          "not": {"const": 0}
+        },
+        "restored_profile": {"const": "self-trigger"},
+        "restored_build_id": {"$ref": "#/$defs/buildId"},
+        "server_mode": {"const": "self-trigger"},
+        "service_active": {"const": true}
+      }
+    },
+    "selfDataObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["daq_command_argv", "daq_config", "data_units", "errors"],
+      "properties": {
+        "daq_command_argv": {"$ref": "#/$defs/commandArgv"},
+        "daq_config": {"$ref": "#/$defs/evidenceReference"},
+        "data_units": {"type": "number", "exclusiveMinimum": 0},
+        "errors": {"const": 0}
+      }
+    },
+    "channelList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 0, "maximum": 39}
+    },
+    "fullDataObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "daq_command_argv",
+        "daq_config",
+        "data_units",
+        "errors",
+        "configured_channels",
+        "observed_channels",
+        "mapping_errors"
+      ],
+      "properties": {
+        "daq_command_argv": {"$ref": "#/$defs/commandArgv"},
+        "daq_config": {"$ref": "#/$defs/evidenceReference"},
+        "data_units": {"type": "number", "exclusiveMinimum": 0},
+        "errors": {"const": 0},
+        "configured_channels": {"$ref": "#/$defs/channelList"},
+        "observed_channels": {"$ref": "#/$defs/channelList"},
+        "mapping_errors": {"const": 0}
+      }
+    },
+    "nonnegativeCounterMap": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"minLength": 1},
+      "additionalProperties": {"type": "number", "minimum": 0}
+    },
+    "ethernetLinkObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "link_id",
+        "link_up",
+        "duration_seconds",
+        "counter_deltas",
+        "error_deltas"
+      ],
+      "properties": {
+        "link_id": {"type": "string", "minLength": 1},
+        "link_up": {"const": true},
+        "duration_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "counter_deltas": {"$ref": "#/$defs/nonnegativeCounterMap"},
+        "error_deltas": {"$ref": "#/$defs/nonnegativeCounterMap"}
+      }
+    },
+    "ethernetObserved": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["links"],
+      "properties": {
+        "links": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/ethernetLinkObserved"}
+        }
+      }
+    },
+    "gateBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "evidence", "observed", "notes"],
+      "properties": {
+        "id": {
+          "enum": [
+            "postboot_identity",
+            "switch_cycle_1_self_full_self",
+            "switch_cycle_2_self_full_self",
+            "failed_load_rollback",
+            "self_trigger_data",
+            "full_stream_data_channel_mapping",
+            "four_link_ethernet"
+          ]
+        },
+        "status": {"enum": ["NOT_RUN", "PASS", "FAIL"]},
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidenceReference"}
+        },
+        "observed": {"type": ["object", "null"]},
+        "notes": {"type": ["string", "null"]}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"const": "NOT_RUN"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "evidence": {"maxItems": 0},
+              "observed": {"type": "null"}
+            }
+          },
+          "else": {
+            "properties": {
+              "evidence": {"minItems": 1}
+            }
+          }
+        }
+      ]
+    },
+    "postbootGate": {
+      "allOf": [
+        {"$ref": "#/$defs/gateBase"},
+        {
+          "properties": {"id": {"const": "postboot_identity"}},
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"observed": {"$ref": "#/$defs/postbootObserved"}}
+          }
+        }
+      ]
+    },
+    "switchCycle1Gate": {
+      "allOf": [
+        {"$ref": "#/$defs/gateBase"},
+        {
+          "properties": {"id": {"const": "switch_cycle_1_self_full_self"}},
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"observed": {"$ref": "#/$defs/switchCycleObserved"}}
+          }
+        }
+      ]
+    },
+    "switchCycle2Gate": {
+      "allOf": [
+        {"$ref": "#/$defs/gateBase"},
+        {
+          "properties": {"id": {"const": "switch_cycle_2_self_full_self"}},
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"observed": {"$ref": "#/$defs/switchCycleObserved"}}
+          }
+        }
+      ]
+    },
+    "rollbackGate": {
+      "allOf": [
+        {"$ref": "#/$defs/gateBase"},
+        {
+          "properties": {"id": {"const": "failed_load_rollback"}},
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"observed": {"$ref": "#/$defs/rollbackObserved"}}
+          }
+        }
+      ]
+    },
+    "selfDataGate": {
+      "allOf": [
+        {"$ref": "#/$defs/gateBase"},
+        {
+          "properties": {"id": {"const": "self_trigger_data"}},
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"observed": {"$ref": "#/$defs/selfDataObserved"}}
+          }
+        }
+      ]
+    },
+    "fullDataGate": {
+      "allOf": [
+        {"$ref": "#/$defs/gateBase"},
+        {
+          "properties": {"id": {"const": "full_stream_data_channel_mapping"}},
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"observed": {"$ref": "#/$defs/fullDataObserved"}}
+          }
+        }
+      ]
+    },
+    "ethernetGate": {
+      "allOf": [
+        {"$ref": "#/$defs/gateBase"},
+        {
+          "properties": {"id": {"const": "four_link_ethernet"}},
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {"observed": {"$ref": "#/$defs/ethernetObserved"}}
+          }
+        }
+      ]
+    },
+    "gate": {
+      "oneOf": [
+        {"$ref": "#/$defs/postbootGate"},
+        {"$ref": "#/$defs/switchCycle1Gate"},
+        {"$ref": "#/$defs/switchCycle2Gate"},
+        {"$ref": "#/$defs/rollbackGate"},
+        {"$ref": "#/$defs/selfDataGate"},
+        {"$ref": "#/$defs/fullDataGate"},
+        {"$ref": "#/$defs/ethernetGate"}
+      ]
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reviewer", "approved_utc", "evidence", "notes"],
+      "properties": {
+        "status": {"enum": ["NOT_RUN", "PASS", "FAIL"]},
+        "reviewer": {"type": ["string", "null"]},
+        "approved_utc": {
+          "anyOf": [
+            {"$ref": "#/$defs/utcTimestamp"},
+            {"type": "null"}
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidenceReference"}
+        },
+        "notes": {"type": ["string", "null"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "NOT_RUN"}}},
+          "then": {
+            "properties": {
+              "reviewer": {"type": "null"},
+              "approved_utc": {"type": "null"},
+              "evidence": {"maxItems": 0}
+            }
+          },
+          "else": {
+            "properties": {
+              "evidence": {"minItems": 1}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "reviewer": {"type": "string", "minLength": 1},
+              "approved_utc": {"$ref": "#/$defs/utcTimestamp"},
+              "evidence": {"minItems": 1}
+            }
+          }
+        }
+      ]
+    },
+    "resolvedAcceptance": {
+      "allOf": [
+        {"$ref": "#/$defs/acceptance"},
+        {
+          "properties": {
+            "daq": {
+              "properties": {
+                "command_argv": {"$ref": "#/$defs/commandArgv"},
+                "config": {"$ref": "#/$defs/evidenceReference"}
+              },
+              "required": ["command_argv", "config"]
+            },
+            "ethernet": {
+              "properties": {
+                "minimum_duration_seconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "minimum_counter_deltas": {
+                  "type": "object",
+                  "minProperties": 1
+                },
+                "maximum_error_deltas": {
+                  "type": "object",
+                  "minProperties": 1
+                }
+              },
+              "required": [
+                "minimum_duration_seconds",
+                "minimum_counter_deltas",
+                "maximum_error_deltas"
+              ]
+            }
+          },
+          "required": ["daq", "ethernet"]
+        }
+      ]
+    },
+    "approvedReview": {
+      "allOf": [
+        {"$ref": "#/$defs/review"},
+        {
+          "properties": {
+            "status": {"const": "PASS"},
+            "reviewer": {"type": "string", "minLength": 1},
+            "approved_utc": {"$ref": "#/$defs/utcTimestamp"},
+            "evidence": {"minItems": 1}
+          },
+          "required": ["status", "reviewer", "approved_utc", "evidence"]
+        }
+      ]
+    },
+    "qualificationClaim": {
+      "type": "object",
+      "properties": {
+        "qualification_status": {"const": "PASS"},
+        "release_qualified": {"const": true}
+      },
+      "required": ["qualification_status", "release_qualified"]
+    },
+    "qualificationPrerequisites": {
+      "type": "object",
+      "properties": {
+        "acceptance": {"$ref": "#/$defs/resolvedAcceptance"},
+        "gates": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "items": {
+            "properties": {"status": {"const": "PASS"}},
+            "required": ["status"]
+          }
+        },
+        "review": {"$ref": "#/$defs/approvedReview"}
+      },
+      "required": ["acceptance", "gates", "review"]
+    }
+  }
+}

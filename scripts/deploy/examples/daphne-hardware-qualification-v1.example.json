@@ -1,0 +1,146 @@
+{
+  "$schema": "schemas/daphne-hardware-qualification-v1.schema.json",
+  "contract": "daphne.hardware-qualification",
+  "version": 1,
+  "created_utc": "2026-08-31T23:59:00Z",
+  "qualification_status": "NOT_RUN",
+  "release_qualified": false,
+  "binding": {
+    "campaign": {
+      "path": "/srv/daphne/campaign-001/campaign-summary.json",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "contract": "daphne.deploy-campaign",
+      "version": 1,
+      "mode": "execute",
+      "status": "staged",
+      "firmware_release": "dual-gateware-2026.08.31-rc1",
+      "completed_utc": "2026-08-31T23:55:00Z",
+      "campaign_csv_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "deploy_script_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "bundle_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "bundle_artifact_sha256": {
+        "boot/Image": "5555555555555555555555555555555555555555555555555555555555555555",
+        "boot/boot.scr": "6666666666666666666666666666666666666666666666666666666666666666",
+        "rootfs/rootfs.ext4": "7777777777777777777777777777777777777777777777777777777777777777",
+        "rootfs/rootfs.wic.gz": "8888888888888888888888888888888888888888888888888888888888888888"
+      }
+    },
+    "deployment": {
+      "index": 1,
+      "source_line": 2,
+      "board": "DAPHNE-EXAMPLE-01",
+      "host": "daphne-example-01.invalid",
+      "user": "root",
+      "control_host": null,
+      "board_config_source": "/srv/daphne/config/DAPHNE-EXAMPLE-01",
+      "board_config": "/srv/daphne/campaign-001/inputs/boards/001-DAPHNE-EXAMPLE-01",
+      "board_config_sha256": {
+        "manifest.env": "9999999999999999999999999999999999999999999999999999999999999999",
+        "ssh_host_ed25519_key.pub": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "host_key_sha256": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "firmware_release": "dual-gateware-2026.08.31-rc1",
+      "qualification_status": "not_performed",
+      "release_qualified": false,
+      "command": ["daphne_deploy.sh", "--board", "DAPHNE-EXAMPLE-01"],
+      "log": "001-DAPHNE-EXAMPLE-01.log",
+      "log_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "started_utc": "2026-08-31T23:54:00Z",
+      "completed_utc": "2026-08-31T23:55:00Z",
+      "duration_seconds": 60.0,
+      "return_code": 0,
+      "status": "staged"
+    },
+    "release": {
+      "path": "/srv/daphne/releases/dual-gateware-2026.08.31-rc1/COMPATIBILITY.json",
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "contract": "daphne.dual-gateware-release",
+      "contract_version": 1,
+      "release_id": "dual-gateware-2026.08.31-rc1",
+      "lifecycle": "engineering_rc",
+      "self_trigger_build_id": "0x03F17F1B",
+      "full_stream_build_id": "0x0B24E416",
+      "petalinux_rootfs_ext4_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "petalinux_bundle_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "artifact_sha256": {
+        "petalinux_image": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "self_trigger_build": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "full_stream_build": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "server_runtime": "123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+        "client_install": "23456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01"
+      }
+    }
+  },
+  "acceptance": {
+    "daq": {
+      "command_argv": null,
+      "config": {
+        "path": null,
+        "sha256": null
+      }
+    },
+    "ethernet": {
+      "minimum_duration_seconds": null,
+      "minimum_counter_deltas": null,
+      "maximum_error_deltas": null
+    }
+  },
+  "gates": [
+    {
+      "id": "postboot_identity",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "observed": null,
+      "notes": null
+    },
+    {
+      "id": "switch_cycle_1_self_full_self",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "observed": null,
+      "notes": null
+    },
+    {
+      "id": "switch_cycle_2_self_full_self",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "observed": null,
+      "notes": null
+    },
+    {
+      "id": "failed_load_rollback",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "observed": null,
+      "notes": null
+    },
+    {
+      "id": "self_trigger_data",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "observed": null,
+      "notes": null
+    },
+    {
+      "id": "full_stream_data_channel_mapping",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "observed": null,
+      "notes": null
+    },
+    {
+      "id": "four_link_ethernet",
+      "status": "NOT_RUN",
+      "evidence": [],
+      "observed": null,
+      "notes": null
+    }
+  ],
+  "review": {
+    "status": "NOT_RUN",
+    "reviewer": null,
+    "approved_utc": null,
+    "evidence": [],
+    "notes": null
+  }
+}

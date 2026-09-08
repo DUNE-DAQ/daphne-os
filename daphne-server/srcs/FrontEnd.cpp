@@ -1,0 +1,85 @@
+#include "FrontEnd.hpp"
+
+FrontEnd::FrontEnd()
+	: fpgaReg(std::make_unique<FpgaReg>()){}
+
+FrontEnd::~FrontEnd(){}
+
+uint32_t FrontEnd::doResetDelayCtrl(){
+
+	this->fpgaReg->setBits("frontendControl", "DELAYCTRL_RESET", 1);
+	// add delay to ensure the reset is applied
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    return this->fpgaReg->setBits("frontendControl", "DELAYCTRL_RESET", 0);
+}
+
+uint32_t FrontEnd::doResetSerDesCtrl(){
+
+	this->fpgaReg->setBits("frontendControl", "SERDES_RESET", 1);
+	// add delay to ensure the reset is applied
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    return this->fpgaReg->setBits("frontendControl", "SERDES_RESET", 0);
+}
+
+uint32_t FrontEnd::setEnableDelayVtc(const uint32_t& value){
+
+	return this->fpgaReg->setBits("frontendControl", "DELAY_EN_VTC", value);
+}
+
+uint32_t FrontEnd::getEnableDelayVtc(){
+
+	return this->fpgaReg->getBits("frontendControl", "DELAY_EN_VTC");
+}
+
+uint32_t FrontEnd::getDelayCtrlReady(){
+
+	return this->fpgaReg->getBits("frontendStatus", "DELAYCTRL_READY");
+}
+
+uint32_t FrontEnd::doTrigger(){
+
+	// Snapshot spies requires magic value per FPGA design (0xBABA)
+	return this->fpgaReg->writeRegister("frontendTrigger", 0xBABA);
+}
+
+uint32_t FrontEnd::setDelay(const uint8_t& afe,const uint32_t& delay){
+
+	return this->fpgaReg->setBits("frontendDelay_" + std::to_string(afe), "DELAY", delay);
+}
+
+uint32_t FrontEnd::getDelay(const uint8_t& afe){
+
+	return this->fpgaReg->getBits("frontendDelay_" + std::to_string(afe), "DELAY");
+}
+
+uint32_t FrontEnd::setBitslip(const uint8_t& afe,const uint32_t& bitslip){
+
+	return this->fpgaReg->setBits("frontendBitslip_" + std::to_string(afe), "BITSLIP", bitslip);
+}
+
+uint32_t FrontEnd::getBitslip(const uint8_t& afe){
+
+	return this->fpgaReg->getBits("frontendBitslip_" + std::to_string(afe), "BITSLIP");
+}
+
+uint32_t FrontEnd::resetDelayCtrlValues(){
+	int afeNum = 5;
+	for(int afe = 0; afe < afeNum; afe++){
+		this->setBitslip(afe, 0);
+		this->setDelay(afe, 0);
+	}
+	return 0;
+}
+
+bool FrontEnd::waitForDelayCtrlReady(std::chrono::milliseconds timeout,
+                                     std::chrono::milliseconds poll){
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (this->getDelayCtrlReady() != 0) {
+            return true;
+        }
+        std::this_thread::sleep_for(poll);
+    } while (std::chrono::steady_clock::now() < deadline);
+
+    return this->getDelayCtrlReady() != 0;
+}

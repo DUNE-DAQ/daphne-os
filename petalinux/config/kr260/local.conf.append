@@ -1,0 +1,26 @@
+# Shared DAPHNE images are deliberately board-neutral. Hardware identity and
+# MAC address come from the K26 SOM EEPROM through U-Boot; per-board IP and
+# runtime assignments are provisioned after enrollment.
+
+DAPHNE_IMAGE_PROFILE ?= "minimal"
+
+# PetaLinux 2026.1 replaces the Kria machine's WIC image types when it emits
+# plnxtool.conf. Restore a complete, compressed eMMC image for virgin-SOM
+# provisioning and use the smaller DAPHNE factory layout. Keep the override
+# scoped to the runtime image: applying WIC globally creates a dependency loop
+# through PetaLinux's qemu-image-empty/initramfs helper.
+IMAGE_FSTYPES:append:pn-petalinux-image-minimal = " wic.gz"
+WKS_FILE:pn-petalinux-image-minimal = "daphne-emmc.wks"
+
+DAPHNE_RUNTIME_PACKAGES = " \
+    daphne-overlay \
+    daphne-server \
+    daphne-services \
+    daphne-boot-state \
+"
+
+IMAGE_INSTALL:append = " ${@bb.utils.contains('DAPHNE_IMAGE_PROFILE', 'provisioning', '', d.getVar('DAPHNE_RUNTIME_PACKAGES'), d)}"
+IMAGE_INSTALL:append = " ${@bb.utils.contains('DAPHNE_IMAGE_PROFILE', 'developer', 'packagegroup-daphne-server-build', '', d)}"
+EXTRA_IMAGE_FEATURES:append = " ${@bb.utils.contains('DAPHNE_IMAGE_PROFILE', 'developer', 'dev-pkgs tools-sdk', '', d)}"
+
+INHERIT += "daphne-runtime-image"

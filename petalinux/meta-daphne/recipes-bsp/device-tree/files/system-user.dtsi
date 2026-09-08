@@ -1,0 +1,88 @@
+/include/ "daphne-k26c-network.dtsi"
+
+/ {
+	/*
+	 * Repo-owned DT append point for DAPHNE on KR260.
+	 *
+	 * Keep BSP-owned base board description in the vendor layer. Add only
+	 * DAPHNE-specific policy here:
+	 *   - MAC identity
+	 *   - optional PS peripherals
+	 *   - firmware/overlay install assumptions
+	 *
+	 * The PL hardware description itself should continue to arrive via the
+	 * generated overlay path from the firmware build. Remove the BSP-generated
+	 * PL bus from the base DT so Linux does not probe PL timing peripherals
+	 * before the overlay is loaded.
+	 */
+};
+
+/delete-node/ &amba_pl;
+
+/*
+ * Reclaim PS MIOs used by the mezzanine SPI groups.
+ *
+ * Management stays on GEM0. GEM1 and both USB controllers conflict with the
+ * schematic SPI ownership on DAPHNE-14 and should not claim those MIOs in the
+ * default DAPHNE image. Use boot-time DT ownership, not a runtime service, so
+ * Linux sees the intended pinmux immediately.
+ */
+
+&gem1 {
+	status = "disabled";
+};
+
+&usb0 {
+	status = "disabled";
+};
+
+&usb1 {
+	status = "disabled";
+};
+
+&dwc3_0 {
+	status = "disabled";
+};
+
+&dwc3_1 {
+	status = "disabled";
+};
+
+&pinctrl0 {
+	daphne_ps_mio_spi_gpio: daphne-ps-mio-spi-gpio {
+		mux {
+			function = "gpio0";
+			groups = "gpio0_38_grp", "gpio0_39_grp",
+				 "gpio0_40_grp", "gpio0_50_grp",
+				 "gpio0_41_grp", "gpio0_42_grp",
+				 "gpio0_43_grp", "gpio0_61_grp",
+				 "gpio0_62_grp", "gpio0_63_grp",
+				 "gpio0_73_grp", "gpio0_74_grp",
+				 "gpio0_69_grp", "gpio0_68_grp",
+				 "gpio0_67_grp", "gpio0_57_grp",
+				 "gpio0_65_grp", "gpio0_64_grp",
+				 "gpio0_46_grp", "gpio0_45_grp";
+		};
+
+		conf {
+			groups = "gpio0_38_grp", "gpio0_39_grp",
+				 "gpio0_40_grp", "gpio0_50_grp",
+				 "gpio0_41_grp", "gpio0_42_grp",
+				 "gpio0_43_grp", "gpio0_61_grp",
+				 "gpio0_62_grp", "gpio0_63_grp",
+				 "gpio0_73_grp", "gpio0_74_grp",
+				 "gpio0_69_grp", "gpio0_68_grp",
+				 "gpio0_67_grp", "gpio0_57_grp",
+				 "gpio0_65_grp", "gpio0_64_grp",
+				 "gpio0_46_grp", "gpio0_45_grp";
+			bias-disable;
+			power-source = <1>;
+			slew-rate = <1>;
+		};
+	};
+};
+
+&gpio {
+	pinctrl-names = "default";
+	pinctrl-0 = <&daphne_ps_mio_spi_gpio>;
+};

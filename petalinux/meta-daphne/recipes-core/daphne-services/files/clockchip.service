@@ -1,0 +1,18 @@
+[Unit]
+Description=Validate DAPHNE timing clock path
+After=daphne-gateware-verify.service firmware.service
+Requires=daphne-gateware-verify.service firmware.service
+PartOf=firmware.service daphne-runtime.target
+Before=endpoint.service hermes.service daphne.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/firmware
+EnvironmentFile=-/etc/daphne-board.env
+EnvironmentFile=/run/daphne-gateware/active.env
+ExecStart=/usr/local/bin/daphne-clockchip.sh
+TimeoutStartSec=300
+RemainAfterExit=yes
+
+[Install]
+WantedBy=daphne-runtime.target
