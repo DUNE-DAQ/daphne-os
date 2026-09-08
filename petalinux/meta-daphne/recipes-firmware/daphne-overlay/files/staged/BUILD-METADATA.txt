@@ -1,0 +1,2 @@
+git_sha=7115168
+firmware_name=daphne_selftrigger_7115168.bit.bin

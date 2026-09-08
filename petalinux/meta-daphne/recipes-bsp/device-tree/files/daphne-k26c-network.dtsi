@@ -1,0 +1,36 @@
+/ {
+	/*
+	 * MAC identity comes from MAC ID 0 in the K26 SOM EEPROM. Xilinx U-Boot
+	 * publishes that value as ethaddr and fixes up the working FDT through the
+	 * standard ethernet0 alias. No DAPHNE image is allowed to compile a MAC.
+	 */
+
+	aliases {
+		serial0 = &uart0;
+		serial1 = &uart1;
+		ethernet0 = &gem0;
+		ethernet_daphne_sgmii = &gem0;
+	};
+
+	chosen {
+		stdout-path = "serial1:115200n8";
+	};
+};
+
+&gem0 {
+	/*
+	 * DAPHNE uses GEM0 over the PS GT SGMII path with a fixed-link. Keep that
+	 * contract explicit here so Linux does not depend on the generated external
+	 * PHY defaults from the base KR260 tree.
+	 */
+	is-internal-pcspma;
+	phy-mode = "sgmii";
+	/delete-property/ local-mac-address;
+	/delete-property/ mac-address;
+	status = "okay";
+
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+	};
+};

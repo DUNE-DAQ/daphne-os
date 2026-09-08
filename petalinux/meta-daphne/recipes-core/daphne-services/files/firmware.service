@@ -1,0 +1,22 @@
+[Unit]
+Description=Program DAPHNE firmware app
+After=local-fs.target dfx-mgr.service dfx-mgrd.service daphne-gateware-prepare.service
+Wants=dfx-mgr.service
+Requires=daphne-gateware-prepare.service
+Before=daphne-gateware-verify.service clockchip.service endpoint.service hermes.service daphne.service
+PartOf=daphne-runtime.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/default/firmware
+EnvironmentFile=-/etc/daphne-board.env
+EnvironmentFile=/run/daphne-gateware/active.env
+Environment=ACCEL_CONFIG_PATH=/lib/firmware/xilinx
+ExecStart=/usr/local/bin/daphne-fw.sh
+ExecStop=/usr/local/bin/daphne-fw-stop.sh
+TimeoutStartSec=20
+TimeoutStopSec=20
+RemainAfterExit=yes
+
+[Install]
+WantedBy=daphne-runtime.target

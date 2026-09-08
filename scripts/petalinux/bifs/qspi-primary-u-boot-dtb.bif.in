@@ -1,0 +1,7 @@
+the_ROM_image:
+{
+	[bootloader, destination_cpu=a53-0] @IMAGES_DIR@/zynqmp_fsbl.elf
+	[pmufw_image] @IMAGES_DIR@/pmufw.elf
+	[destination_cpu=a53-0, exception_level=el-3, trustzone] @IMAGES_DIR@/bl31.elf
+	[destination_cpu=a53-0, exception_level=el-2] @IMAGES_DIR@/u-boot-dtb.elf
+}

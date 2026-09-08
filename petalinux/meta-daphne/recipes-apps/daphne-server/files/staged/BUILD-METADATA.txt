@@ -1,0 +1,4 @@
+artifact=daphne-server-runtime-minimal.tgz
+sha256=45043cc8bbbc0c8ca50040f5b437ed7dab259eebbfc81dcd9e4e5655d482f858
+provenance=legacy-external-binary-import
+qualification=not-reproducible-from-this-repository

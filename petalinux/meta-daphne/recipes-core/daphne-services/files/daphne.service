@@ -1,0 +1,22 @@
+[Unit]
+Description=DAPHNE Slow Controller
+After=hermes.service endpoint.service daphne-gateware-verify.service firmware.service
+Requires=hermes.service endpoint.service daphne-gateware-verify.service firmware.service
+PartOf=firmware.service daphne-runtime.target
+
+[Service]
+Type=simple
+Environment=LD_LIBRARY_PATH=/usr/lib/daphne-server
+Environment=DAPHNE_BIND_ENDPOINT=tcp://*:40001
+EnvironmentFile=/etc/default/firmware
+EnvironmentFile=-/etc/daphne-board.env
+EnvironmentFile=/run/daphne-gateware/active.env
+ExecStart=/bin/sh -c 'exec /usr/bin/daphneServer --bind "${DAPHNE_BIND_ENDPOINT}" --gateware-mode "${GATEWARE_MODE}" --expected-gateware-build-id "${IDENTITY_BUILD_ID}"'
+ExecStopPost=/usr/sbin/daphne-gateware quiesce
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=1
+TimeoutStopSec=5s
+
+[Install]
+WantedBy=daphne-runtime.target

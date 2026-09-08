@@ -1,0 +1,83 @@
+This package is the repo-owned hook point for DAPHNE bring-up service
+ownership inside the image.
+
+The `daphne-runtime.target` service chain is:
+
+- `daphne-gateware-prepare.service`
+- `firmware.service`
+- `daphne-gateware-verify.service`
+- `clockchip.service`
+- `endpoint.service`
+- `hermes.service`
+- `daphne.service`
+
+`daphne-gateware-verify.service` reads the common identity words at
+`0x940000F0`, `0x940000F4`, `0x940000F8`, and `0x940000FC`. No clock, Hermes,
+or server process starts unless magic, ABI 2.0, variant, and the zero-extended
+28-bit build stamp match the active profile.
+
+Use `sudo daphne-gateware list`, `status`, `switch self-trigger`,
+`switch full-stream`, or `set-default PROFILE`. A switch is serialized and
+transactional: systemd stops every PL client before `firmware.service` unloads
+the FPGA, the active profile is replaced atomically, the complete target is
+started, its full dependency chain remains active through a one-second
+post-start stability window, and a failed start is rolled back to the prior
+profile.
+The unload helper deliberately propagates `xmutil`, `dfx-mgr-client`, or
+`fpgautil` failures.
+
+The two checked-in profile files contain fail-closed release placeholders for
+their immutable `daphne_selftrigger_ol_<7sha>` and
+`daphne_fullstream_ol_<7sha>` app directory names. Release packaging must
+replace those `APP` values and install both matching app directories, each with
+`BUILD-METADATA.txt` containing `git_sha` (seven or more hex digits), before
+enabling this target. `stage_overlay_into_project.sh` now validates both
+qualified bundles and atomically replaces the two `APP` values together with
+the staged payload. The `daphne-overlay` recipe installs both immutable apps;
+it deliberately creates no generic `daphne` alias.
+
+The service logic is now repo-owned, but the userspace runtime and overlay
+payloads are still staged from qualified artifacts rather than rebuilt here
+from source.
+
+The board-selection inputs for those units should come from the board-config
+package:
+
+- `/etc/default/firmware`
+- `/etc/daphne-board.env`
+
+In particular, the common timing profile should be driven from inventory
+metadata such as `TIMING_PROFILE`, `ENDPOINT_WAIT_MS`, and
+`ENDPOINT_SUCCESS_STATES`, not from per-board hand edits.
+
+Current implementation notes:
+
+- `firmware.service`, `hermes.service`, and `daphne.service` are based on the
+  verified `015` service contract.
+- `firmware.service` prefers the AMD/Kria DFX application path
+  (`dfx-mgr-client`, then `xmutil`) before falling back to raw `fpgautil`, and
+  fails the boot chain if FPGA manager state does not become `operating`.
+- `endpoint.service` performs the known endpoint MMIO bring-up from the
+  `daphneZMQ` register map through `/dev/mem`, but now does it through a
+  shell-native `devmem` helper rather than a Python `mmap` dependency.
+- `clockchip.service` now carries the programming payload harvested from the
+  live `NP04-DAPHNE-014` `daphne-server` checkout on branch
+  `marroyav/server_bringup_thresholds` at commit
+  `aa2942a58d62e19a49cdfbf0b382ed118fcef9a5`.
+- the repo-owned `daphne-clockchip.sh` no longer assumes one fixed
+  `/dev/i2c-N` number. It prefers the configured `CLOCKCHIP_BUS`, but falls
+  back to probing the available adapters for the expected clockchip address
+  cluster when Linux renumbers the bus.
+- `hermes.service` and `daphne.service` now start from normal system paths
+  (`/usr/bin/hermes_udp_srv` and `/usr/bin/daphneServer`) rather than from
+  `/home/petalinux/...`.
+- `daphne.service` also carries `LD_LIBRARY_PATH=/usr/lib/daphne-server`
+  because the staged `daphneServer` bundle still ships private shared libs
+  outside the default dynamic-linker search path.
+- `daphne.service` runs `daphne-gateware quiesce` after every stop. For the
+  full-stream profile this verifies the live identity, clears the atomic gate
+  at `0xA0020080`, and waits for the stream-clock acknowledgement before an
+  FPGA unload can proceed. Self-trigger stops require no extra MMIO write.
+- `daphne.service` passes the active profile as `--gateware-mode` and the pinned
+  identity stamp as `--expected-gateware-build-id`. Exit status 78 prevents an
+  ABI/configuration mismatch from entering a restart loop.

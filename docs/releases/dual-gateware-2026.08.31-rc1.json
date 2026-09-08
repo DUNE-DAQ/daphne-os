@@ -1,0 +1,202 @@
+{
+  "contract": "daphne.dual-gateware-release",
+  "contract_version": 1,
+  "release_id": "dual-gateware-2026.08.31-rc1",
+  "created_utc": "2026-09-01T00:14:29Z",
+  "lifecycle": "engineering_rc",
+  "production_qualified": false,
+  "board_family": "k26c",
+  "default_profile": "self-trigger",
+  "toolchains": {
+    "vivado": "2026.1",
+    "petalinux": "2026.1",
+    "dune_daq": "fddaq-v5.6.2-a9-1",
+    "dbt": "8.12.1"
+  },
+  "sources": {
+    "self_trigger": {
+      "repository": "git@github.com:DUNE-DAQ/daphne-firmware.git",
+      "commit": "3f17f1bdb14f13fd64dac0d8866dc3dda9e8dd96",
+      "tree": "286489366b8f3d94ba755196e9b5ff35dcd37114",
+      "dirty": false
+    },
+    "full_stream": {
+      "repository": "git@github.com:marroyav/daphne-fullstream-firmware.git",
+      "commit": "b24e416bf56c8424ab679924f1476597bb24186b",
+      "tree": "39157897924957eb616422bb80849a6b5b607734",
+      "dirty": false,
+      "build_tool_descendant": "bff0ee134b12e9e98dc72d99e3917454b02ea38d"
+    },
+    "image_integration": {
+      "repository": "git@github.com:DUNE-DAQ/daphne-firmware.git",
+      "commit": "ae2c7be986ba4930968a2821afc641d5f52591a4",
+      "tree": "57e99f3cd1f18846fe336258ae7076fca2a4142d",
+      "dirty": false
+    },
+    "campaign_tooling": {
+      "repository": "git@github.com:DUNE-DAQ/daphne-firmware.git",
+      "commit": "93db1ad0392918d8a0e6d4603bdddd96cbac0aae",
+      "tree": "b2bc5c49daa46f311f3c770504879c6943071ba2",
+      "dirty": false
+    },
+    "server": {
+      "repository": "git@github.com:ecristal/daphneZMQ.git",
+      "commit": "77b39b7eb75204e1f2025f251a3a76ecf69d1d74",
+      "tree": "9cf22e0e0216a6535eeb882687d46b02f575b42f",
+      "dirty": false
+    },
+    "client": {
+      "repository": "https://github.com/DUNE-DAQ/daphnemodules.git",
+      "commit": "9d807840f249763607a1e31bb78e44de8ba8a082",
+      "tree": "348a5edff0a8151f2cb13467b1aad44e95ba2467",
+      "dirty": false,
+      "package_version": "3.0.4"
+    }
+  },
+  "runtime": {
+    "server_endpoint": "tcp://*:40001",
+    "gateware_abi": "2.0",
+    "server_exit_on_contract_mismatch": 78,
+    "client_rules": {
+      "self_trigger": "full_stream_channels must be empty",
+      "full_stream": "full_stream_channels must contain 1 to 32 unique board-channel IDs in the range 0 through 39"
+    }
+  },
+  "campaign_tooling": {
+    "deployment_tests": "58_passed",
+    "schema_validator": "jsonschema-4.25.1",
+    "files": {
+      "single_board_deployer": {
+        "source_path": "scripts/deploy/daphne_deploy.sh",
+        "release_path": "tools/daphne_deploy.sh",
+        "sha256": "0f57f57448d8bcf492c068d45a5fe31afd767433ba3eaf880ebbba87bbbe7d7c"
+      },
+      "campaign_runner": {
+        "source_path": "scripts/deploy/daphne_deploy_campaign.py",
+        "release_path": "tools/daphne_deploy_campaign.py",
+        "sha256": "bc55a12b114f0afb32f31b6d092d15a006d26340464858124b277d70c7ffe893"
+      },
+      "board_config_renderer": {
+        "source_path": "scripts/deploy/render_board_config.py",
+        "release_path": "tools/render_board_config.py",
+        "sha256": "7dcaf5d4c9a14b91d92f8a4972cb14f0cf3865c388c8d2949b9b0d31a082d36a"
+      },
+      "qualification_checker": {
+        "source_path": "scripts/deploy/daphne_qualification.py",
+        "release_path": "tools/daphne_qualification.py",
+        "sha256": "9f762d61fcf882daeca662d3d54903af69eb00a5a56689936c3dcb44122b86c9"
+      },
+      "board_config_schema": {
+        "source_path": "scripts/deploy/schemas/daphne-board-config-v1.schema.json",
+        "release_path": "schemas/daphne-board-config-v1.schema.json",
+        "sha256": "84b1db9ef96f0a0612b36e88ce62fb0b70a168b89d208ca32230f44d9c72f994"
+      },
+      "qualification_schema": {
+        "source_path": "scripts/deploy/schemas/daphne-hardware-qualification-v1.schema.json",
+        "release_path": "schemas/daphne-hardware-qualification-v1.schema.json",
+        "sha256": "8a3791fd57e90dc38579f1c0e050d2d3cdbdd2cce31b95ee1b3c15dce92c0c1c"
+      },
+      "board_config_example": {
+        "source_path": "scripts/deploy/examples/daphne-board-config-v1.example.json",
+        "release_path": "examples/daphne-board-config-v1.example.json",
+        "sha256": "e5f6e22ff38330e4f830daeb7368e396cce4fe6cbaa83265b403b315b2b1238f"
+      },
+      "qualification_example": {
+        "source_path": "scripts/deploy/examples/daphne-hardware-qualification-v1.example.json",
+        "release_path": "examples/daphne-hardware-qualification-v1.example.json",
+        "sha256": "fc17e73f6249e819798a4e99893798f7355116e1bef20f507a3009651ad8114d"
+      }
+    }
+  },
+  "profiles": {
+    "self-trigger": {
+      "app": "daphne_selftrigger_ol_3f17f1b",
+      "firmware_name": "daphne_selftrigger_3f17f1b.bit.bin",
+      "abi_major": 2,
+      "abi_minor": 0,
+      "variant": 1,
+      "build_id": "0x03F17F1B",
+      "register_window": "0xA0010000",
+      "server_mode": "self-trigger",
+      "supported_client_versions": ["3.0.3", "3.0.4"]
+    },
+    "full-stream": {
+      "app": "daphne_fullstream_ol_b24e416",
+      "firmware_name": "daphne_fullstream_b24e416.bit.bin",
+      "abi_major": 2,
+      "abi_minor": 0,
+      "variant": 2,
+      "build_id": "0x0B24E416",
+      "register_window": "0xA0020000",
+      "server_mode": "full-stream",
+      "supported_client_versions": ["3.0.4"]
+    }
+  },
+  "artifacts": {
+    "petalinux_image": {
+      "path": "artifacts/image/daphne-dual-gateware-2026.08.31-rc1-petalinux.tgz",
+      "sha256": "59e8f55bfae94b1d1f61942c5c8c960421652d922f8894d3e8c46f6767d51ed2",
+      "size_bytes": 375004760,
+      "build_log": "artifacts/image/petalinux-build.log",
+      "build_log_sha256": "1a45f65246067f941819bf234a4b1e6e35c43396193f366b8ff18e96443352c4",
+      "build_log_size_bytes": 32992,
+      "bundle_manifest_sha256": "edef509e7759e7d1be77ee0eaab95815b49e790a1885cb0bffcb99dc0fd1b34f",
+      "rootfs_cpio_gz_sha256": "9a3f1666479c6b86ba3b3cad402a8fe97e98b26be711838e51496108ec4d63ab",
+      "rootfs_ext4_sha256": "64cdb4036b0407dbf2dcab26115aaeb8183abad341bc68d16ec34768627ef4f7",
+      "rootfs_manifest_sha256": "49fb4ee013bf366a2915de238a8202adeba2ee61af29d1bb1fe48b5b82aeb788",
+      "rootfs_tar_gz_sha256": "e1469bff8bc320a96080237f4baca200675659de668c455c4deac64981a55108",
+      "rootfs_wic_gz_sha256": "f4719b3a95df783a3acb8f6614abeb3e30978956c3ebb360df3ef57ed48dc702",
+      "verification_log": "artifacts/image/image-verification.log",
+      "verification_log_sha256": "f0ccda67ebffe2f0019dfa6d28c0c5a38d41a82f472a2b18aea99d4c6628a113",
+      "verification_log_size_bytes": 3898
+    },
+    "self_trigger_build": {
+      "path": "artifacts/self-trigger/daphne-selftrigger-3f17f1b-artifacts.tgz",
+      "sha256": "dfe7c846b97dec80d5a9782e3edf4bd1c6f2088007a5512e06bf0845d8b03aac",
+      "size_bytes": 22807263
+    },
+    "full_stream_build": {
+      "path": "artifacts/full-stream/daphne-fullstream-b24e416-artifacts.tgz",
+      "sha256": "b4158b73926329df51f12c31dbc5bd787afe88b7687276fb6d19612f93f4ad95",
+      "size_bytes": 13436342,
+      "source_output_manifest": "artifacts/full-stream/source-output/SHA256SUMS",
+      "source_output_manifest_sha256": "3fa8b9d0ea3bd2787159ccbf1bed0353a993a8b37051e1919d443e25db038362"
+    },
+    "server_runtime": {
+      "path": "artifacts/server/daphne-server-runtime-minimal.tgz",
+      "sha256": "8e691f76ca88ce48f40f97c96475fa331da342db7a35674a611ae18ff7a2ef95",
+      "size_bytes": 8559361,
+      "runtime_archive_binary_sha256": "158f0078b56a124915587b13f0e9d55bad4b6eb9b92b14ce34007cf59953a85a",
+      "recipe_install_simulation_binary_sha256": "6d5c262cd7e22cc65a2d2520fe1e026e62f25c464aab9af247185e1898385cc2",
+      "petalinux_do_install_binary_sha256": "da89e56d4f6f8ec0e92bd9b5df7cb930abab1291623817aca2c17eea290d44e2",
+      "installed_binary_sha256": "b9a39a5f4d381329e25cd7b98ea00c86b12ed550d7957dd6e071a534e64c56d7"
+    },
+    "client_install": {
+      "path": "artifacts/client/daphnemodules-3.0.4-fddaq-v5.6.2-a9-1-install.tgz",
+      "sha256": "6f0a532cfa0f988df5548266c5c3a6fa7788563a0d52460df09ba4628fa450d2",
+      "size_bytes": 8746351
+    }
+  },
+  "qualification": {
+    "self_trigger_implementation": "pass_with_limitations",
+    "full_stream_implementation": "pass_with_limitations",
+    "full_stream_design_wide_cdc_methodology": "fail",
+    "server_aarch64_and_qemu": "pass",
+    "client_fddaq_5_6_build_and_tests": "pass",
+    "petalinux_build_and_rootfs_contract": "pass",
+    "campaign_tooling_and_contract_tests": "pass",
+    "approved_board_records": "not_supplied",
+    "site_acceptance_policy": "not_supplied",
+    "board_switch_and_rollback": "not_run",
+    "board_data_path": "not_run",
+    "four_link_license_duration": "not_run"
+  },
+  "blockers": [
+    "Review, fix, or explicitly baseline the inherited design-wide CDC and methodology findings.",
+    "Supply reviewed board-configuration records, independently approved SSH fingerprints, network settings, and recovery access.",
+    "Approve the site DAQ command, channel plans, Ethernet duration, counter thresholds, and error thresholds.",
+    "Run self-trigger to full-stream to self-trigger switching and rollback on hardware.",
+    "Qualify the data path, channel mapping, and all four Ethernet links for sufficient duration.",
+    "Publish the exact commits and client package, then create reviewed release tags."
+  ]
+}

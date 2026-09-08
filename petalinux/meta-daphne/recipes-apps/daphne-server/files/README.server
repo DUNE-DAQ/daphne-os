@@ -1,0 +1,34 @@
+This package installs the current prebuilt DAPHNE userspace runtime into the
+PetaLinux image.
+
+Installed payload:
+- `/usr/bin/daphneServer`
+- `/usr/bin/hermes_udp_srv`
+- private runtime libraries under `/usr/lib/daphne-server`
+- `BUILD-METADATA.txt` describing the staged source bundle
+
+Provenance status:
+- the checked-in payload is a legacy external binary import
+- its digest is verified, but it is not reproducible from this repository
+- it does not implement the dual-gateware command-line contract and the recipe
+  deliberately rejects it at `do_fetch`
+- production release therefore requires a separately qualified runtime bundle
+- `scripts/petalinux/stage_runtime_into_project.sh` is the only staging entry
+  point
+
+Qualification contract:
+- keep `BUILD-METADATA.txt` and, when supplied, `SHA256SUMS` beside the input
+  tarball; the stager preserves the rich metadata instead of replacing it
+- metadata must bind the exact tarball and bundled `daphneServer`, identify the
+  server commit pinned by `daphne-server-contract.inc`, and record a clean
+  AArch64 build with passing QEMU validation
+- the executable must expose both `--gateware-mode` and
+  `--expected-gateware-build-id`
+- a bare tarball can still be staged for inspection, but its generated
+  `daphne-server-version.inc` remains unqualified and cannot build the release
+
+Design intent:
+- keep the package layout independent of `/home/petalinux`
+- preserve deterministic runtime libraries via a private libdir
+- let the service layer start `daphneServer` and Hermes from normal system
+  paths

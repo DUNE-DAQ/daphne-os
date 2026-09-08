@@ -1,0 +1,14 @@
+[Unit]
+Description=Mark successful DAPHNE boot in U-Boot env
+After=daphne.service
+Requires=daphne.service
+ConditionPathExists=/etc/fw_env.config
+ConditionPathExists=/usr/bin/fw_printenv
+ConditionPathExists=/usr/bin/fw_setenv
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/daphne-boot-ok.sh
+
+[Install]
+WantedBy=multi-user.target

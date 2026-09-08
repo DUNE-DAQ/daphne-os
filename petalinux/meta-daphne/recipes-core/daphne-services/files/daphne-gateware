@@ -1,0 +1,646 @@
+#!/usr/bin/env python3
+"""Transactional selector for the two DAPHNE gateware profiles."""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import dataclasses
+import fcntl
+import os
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Iterator
+
+
+MAGIC_ADDRESS = 0x940000F0
+ABI_ADDRESS = 0x940000F4
+VARIANT_ADDRESS = 0x940000F8
+BUILD_ID_ADDRESS = 0x940000FC
+FULL_STREAM_CONTROL_ADDRESS = 0xA0020080
+FULL_STREAM_ENABLE_REQUEST = 1 << 0
+FULL_STREAM_ACTIVE_ACK = 1 << 1
+FULL_STREAM_CONTROL_MASK = FULL_STREAM_ENABLE_REQUEST | FULL_STREAM_ACTIVE_ACK
+COMMON_MAGIC = 0x44415048
+COMMON_ABI_MAJOR = 2
+COMMON_ABI_MINOR = 0
+
+PROFILE_VARIANTS = {
+    "self-trigger": 1,
+    "full-stream": 2,
+}
+PROFILE_KEYS = {
+    "PROFILE",
+    "APP",
+    "GATEWARE_MODE",
+    "IDENTITY_MAGIC",
+    "IDENTITY_ABI_MAJOR",
+    "IDENTITY_ABI_MINOR",
+    "IDENTITY_VARIANT",
+    "IDENTITY_BUILD_ID",
+}
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
+
+ETC_DIR = Path(os.environ.get("DAPHNE_GATEWARE_ETC_DIR", "/etc/daphne-gateware"))
+RUN_DIR = Path(os.environ.get("DAPHNE_GATEWARE_RUN_DIR", "/run/daphne-gateware"))
+FIRMWARE_DIR = Path(
+    os.environ.get("DAPHNE_GATEWARE_FIRMWARE_DIR", "/lib/firmware/xilinx")
+)
+ACTIVE_PATH = RUN_DIR / "active.env"
+DEFAULT_PATH = ETC_DIR / "default-profile"
+PROFILES_DIR = ETC_DIR / "profiles"
+LOCK_PATH = RUN_DIR / "switch.lock"
+RUNTIME_TARGET = os.environ.get(
+    "DAPHNE_GATEWARE_RUNTIME_TARGET", "daphne-runtime.target"
+)
+SYSTEMCTL = os.environ.get("DAPHNE_GATEWARE_SYSTEMCTL", "systemctl")
+DEVMEM = os.environ.get("DAPHNE_GATEWARE_DEVMEM", "devmem")
+
+STOP_UNITS = (
+    RUNTIME_TARGET,
+    "daphne.service",
+    "hermes.service",
+    "endpoint.service",
+    "clockchip.service",
+    "daphne-gateware-verify.service",
+    "firmware.service",
+    "daphne-gateware-prepare.service",
+)
+HEALTH_UNITS = (
+    RUNTIME_TARGET,
+    "firmware.service",
+    "daphne-gateware-verify.service",
+    "clockchip.service",
+    "endpoint.service",
+    "hermes.service",
+    "daphne.service",
+)
+
+
+class GatewareError(RuntimeError):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class Profile:
+    name: str
+    app: str
+    gateware_mode: str
+    magic: int
+    abi_major: int
+    abi_minor: int
+    variant: int
+    build_id_spec: str
+
+    @property
+    def abi_word(self) -> int:
+        return (self.abi_major << 16) | self.abi_minor
+
+
+def require_root() -> None:
+    if os.geteuid() != 0 and os.environ.get("DAPHNE_GATEWARE_ALLOW_NONROOT") != "1":
+        raise GatewareError("this operation must be run as root (normally through sudo)")
+
+
+def parse_int(value: str, label: str, maximum: int = 0xFFFFFFFF) -> int:
+    try:
+        parsed = int(value, 0)
+    except ValueError as exc:
+        raise GatewareError(f"{label} is not an integer: {value}") from exc
+    if parsed < 0 or parsed > maximum:
+        raise GatewareError(f"{label} is outside 0..0x{maximum:X}: {value}")
+    return parsed
+
+
+def read_assignments(path: Path) -> dict[str, str]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise GatewareError(f"cannot read {path}: {exc}") from exc
+
+    values: dict[str, str] = {}
+    for line_number, raw_line in enumerate(text.splitlines(), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, separator, raw_value = line.partition("=")
+        key = key.strip()
+        if not separator or key not in PROFILE_KEYS:
+            raise GatewareError(f"{path}:{line_number}: unsupported assignment")
+        if key in values:
+            raise GatewareError(f"{path}:{line_number}: duplicate {key}")
+        try:
+            words = shlex.split(raw_value, comments=True, posix=True)
+        except ValueError as exc:
+            raise GatewareError(f"{path}:{line_number}: {exc}") from exc
+        if len(words) != 1:
+            raise GatewareError(f"{path}:{line_number}: {key} needs one value")
+        values[key] = words[0]
+
+    missing = sorted(PROFILE_KEYS - values.keys())
+    if missing:
+        raise GatewareError(f"{path}: missing assignments: {', '.join(missing)}")
+    return values
+
+
+def profile_from_path(path: Path, expected_name: str | None = None) -> Profile:
+    values = read_assignments(path)
+    name = values["PROFILE"]
+    app = values["APP"]
+    mode = values["GATEWARE_MODE"]
+    if not NAME_RE.fullmatch(name):
+        raise GatewareError(f"{path}: invalid profile name {name!r}")
+    if not NAME_RE.fullmatch(app):
+        raise GatewareError(f"{path}: invalid app name {app!r}")
+    if expected_name is not None and name != expected_name:
+        raise GatewareError(f"{path}: PROFILE={name} does not match {expected_name}")
+    if mode not in PROFILE_VARIANTS:
+        raise GatewareError(f"{path}: unsupported GATEWARE_MODE={mode}")
+
+    profile = Profile(
+        name=name,
+        app=app,
+        gateware_mode=mode,
+        magic=parse_int(values["IDENTITY_MAGIC"], "IDENTITY_MAGIC"),
+        abi_major=parse_int(values["IDENTITY_ABI_MAJOR"], "IDENTITY_ABI_MAJOR", 0xFFFF),
+        abi_minor=parse_int(values["IDENTITY_ABI_MINOR"], "IDENTITY_ABI_MINOR", 0xFFFF),
+        variant=parse_int(values["IDENTITY_VARIANT"], "IDENTITY_VARIANT"),
+        build_id_spec=values["IDENTITY_BUILD_ID"],
+    )
+    if profile.magic != COMMON_MAGIC:
+        raise GatewareError(f"{path}: identity magic must be 0x{COMMON_MAGIC:08X}")
+    if (profile.abi_major, profile.abi_minor) != (
+        COMMON_ABI_MAJOR,
+        COMMON_ABI_MINOR,
+    ):
+        raise GatewareError(f"{path}: both release profiles must use ABI 2.0")
+    if profile.variant != PROFILE_VARIANTS[mode]:
+        raise GatewareError(
+            f"{path}: variant {profile.variant} does not match mode {mode}"
+        )
+    if profile.build_id_spec != "metadata":
+        parse_int(profile.build_id_spec, "IDENTITY_BUILD_ID", 0x0FFFFFFF)
+    return profile
+
+
+def load_profile(name: str) -> Profile:
+    if not NAME_RE.fullmatch(name):
+        raise GatewareError(f"invalid profile name: {name!r}")
+    path = PROFILES_DIR / f"{name}.conf"
+    return profile_from_path(path, name)
+
+
+def load_active_profile() -> Profile:
+    return profile_from_path(ACTIVE_PATH)
+
+
+def default_profile_name() -> str:
+    try:
+        name = DEFAULT_PATH.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise GatewareError(f"cannot read {DEFAULT_PATH}: {exc}") from exc
+    if not NAME_RE.fullmatch(name):
+        raise GatewareError(f"{DEFAULT_PATH}: invalid profile name {name!r}")
+    return name
+
+
+def metadata_build_id(profile: Profile) -> int:
+    app_dir = FIRMWARE_DIR / profile.app
+    if not app_dir.is_dir():
+        raise GatewareError(f"gateware app directory is missing: {app_dir}")
+
+    for metadata_path in (app_dir / "identity.env", app_dir / "BUILD-METADATA.txt"):
+        if not metadata_path.is_file():
+            continue
+        fields: dict[str, str] = {}
+        for raw_line in metadata_path.read_text(encoding="utf-8").splitlines():
+            key, separator, value = raw_line.strip().partition("=")
+            if separator:
+                fields[key.strip().lower()] = value.strip()
+        for key in ("identity_build_id", "build_id"):
+            if key in fields:
+                return parse_int(
+                    fields[key], f"{metadata_path}:{key}", 0x0FFFFFFF
+                )
+        if "git_sha" in fields:
+            sha = fields["git_sha"].removeprefix("0x")
+            if len(sha) < 7 or re.fullmatch(r"[0-9a-fA-F]+", sha) is None:
+                raise GatewareError(
+                    f"{metadata_path}: git_sha must contain at least seven hex digits"
+                )
+            # The ABI-2 identity word preserves the existing 28-bit firmware
+            # stamp, zero-extended to one 32-bit MMIO word.
+            return int(sha[:7], 16)
+    raise GatewareError(
+        f"{app_dir}: no identity_build_id/build_id/full git_sha metadata found"
+    )
+
+
+def expected_build_id(profile: Profile) -> int:
+    if profile.build_id_spec == "metadata":
+        return metadata_build_id(profile)
+    return parse_int(profile.build_id_spec, "IDENTITY_BUILD_ID", 0x0FFFFFFF)
+
+
+def preflight(profile: Profile) -> int:
+    app_dir = FIRMWARE_DIR / profile.app
+    missing_assets = [
+        str(path)
+        for path in (
+            app_dir / f"{profile.app}.bin",
+            app_dir / f"{profile.app}.dtbo",
+            app_dir / "shell.json",
+        )
+        if not path.is_file()
+    ]
+    if missing_assets:
+        raise GatewareError(
+            "gateware app is incomplete; missing " + ", ".join(missing_assets)
+        )
+    return expected_build_id(profile)
+
+
+def render_active(profile: Profile, build_id: int) -> str:
+    return "".join(
+        (
+            f"PROFILE={profile.name}\n",
+            f"APP={profile.app}\n",
+            f"GATEWARE_MODE={profile.gateware_mode}\n",
+            f"IDENTITY_MAGIC=0x{profile.magic:08X}\n",
+            f"IDENTITY_ABI_MAJOR={profile.abi_major}\n",
+            f"IDENTITY_ABI_MINOR={profile.abi_minor}\n",
+            f"IDENTITY_VARIANT={profile.variant}\n",
+            f"IDENTITY_BUILD_ID=0x{build_id:08X}\n",
+        )
+    )
+
+
+def atomic_write(path: Path, content: str, mode: int = 0o644) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+            os.fchmod(temporary.fileno(), mode)
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_name, path)
+        temporary_name = None
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if temporary_name is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(temporary_name)
+
+
+@contextlib.contextmanager
+def switch_lock() -> Iterator[None]:
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
+    with LOCK_PATH.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        yield
+
+
+def run_command(arguments: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(arguments, text=True, capture_output=True, check=False)
+    if check and result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
+        raise GatewareError(
+            f"command failed ({result.returncode}): {shlex.join(arguments)}: {detail}"
+        )
+    return result
+
+
+def systemctl(*arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return run_command([SYSTEMCTL, *arguments], check=check)
+
+
+def unit_is_active(unit: str) -> bool:
+    return systemctl("is-active", "--quiet", unit, check=False).returncode == 0
+
+
+def runtime_stability_settings() -> tuple[int, float]:
+    try:
+        checks = int(os.environ.get("DAPHNE_GATEWARE_STABILITY_CHECKS", "11"))
+        interval = float(
+            os.environ.get(
+                "DAPHNE_GATEWARE_STABILITY_INTERVAL_SECONDS", "0.1"
+            )
+        )
+    except ValueError as exc:
+        raise GatewareError("invalid runtime stability-check setting") from exc
+    if checks < 1 or checks > 1000:
+        raise GatewareError("DAPHNE_GATEWARE_STABILITY_CHECKS must be 1..1000")
+    if interval < 0 or interval > 10:
+        raise GatewareError(
+            "DAPHNE_GATEWARE_STABILITY_INTERVAL_SECONDS must be 0..10"
+        )
+    return checks, interval
+
+
+def stop_runtime() -> None:
+    result = systemctl("stop", *STOP_UNITS, check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
+        raise GatewareError(
+            f"runtime stop/unload failed ({result.returncode}); profile was not changed: {detail}"
+        )
+    still_active = [unit for unit in STOP_UNITS[1:-1] if unit_is_active(unit)]
+    if still_active:
+        raise GatewareError(
+            "runtime stop returned success but PL clients remain active: "
+            + ", ".join(still_active)
+        )
+
+
+def start_runtime() -> None:
+    systemctl("start", RUNTIME_TARGET)
+    checks, interval = runtime_stability_settings()
+    for sample in range(checks):
+        unhealthy = [unit for unit in HEALTH_UNITS if not unit_is_active(unit)]
+        if unhealthy:
+            raise GatewareError(
+                "runtime dependency chain became unhealthy during the "
+                f"post-start stability window (sample {sample + 1}/{checks}): "
+                + ", ".join(unhealthy)
+            )
+        if sample + 1 != checks:
+            time.sleep(interval)
+
+
+def read_word(address: int) -> int:
+    result = run_command([DEVMEM, f"0x{address:08X}", "32"])
+    tokens = re.findall(r"0[xX][0-9a-fA-F]+|\b[0-9a-fA-F]{1,8}\b", result.stdout)
+    if not tokens:
+        raise GatewareError(f"devmem returned no value for 0x{address:08X}")
+    token = tokens[-1]
+    try:
+        return int(token, 0 if token.lower().startswith("0x") else 16)
+    except ValueError as exc:
+        raise GatewareError(f"cannot parse devmem value {token!r}") from exc
+
+
+def write_word(address: int, value: int) -> None:
+    run_command([DEVMEM, f"0x{address:08X}", "32", f"0x{value:08X}"])
+
+
+def probe_identity() -> dict[str, int]:
+    return {
+        "magic": read_word(MAGIC_ADDRESS),
+        "abi": read_word(ABI_ADDRESS),
+        "variant": read_word(VARIANT_ADDRESS),
+        "build_id": read_word(BUILD_ID_ADDRESS),
+    }
+
+
+def verify_profile(profile: Profile, emit: bool = True) -> dict[str, int]:
+    expected_id = expected_build_id(profile)
+    observed = probe_identity()
+    expected = {
+        "magic": profile.magic,
+        "abi": profile.abi_word,
+        "variant": profile.variant,
+        "build_id": expected_id,
+    }
+    mismatches = [
+        f"{key}=0x{observed[key]:08X} (expected 0x{value:08X})"
+        for key, value in expected.items()
+        if observed[key] != value
+    ]
+    if mismatches:
+        raise GatewareError(
+            f"identity mismatch for {profile.name}: " + "; ".join(mismatches)
+        )
+    if emit:
+        print(
+            f"identity ok: profile={profile.name} ABI={profile.abi_major}.{profile.abi_minor} "
+            f"variant={profile.variant} build=0x{expected_id:08X}"
+        )
+    return observed
+
+
+def quiesce_active() -> None:
+    """Gate full-stream output before a server-only stop or FPGA unload."""
+    require_root()
+    profile = load_active_profile()
+    if profile.gateware_mode != "full-stream":
+        return
+
+    # Never write an address solely because an environment file names it. The
+    # identity check proves that the live ABI assigns A0020080 to this control.
+    verify_profile(profile, emit=False)
+    write_word(FULL_STREAM_CONTROL_ADDRESS, 0)
+    for _ in range(100):
+        control = read_word(FULL_STREAM_CONTROL_ADDRESS)
+        if (control & FULL_STREAM_CONTROL_MASK) == 0:
+            print("full-stream output quiesced")
+            return
+        time.sleep(0.001)
+    raise GatewareError(
+        "full-stream output did not acknowledge quiesce at 0xA0020080"
+    )
+
+
+def prepare_default() -> None:
+    require_root()
+    # A transactional switch holds switch_lock while systemd starts the target.
+    # In that path active.env is already atomically installed; validating it
+    # without reacquiring the non-reentrant lock avoids a parent/child deadlock.
+    if ACTIVE_PATH.exists():
+        load_active_profile()
+        return
+    with switch_lock():
+        # Recheck after acquiring the boot-time initialization lock so two
+        # independent starters cannot both create the initial selection.
+        if ACTIVE_PATH.exists():
+            load_active_profile()
+            return
+        profile = load_profile(default_profile_name())
+        build_id = preflight(profile)
+        atomic_write(ACTIVE_PATH, render_active(profile, build_id))
+
+
+def list_profiles() -> int:
+    if not PROFILES_DIR.is_dir():
+        raise GatewareError(f"profile directory is missing: {PROFILES_DIR}")
+    for path in sorted(PROFILES_DIR.glob("*.conf")):
+        profile = profile_from_path(path, path.stem)
+        try:
+            build_id = preflight(profile)
+            availability = f"ready build=0x{build_id:08X}"
+        except GatewareError as exc:
+            availability = f"unavailable ({exc})"
+        print(
+            f"{profile.name}: app={profile.app} mode={profile.gateware_mode} "
+            f"ABI={profile.abi_major}.{profile.abi_minor} variant={profile.variant} "
+            f"{availability}"
+        )
+    return 0
+
+
+def status() -> int:
+    default_name = default_profile_name()
+    print(f"default profile: {default_name}")
+    if not ACTIVE_PATH.exists():
+        print("active profile: none")
+        print(f"runtime target: {'active' if unit_is_active(RUNTIME_TARGET) else 'inactive'}")
+        return 1
+    profile = load_active_profile()
+    health = {unit: unit_is_active(unit) for unit in HEALTH_UNITS}
+    unhealthy = [unit for unit, active in health.items() if not active]
+    runtime_active = health[RUNTIME_TARGET]
+    print(f"active profile: {profile.name}")
+    print(f"app: {profile.app}")
+    print(f"server mode: {profile.gateware_mode}")
+    print(f"runtime target: {'active' if runtime_active else 'inactive'}")
+    if unhealthy:
+        print("unhealthy units: " + ", ".join(unhealthy))
+    if not runtime_active or not health["firmware.service"]:
+        print("identity: not probed because firmware is inactive")
+        return 1
+    verify_profile(profile)
+    return 1 if unhealthy else 0
+
+
+def set_default(name: str) -> None:
+    require_root()
+    profile = load_profile(name)
+    preflight(profile)
+    atomic_write(DEFAULT_PATH, f"{profile.name}\n")
+    print(f"default profile set to {profile.name}; active profile was not changed")
+
+
+def switch_profile(name: str) -> None:
+    require_root()
+    target_profile = load_profile(name)
+    target_build_id = preflight(target_profile)
+    target_text = render_active(target_profile, target_build_id)
+
+    with switch_lock():
+        if ACTIVE_PATH.exists():
+            previous_text = ACTIVE_PATH.read_text(encoding="utf-8")
+            previous_profile = load_active_profile()
+        else:
+            previous_profile = load_profile(default_profile_name())
+            previous_build_id = preflight(previous_profile)
+            previous_text = render_active(previous_profile, previous_build_id)
+            atomic_write(ACTIVE_PATH, previous_text)
+
+        was_active = unit_is_active(RUNTIME_TARGET)
+        if previous_profile.name == target_profile.name and was_active:
+            verify_profile(target_profile)
+            print(f"{target_profile.name} is already active")
+            return
+
+        try:
+            stop_runtime()
+        except GatewareError as stop_error:
+            recovery_error = ""
+            if was_active:
+                try:
+                    start_runtime()
+                    verify_profile(previous_profile, emit=False)
+                except GatewareError as exc:
+                    recovery_error = f"; prior runtime recovery also failed: {exc}"
+            raise GatewareError(f"{stop_error}{recovery_error}") from stop_error
+
+        atomic_write(ACTIVE_PATH, target_text)
+        try:
+            start_runtime()
+            verify_profile(target_profile)
+        except GatewareError as switch_error:
+            rollback_stop_error: GatewareError | None = None
+            try:
+                stop_runtime()
+            except GatewareError as exc:
+                rollback_stop_error = exc
+            atomic_write(ACTIVE_PATH, previous_text)
+            if rollback_stop_error is not None:
+                raise GatewareError(
+                    f"switch to {name} failed ({switch_error}); rollback could not unload "
+                    f"the failed app ({rollback_stop_error}); previous profile metadata was restored "
+                    "but its app was not loaded"
+                ) from switch_error
+            try:
+                start_runtime()
+                verify_profile(previous_profile, emit=False)
+            except GatewareError as rollback_error:
+                raise GatewareError(
+                    f"switch to {name} failed ({switch_error}); rollback to "
+                    f"{previous_profile.name} also failed ({rollback_error})"
+                ) from switch_error
+            raise GatewareError(
+                f"switch to {name} failed ({switch_error}); rolled back successfully "
+                f"to {previous_profile.name}"
+            ) from switch_error
+
+        print(f"switched gateware to {target_profile.name}")
+
+
+def verify_active() -> None:
+    require_root()
+    verify_profile(load_active_profile())
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Safely inspect and switch DAPHNE gateware profiles"
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("list", help="list configured profiles and app readiness")
+    subparsers.add_parser("status", help="show default/active profile and live identity")
+    switch_parser = subparsers.add_parser(
+        "switch", help="stop the runtime, switch gateware, verify, and restart"
+    )
+    switch_parser.add_argument("profile")
+    default_parser = subparsers.add_parser(
+        "set-default", help="select the profile to load on the next boot"
+    )
+    default_parser.add_argument("profile")
+    subparsers.add_parser("prepare-default", help=argparse.SUPPRESS)
+    subparsers.add_parser("verify", help=argparse.SUPPRESS)
+    subparsers.add_parser("quiesce", help=argparse.SUPPRESS)
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    try:
+        if args.command == "list":
+            return list_profiles()
+        if args.command == "status":
+            return status()
+        if args.command == "switch":
+            switch_profile(args.profile)
+        elif args.command == "set-default":
+            set_default(args.profile)
+        elif args.command == "prepare-default":
+            prepare_default()
+        elif args.command == "verify":
+            verify_active()
+        elif args.command == "quiesce":
+            quiesce_active()
+        return 0
+    except (GatewareError, OSError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

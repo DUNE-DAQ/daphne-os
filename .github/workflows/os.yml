@@ -1,0 +1,75 @@
+name: OS and server
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - 'archive/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  os-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes device-tree-compiler python3-venv
+          python3 -m venv /tmp/daphne-os-tests
+          /tmp/daphne-os-tests/bin/python -m pip install 'jsonschema==4.25.1'
+      - name: Check OS and deployment ownership
+        run: |
+          /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/deploy -v
+          /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/petalinux -v
+          /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/remote -v
+          /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/migration -v
+          /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/security -v
+          python3 scripts/check_documentation.py
+          sh -n petalinux/meta-daphne/recipes-core/daphne-services/files/daphne-fw-stop.sh
+          python3 -m py_compile petalinux/meta-daphne/recipes-core/daphne-services/files/daphne-gateware
+          bash -n scripts/server/build_native.sh scripts/security/scan.sh
+
+  native-server:
+    # The preserved server uses ARM NEON; compile it natively on AArch64.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake g++ make pkg-config libi2c-dev \
+            libprotobuf-dev protobuf-compiler libzmq3-dev cppzmq-dev \
+            libcli11-dev python3-protobuf python3-zmq
+      - name: Build server and generate client bindings without hardware access
+        run: |
+          PATH=/usr/bin:/bin ./scripts/server/build_native.sh ./daphne-server ./build/server
+
+  credential-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-pinned scanner
+        run: |
+          mkdir /tmp/daphne-gitleaks
+          cd /tmp/daphne-gitleaks
+          curl --fail --location --silent --show-error --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output gitleaks.tar.gz
+          printf '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz\n' | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: Scan complete history, current files, and messages
+        env:
+          GITLEAKS_BIN: /tmp/daphne-gitleaks/gitleaks
+        run: ./scripts/security/scan.sh

@@ -1,0 +1,21 @@
+title = "DAPHNE OS credential checks"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "daphne-literal-password"
+description = "Quoted password assignment, including low-entropy board passwords"
+regex = '''(?i)(?:password|passwd|passphrase|ssh_pass|ssh_password|root_password|user_password|sshp[aw]ss)\s*[:=]\s*["']([^"'\r\n]{1,128})["']'''
+secretGroup = 1
+
+[[rules]]
+id = "daphne-sshpass-argument"
+description = "Literal sshpass command-line password"
+regex = '''(?i)sshpass\s+-p\s+["']?([^"'\s;]{1,128})'''
+secretGroup = 1
+
+[[rules]]
+id = "daphne-unix-password-hash"
+description = "Unix account password hash"
+regex = '''\$[156y]\$[A-Za-z0-9./]{1,24}\$[A-Za-z0-9./]{20,128}'''

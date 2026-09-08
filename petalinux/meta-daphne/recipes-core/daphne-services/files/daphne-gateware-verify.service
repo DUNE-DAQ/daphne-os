@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify DAPHNE gateware identity and ABI
+After=firmware.service daphne-gateware-prepare.service
+Requires=firmware.service daphne-gateware-prepare.service
+Before=clockchip.service endpoint.service hermes.service daphne.service
+PartOf=firmware.service daphne-runtime.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/daphne-gateware verify
+RemainAfterExit=yes
