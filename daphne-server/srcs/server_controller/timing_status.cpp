@@ -62,5 +62,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("ChannelConfig.gain", true,
       "I315/C013: offset DAC x1/x2 -> AD5327 bit 13 = 0/1; 0 retains legacy x1. "
       "Explicit x1/x2 offset limits 2700/1500. Command support, not DAC readback or analog qualification");
+  add("AMSTemperatures", true,
+      "Read-only Linux IIO xilinx-ams Temp_LPD/Temp_FPD/Temp_PL; consult each reading's quality. "
+      "SoC die sensors, not board ambient; host observation times, not conversion timestamps");
 }
 }

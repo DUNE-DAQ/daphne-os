@@ -108,6 +108,7 @@ target_include_directories(daphne_proto PUBLIC
 target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
 
 add_library(daphne_telemetry_protocol
+  srcs/server_controller/ams_temperature.cpp
   srcs/server_controller/telemetry_protocol.cpp
   srcs/server_controller/timing_status.cpp
   srcs/server_controller/readonly_mmio.cpp
@@ -118,6 +119,10 @@ add_library(daphne_configuration srcs/server_controller/configuration_plan.cpp)
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_configuration PUBLIC daphne_proto)
 if(BUILD_TESTING)
+  add_executable(ams_temperature_tests tests/ams_temperature_tests.cpp)
+  target_link_libraries(ams_temperature_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME ams_temperature_unit COMMAND ams_temperature_tests)
+  set_tests_properties(ams_temperature_unit PROPERTIES LABELS unit)
   add_executable(timing_status_tests tests/timing_status_tests.cpp)
   target_link_libraries(timing_status_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME timing_status_unit COMMAND timing_status_tests)

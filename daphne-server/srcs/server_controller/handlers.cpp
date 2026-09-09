@@ -38,6 +38,7 @@
 #include "server_controller/configuration_plan.hpp"
 #include "server_controller/timing_status.hpp"
 #include "server_controller/readonly_mmio.hpp"
+#include "server_controller/ams_temperature.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -2443,8 +2444,10 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       ReadOnlyMmio timing_mmio(kTimingRegisterBase, 16);
       *resp.mutable_endpoint() = read_timing_status(timing_mmio);
       resp.set_ps_local_unix_ns(resp.endpoint().observed_host_unix_ns());
+      add_ams_temperatures(resp);
       resp.set_success(true);
-      resp.set_message("Gateware identity and timing registers read. Other inventory fields are not collected; "
+      resp.set_message("Gateware identity and timing registers read; named AMS temperatures attempted. "
+                        "Check each temperature's quality. Other inventory fields are not collected; "
                         "consult capabilities. Success does not mean timing is ready");
     } catch (const std::exception& e) {
       resp.set_success(false);

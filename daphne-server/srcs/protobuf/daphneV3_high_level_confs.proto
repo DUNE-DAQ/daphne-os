@@ -244,6 +244,10 @@ message TemperatureStatus {
   bool   valid         = 3;
   string source        = 4; // regulator PMBus, SFP A2, PS thermal zone, etc.
   string message       = 5;
+  MeasurementQuality quality = 6;
+  // Host observation times, NOT the ADC conversion time or certified timing.
+  uint64 observed_host_unix_ns = 7;
+  uint64 observed_monotonic_ns = 8;
 }
 
 message EndpointStatus {
