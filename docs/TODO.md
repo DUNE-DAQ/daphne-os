@@ -8,15 +8,18 @@ See [the carrier/services qualification](carrier-telemetry-and-services-verifica
 Supply values are plausible, not externally calibrated; zero-command VBIAS0/1
 residual readings still need characterization without assuming physical zero.
 
-Next, reconcile onboard U6 ADS1261 (schematic sheet 7) with the legacy
-ADS1260-labelled current-monitor driver and its absent `/dev/spidev3.0` path.
-Also bind the onboard sheet-11/12 regulators, currently hardcoded to absent
+Onboard U6 ADS1261 now has an identified kernel-owned SPI path, with all 40
+carrier-mux channels read twice successfully. See the
+[raw-readout qualification](ads1261-readout-verification.md). Current calibration
+and known-stimulus analog mapping remain open; do not claim measured amperes.
+Next bind the onboard sheet-11/12 regulators, currently hardcoded to absent
 `/dev/i2c-2`, by verified PL-controller identity. Review initialization writes
 before retargeting either driver. No mezzanines are fitted on DAPHNE-015, but
 these onboard devices are not thereby absent. Do not use broad scans, infer
 physical absence from Linux clients, or change CERN MAC/IP and clock/bias
-policy. Temperature alarm thresholds and additional sensor coverage remain
-separate qualification work.
+policy. Observation-only temperature alarms are implemented with provisional
+high thresholds; protection qualification and additional sensor coverage remain
+separate work.
 
 ## Qualify unattended boot redundancy for underground deployment
 

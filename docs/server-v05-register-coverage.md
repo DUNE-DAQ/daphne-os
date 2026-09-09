@@ -5,7 +5,8 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `4558bbf`, including
+Current DAPHNE-015 server: `e247dfd`, including
+[CRC-checked 40-channel ADS1261 raw readout](ads1261-readout-verification.md),
 [responsive bookkeeping](server-bookkeeping-verification.md),
 [observation-only temperature alarms](temperature-alarm-verification.md),
 [schematic-backed voltage/carrier telemetry and services](carrier-telemetry-and-services-verification.md),
@@ -44,6 +45,7 @@ preserved history. Relevant prior work:
 | Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | Full zero-bias configuration tested. Nonzero-bias operation unqualified |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
 | I293, bias and rail telemetry | One complete scan per ADC; coherent cache, quality, names/units and times; schematic-backed PS I2C1 binding | Real acquisition/freshness tested; five supply rails near nominal. Bias residuals and external calibration remain unqualified |
+| I316/I317, raw/calibrated current | Identified kernel-owned ADS1261, explicit physical channel 0..39, differential mux mapping/restoration, CRC/status checks and signed raw/nominal volts; calibrated amperes explicitly unavailable | All 40 raw paths read twice on zero-BIAS DAPHNE-015. No mezzanines; current calibration, analog mapping and full-stream live qualification remain open |
 | I200–I202, named temperatures | Three AMS die sensors plus identified carrier U9 MCP9808; Celsius, quality and host observation times | Four readings deployed and tested. Not all possible sensors or ADC conversion timestamps |
 | Temperature-alarm follow-up | Active startup thresholds and Good/Warning/High/Critical/Missing/Invalid/Stale evaluation on each temperature | Deployed with provisional 85/95/105 C thresholds; boundary/fault tests synthetic. Monitoring only, not protection or safe ratings |
 | M009, GeneralInfo temperature | Bound to identified carrier U9; additive source/time metadata; failures NaN with quality | Real carrier readout tested; not calibrated ambient temperature |
@@ -121,6 +123,11 @@ capabilities. The original system-status schema is retained, but empty
 inventory fields are not claims that absent devices or values were measured.
 Only level 0 is supported. `include_ps_values` is accepted for the bounded host
 metadata already included at level 0; I2C scans, xmutil and SFP probes are rejected.
+
+Current-monitor request 244 now requires explicit `physical_channel` field 3,
+including presence for channel zero. Legacy ambiguous ADC-input-only requests
+are rejected; regenerate clients. See the raw-readout report for response
+quality, signed-code and unavailable-current handling.
 
 Legacy GeneralInfo voltage doubles are NaN when invalid, stale or unavailable.
 Its `power_*` fields keep their old voltage mappings; named voltages state the

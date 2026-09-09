@@ -7,7 +7,7 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 
 | Requirement | Implementation / evidence needed | State |
 | --- | --- | --- |
-| ADS1261 current readout | Reuse/reconcile legacy current handler; stable controller ownership, schematic mux mapping, device/status/timeout checks, signed/scaled values and quality; mocks and board readings | Investigating |
+| ADS1261 current readout | Reuse/reconcile legacy current handler; stable controller ownership, schematic mux mapping, device/status/timeout checks, signed/scaled values and quality; mocks and board readings | Raw 40-channel path deployed: 17 native/ARM suites, 45 tracked Python tests and 80 live CRC-checked acquisitions passed. Calibrated amperes and analog channel mapping remain unqualified |
 | Onboard regulators | Schematic-backed PL bus binding and read-only telemetry; do not introduce regulator configuration writes | Pending |
 | Server bookkeeping | Independent heartbeat; observable configuration-in-progress; successful canonical applied-config hash, validity/invalidation, correlated last result; restart and failure tests | Implemented, native/ARM and live configuration tests passed; see bookkeeping qualification |
 | Database identity | Authoritative crate/slot/detector, management IP, timing address and per-Hermes MAC/IP; typed provenance/revision and unavailable handling; distinguish assigned from observed, never change network identity implicitly | Candidate DAPHNE-15 OKS placement/Hermes records located on ONL; timing assignment and source confirmation still needed |
@@ -37,7 +37,8 @@ Evidence found so far:
 - [ADC and SFP schematic details](server-remaining-hardware-evidence.md): U6
   has five differential DA/DB pairs, not the legacy default ten single-ended
   selections. All six SFP I2C routes are drawn; the installed-board wiring caveat
-  still needs qualification. No current/SFP hardware reads were enabled yet.
+  still needs qualification. [Current ADC reads are now qualified](ads1261-readout-verification.md)
+  within the raw-readout scope; SFP hardware reads remain pending.
 - [Temperature alarm qualification](temperature-alarm-verification.md):
   provisional 85/95/105 C monitoring thresholds, configurable at startup and
   returned with each evaluation. No automatic protection action was added.
