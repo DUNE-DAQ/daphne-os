@@ -33,6 +33,7 @@
 #include "daphneV3_low_level_confs.pb.h"
 #include "reg.hpp"
 #include "server_controller/gateware.hpp"
+#include "server_controller/register_reads.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -499,6 +500,12 @@ bool read_counters_raw(uint32_t base,
                        const std::vector<uint32_t>& chs,
                        ReadTriggerCountersResponse& resp,
                        std::string& err) {
+  try {
+    validate_counter_request(base, chs);
+  } catch (const std::exception& e) {
+    err = e.what();
+    return false;
+  }
   long pagesz = sysconf(_SC_PAGESIZE);
   if (pagesz <= 0) pagesz = 4096;
   const uint64_t pg = static_cast<uint64_t>(pagesz);
@@ -527,30 +534,35 @@ bool read_counters_raw(uint32_t base,
 
   auto rd32 = [&](uint32_t phys) -> uint32_t {
     const uint64_t off = static_cast<uint64_t>(phys) - map_base;
-    uint32_t v = 0;
-    std::memcpy(&v, ptr + off, 4);
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    const uint32_t v = *reinterpret_cast<volatile uint32_t*>(ptr + off);
+    std::atomic_thread_fence(std::memory_order_seq_cst);
     return v;
   };
   auto rd64 = [&](uint32_t lo, uint32_t hi) -> uint64_t {
-    const uint32_t l = rd32(lo);
-    const uint32_t h = rd32(hi);
-    return (static_cast<uint64_t>(h) << 32) | l;
+    return read_stable_counter64(rd32, lo, hi);
   };
 
-  for (const auto ch : chs) {
-    if (ch >= trigregs::NUM_CHANNELS) continue;
-    const uint32_t b = base + ch * trigregs::STRIDE;
-    auto* s = resp.add_snapshots();
-    s->set_channel(ch);
-    s->set_threshold(rd32(b + trigregs::OFF_THR) & trigregs::MASK_28BIT);
-    s->set_record_count(rd64(b + trigregs::OFF_REC_LO, b + trigregs::OFF_REC_HI));
-    s->set_busy_count(rd64(b + trigregs::OFF_BSY_LO, b + trigregs::OFF_BSY_HI));
-    s->set_full_count(rd64(b + trigregs::OFF_FUL_LO, b + trigregs::OFF_FUL_HI));
+  bool success = true;
+  try {
+    for (const auto ch : chs) {
+      const uint32_t b = base + ch * trigregs::STRIDE;
+      auto* s = resp.add_snapshots();
+      s->set_channel(ch);
+      s->set_threshold(rd32(b + trigregs::OFF_THR) & trigregs::MASK_28BIT);
+      s->set_record_count(rd64(b + trigregs::OFF_REC_LO, b + trigregs::OFF_REC_HI));
+      s->set_busy_count(rd64(b + trigregs::OFF_BSY_LO, b + trigregs::OFF_BSY_HI));
+      s->set_full_count(rd64(b + trigregs::OFF_FUL_LO, b + trigregs::OFF_FUL_HI));
+    }
+  } catch (const std::exception& e) {
+    resp.clear_snapshots();
+    err = e.what();
+    success = false;
   }
 
   munmap(ptr, map_len);
   close(fd);
-  return true;
+  return success;
 }
 
 bool write_trigger_thresholds(const ConfigureRequest& cfg, std::string& response_msg) {

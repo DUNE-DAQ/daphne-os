@@ -1,3 +1,8 @@
+add_executable(register_reads_tests register_reads_tests.cpp)
+target_link_libraries(register_reads_tests PRIVATE daphne_gateware)
+add_test(NAME register_reads_unit COMMAND register_reads_tests)
+set_tests_properties(register_reads_unit PROPERTIES LABELS unit)
+
 add_executable(hdmezz_driver_tests
   hdmezz_driver_tests.cpp
 )
