@@ -4,8 +4,10 @@
 Writes only offset DACs on explicitly selected board AFEs, then software-triggers
 spybuffer captures. Does NOT configure/reset/align AFEs, change clocks, PGA,
 trim or HV, or send an aggregate Configure request. Requires prior alignment.
-Sequence: 2200/x1, 1100/x2, 1100/x1 control, 2200/x1 repeat. Final setting is
+Sequence: 2200/x1, 1100/x2, 2200/x1 repeat, 1100/x1 control. Final setting is
 2200/x1, NOT restoration of unknown previous DAC state (there is no readback).
+The potentially clipping control follows A/B/A, so its recovery cannot affect
+the repeatability measurement. A final offset write follows the control.
 This qualifies the low-level DAC path, not aggregate Configure end-to-end.
 With --configure-zero-bias, instead run full self-trigger Configure + AlignAFE
 for each setting, including AFE reset/power, trim=0, VGAIN=1700 and the reference
@@ -20,6 +22,12 @@ import statistics
 import sys
 import time
 from pathlib import Path
+
+
+def setting_sequence():
+    """Measure repeatability before the potentially saturating control."""
+    return (("a_2200_x1", 2200, 1), ("b_1100_x2", 1100, 2),
+            ("repeat_2200_x1", 2200, 1), ("control_1100_x1", 1100, 1))
 
 
 def zero_bias_profile(code, gain):
@@ -129,6 +137,7 @@ def main():
               "afes": args.afes, "channels": channels, "waveforms_per_setting": args.waveforms,
               "samples_per_waveform": args.samples, "tolerance_adc": args.tolerance_adc,
               "scope": "Low-level offset DAC path; not aggregate Configure",
+              "setting_order": [label for label, _, _ in setting_sequence()],
               "final_requested_setting": {"offset": 2200, "gain": 1}}
     if args.configure_zero_bias:
         report["scope"] = "Full zero-bias Configure + explicit AlignAFE at every offset/gain setting"
@@ -246,8 +255,7 @@ def main():
             require(report["aggregate_gain_capability"] is True, "Server does not advertise aggregate offset gain support")
         else:
             report["afe_registers_before"] = read_afe_state()
-        for label, code, gain in (("a_2200_x1", 2200, 1), ("b_1100_x2", 1100, 2),
-                                  ("control_1100_x1", 1100, 1), ("repeat_2200_x1", 2200, 1)):
+        for label, code, gain in setting_sequence():
             if args.configure_zero_bias:
                 configure_zero_bias(label, code, gain)
                 registers = read_afe_state()

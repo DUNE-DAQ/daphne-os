@@ -10,6 +10,11 @@ spec.loader.exec_module(module)
 
 
 class OffsetComparisonTests(unittest.TestCase):
+    def test_repeat_precedes_potentially_clipping_control(self):
+        self.assertEqual(module.setting_sequence(), (
+            ("a_2200_x1", 2200, 1), ("b_1100_x2", 1100, 2),
+            ("repeat_2200_x1", 2200, 1), ("control_1100_x1", 1100, 1)))
+
     def test_full_profile_is_zero_bias_and_complete(self):
         for code, gain in ((2200, 1), (1100, 2), (1100, 1)):
             profile = module.zero_bias_profile(code, gain)
