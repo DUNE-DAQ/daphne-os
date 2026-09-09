@@ -3,8 +3,9 @@
 #include <thread>
 #include <chrono>
 
-Daphne::Daphne(bool enable_mezzanines)
+Daphne::Daphne(bool enable_mezzanines, std::shared_ptr<daphne_sc::RuntimeState> runtime_state)
 	: mezzanine_access_enabled(enable_mezzanines),
+	  runtime(std::move(runtime_state)),
 	  afe(std::make_unique<Afe>()),
 	  dac(std::make_unique<Dac>()),
 	  frontend(std::make_unique<FrontEnd>()),

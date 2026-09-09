@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <memory>
 #include <string>
 #include "daphneV3_high_level_confs.pb.h"
 
@@ -32,4 +33,6 @@ class RuntimeState {
   uint64_t invalidations_ = 0;
   uint64_t attempt_invalidations_ = 0;
 };
+std::shared_ptr<RuntimeState> make_process_runtime_state();
+bool invalidates_configuration(daphne::MessageTypeV2 type);
 } // namespace daphne_sc

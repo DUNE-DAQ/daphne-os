@@ -45,6 +45,7 @@ void i2c_2_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
               daphne.HDMezz_3V3_alert[i].store(hd->checkAlertStatus(i, "3V3"));
             }
             if(daphne.HDMezz_5V_alert[i].load() || daphne.HDMezz_3V3_alert[i].load()){
+              if (daphne.runtime) daphne.runtime->invalidate("Mezzanine protective alert removed power requests");
               hd->setPowerRequests(i, false, false);
               daphne.HDMezz_5V_is_powered[i].store(false);
               daphne.HDMezz_3V3_is_powered[i].store(false);

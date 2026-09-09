@@ -28,13 +28,16 @@
 #include "DaphneI2CDrivers.hpp"
 #include "DaphneSpiDrivers.hpp"
 #include "server_controller/board_monitor.hpp"
+#include "server_controller/runtime_state.hpp"
 
 class Daphne {
 public:
     // Constructor
 
-    explicit Daphne(bool enable_mezzanines = true);
+    explicit Daphne(bool enable_mezzanines = true,
+                    std::shared_ptr<daphne_sc::RuntimeState> runtime_state = {});
     const bool mezzanine_access_enabled;
+    const std::shared_ptr<daphne_sc::RuntimeState> runtime;
 
     // Destructor
     ~Daphne();

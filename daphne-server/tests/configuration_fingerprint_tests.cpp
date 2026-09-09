@@ -38,5 +38,17 @@ int main() {
   try { (void)canonical_configuration_evidence(config, profile, {{1,2},{1,3}}); }
   catch (const std::invalid_argument&) { rejected = true; }
   require(rejected);
+  profile.mode = GatewareMode::kFullStream;
+  profile.identity.variant = 2;
+  config.add_full_stream_channels(0);
+  config.add_full_stream_channels(9);
+  const auto stream_order = fingerprint(config);
+  config.set_full_stream_channels(0, 9);
+  config.set_full_stream_channels(1, 0);
+  require(fingerprint(config) != stream_order);
+  const auto reordered = fingerprint(config);
+  config.set_self_trigger_threshold(123); // Ignored in full-stream mode.
+  config.set_inverters(999);
+  require(fingerprint(config) == reordered);
   std::cout << "SHA-256 vectors, canonical ordering, effective gain, ignored fields, profile and observation evidence checks passed\n";
 }

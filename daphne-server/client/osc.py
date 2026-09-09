@@ -134,6 +134,8 @@ class V2Link:
 
         rep = pb_high.ControlEnvelopeV2()
         rep.ParseFromString(frames[-1])
+        if getattr(rep, "transport_error", ""):
+            raise RuntimeError(rep.transport_error)
 
         if rep.dir != pb_high.DIR_RESPONSE:
             raise RuntimeError(f"Unexpected dir={rep.dir}")

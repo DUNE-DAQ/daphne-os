@@ -139,6 +139,7 @@ def main():
                                           type=kind, msg_id=sequence, task_id=1, payload=payload)
         socket.send(envelope.SerializeToString())
         reply = high.ControlEnvelopeV2.FromString(socket.recv())
+        require(not getattr(reply, "transport_error", ""), getattr(reply, "transport_error", ""))
         require(reply.version == 2 and reply.dir == high.DIR_RESPONSE and reply.type == kind + 1,
                 "Wrong response envelope")
         require(reply.correl_id == sequence and reply.task_id == 1, "Wrong response correlation")

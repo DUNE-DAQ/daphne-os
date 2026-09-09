@@ -54,6 +54,8 @@ def main():
 
     rep = pb_high.ControlEnvelopeV2()
     rep.ParseFromString(frames[-1])
+    if getattr(rep, "transport_error", ""):
+        raise RuntimeError(rep.transport_error)
     if rep.type != pb_high.MT2_READ_GENERAL_INFO_RESP:
         raise RuntimeError(f"Unexpected reply type {rep.type}")
 

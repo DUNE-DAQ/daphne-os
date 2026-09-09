@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <stdexcept>
 #include <utility>
+#include <cstdlib>
+#include <fstream>
+#include "server_controller/board_monitor.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -121,5 +124,53 @@ void RuntimeState::invalidate(const std::string& reason) {
   ++invalidations_;
   state_.set_applied_configuration_valid(false);
   state_.set_invalidation_reason(bounded_reason(reason));
+}
+
+std::shared_ptr<RuntimeState> make_process_runtime_state() {
+  auto uuid = [](const char* path) {
+    std::ifstream input(path);
+    std::string value;
+    std::getline(input, value);
+    if (value.size() != 36 || value.find_first_not_of("0123456789abcdef-") != std::string::npos)
+      throw std::runtime_error("Cannot establish process/boot identity");
+    return value;
+  };
+  auto instance = uuid("/proc/sys/kernel/random/uuid");
+  instance.erase(std::remove(instance.begin(), instance.end(), '-'), instance.end());
+  if (const char* invocation = std::getenv("INVOCATION_ID")) {
+    const std::string value(invocation);
+    if (value.size() == 32 && value.find_first_not_of("0123456789abcdef") == std::string::npos)
+      instance = value;
+  }
+  return std::make_shared<RuntimeState>(instance, uuid("/proc/sys/kernel/random/boot_id"), [] {
+    return ObservationTime{monotonic_time_ns(), host_unix_time_ns()};
+  });
+}
+
+bool invalidates_configuration(daphne::MessageTypeV2 type) {
+  switch (type) {
+    case daphne::MT2_CONFIGURE_CLKS_REQ:
+    case daphne::MT2_WRITE_AFE_REG_REQ:
+    case daphne::MT2_WRITE_AFE_VGAIN_REQ:
+    case daphne::MT2_WRITE_AFE_ATTENUATION_REQ:
+    case daphne::MT2_WRITE_AFE_BIAS_SET_REQ:
+    case daphne::MT2_WRITE_AFE_BIAS_CONTROLLED_SET_REQ:
+    case daphne::MT2_WRITE_TRIM_CH_REQ:
+    case daphne::MT2_WRITE_TRIM_ALL_CH_REQ:
+    case daphne::MT2_WRITE_TRIM_ALL_AFE_REQ:
+    case daphne::MT2_WRITE_OFFSET_CH_REQ:
+    case daphne::MT2_WRITE_OFFSET_ALL_CH_REQ:
+    case daphne::MT2_WRITE_OFFSET_ALL_AFE_REQ:
+    case daphne::MT2_WRITE_VBIAS_CONTROL_REQ:
+    case daphne::MT2_WRITE_AFE_FUNCTION_REQ:
+    case daphne::MT2_SET_AFE_RESET_REQ:
+    case daphne::MT2_DO_AFE_RESET_REQ:
+    case daphne::MT2_SET_AFE_POWERSTATE_REQ:
+    case daphne::MT2_SET_HDMEZZ_BLOCK_ENABLE_REQ:
+    case daphne::MT2_CONFIGURE_HDMEZZ_BLOCK_REQ:
+    case daphne::MT2_SET_HDMEZZ_POWER_STATES_REQ:
+      return true;
+    default: return false;
+  }
 }
 } // namespace daphne_sc

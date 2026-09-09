@@ -107,7 +107,8 @@ int main(int argc, char* argv[]) {
   }
 
   zmq::context_t context(1);
-  Daphne daphne(!no_mezzanines);
+  const auto runtime = daphne_sc::make_process_runtime_state();
+  Daphne daphne(!no_mezzanines, runtime);
 
   std::vector<std::thread> monitor_threads;
   if (!disable_monitoring) {
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Monitoring period: " << monitor_period_ms << " ms\n";
   }
 
-  const auto handlers = daphne_sc::make_v2_handlers(gateware_mode, full_stream_mmio);
+  const auto handlers = daphne_sc::make_v2_handlers(gateware_mode, full_stream_mmio, identity);
   daphne_sc::run_router_server(context, bind_endpoint, daphne, handlers, server_opts);
 
   for (auto& t : monitor_threads) {

@@ -41,6 +41,7 @@
 #include "server_controller/ams_temperature.hpp"
 #include "server_controller/carrier_temperature.hpp"
 #include "server_controller/service_status.hpp"
+#include "server_controller/configuration_fingerprint.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -760,6 +761,9 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
     const std::vector<RegisterWrite> mode_register_plan =
         make_mode_register_plan(mode, full_stream_channels);
     validate_analog_configuration(requested_cfg);
+    if (mode == GatewareMode::kFullStream && full_stream_mmio == nullptr)
+      throw std::logic_error("Full-stream MMIO window is not configured");
+    if (daphne.runtime) daphne.runtime->hardware_started();
     if (mode == GatewareMode::kFullStream) {
       if (full_stream_mmio == nullptr) {
         throw std::logic_error("Full-stream MMIO window is not configured");
@@ -2331,11 +2335,34 @@ std::string serialize_error_with_success_field(Msg& msg, const std::string& err)
   return serialize_or_empty(msg);
 }
 
+std::vector<std::pair<uint32_t, uint32_t>> configuration_control_observations(GatewareMode mode) {
+  std::vector<std::pair<uint32_t, uint32_t>> values;
+  auto observe = [&](ReadOnlyMmio& mmio, uint32_t address) {
+    const auto value = mmio.read32(address);
+    if (mmio.read32(address) != value) throw std::runtime_error("Configuration control changed during evidence read");
+    values.emplace_back(address, value);
+  };
+  if (mode == GatewareMode::kSelfTrigger) {
+    ReadOnlyMmio controls(stuffregs::PHYS_BASE, stuffregs::SPAN);
+    for (uint32_t offset : {0x20u, 0x24u, 0x2cu, 0x30u, 0x34u, 0x3cu, 0x40u, 0x44u, 0x48u})
+      observe(controls, stuffregs::PHYS_BASE + offset);
+    ReadOnlyMmio thresholds(trigregs::PHYS_BASE, trigregs::NUM_CHANNELS * trigregs::STRIDE);
+    for (uint32_t channel = 0; channel < trigregs::NUM_CHANNELS; ++channel)
+      observe(thresholds, trigregs::PHYS_BASE + channel * trigregs::STRIDE);
+  } else {
+    ReadOnlyMmio mux(kFullStreamMuxBaseAddress, kFullStreamMuxWindowLength);
+    for (uint32_t offset = 0; offset < kFullStreamMuxWindowLength; offset += 4)
+      observe(mux, static_cast<uint32_t>(kFullStreamMuxBaseAddress) + offset);
+  }
+  return values;
+}
+
 }  // namespace
 
 std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     GatewareMode mode,
-    std::shared_ptr<Mmio32> full_stream_mmio) {
+    std::shared_ptr<Mmio32> full_stream_mmio,
+    std::optional<GatewareIdentity> admitted_identity) {
   using daphne::MessageTypeV2;
 
   if (mode == GatewareMode::kFullStream && !full_stream_mmio) {
@@ -2345,21 +2372,48 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
   std::unordered_map<MessageTypeV2, V2Handler> handlers;
 
   handlers[daphne::MT2_CONFIGURE_FE_REQ] =
-      [mode, full_stream_mmio](const std::string& in, std::string& out, Daphne& d) {
+      [mode, full_stream_mmio, admitted_identity](const std::string& in, std::string& out, Daphne& d) {
     ConfigureRequest req;
     ConfigureResponse resp;
-    if (!req.ParseFromString(in)) {
+    if (d.runtime) d.runtime->begin_configuration();
+    try {
+      if (!req.ParseFromString(in)) throw std::invalid_argument("Bad ConfigureRequest payload");
+      ReadOnlyMmio identity_mmio(kGatewareIdentityMagicAddress, 16);
+      const auto identity = probe_gateware_identity(identity_mmio);
+      try {
+        validate_gateware_identity(identity, mode, admitted_identity ?
+            std::optional<uint32_t>(admitted_identity->build_id) : std::nullopt);
+      } catch (...) {
+        if (d.runtime) d.runtime->invalidate("Gateware admission changed before configuration");
+        throw;
+      }
+      std::string msg;
+      const bool ok = configureDaphne(req, d, mode, full_stream_mmio.get(), msg);
+      if (d.runtime) {
+        std::string digest;
+        if (ok) {
+          const auto after = probe_gateware_identity(identity_mmio);
+          validate_gateware_identity(after, mode, identity.build_id);
+          const ConfigurationProfile profile{after, mode, config_resets_enabled(), auto_align_enabled()};
+          digest = sha256_hex(canonical_configuration_evidence(req, profile, configuration_control_observations(mode)));
+        }
+        d.runtime->finish_configuration(ok, ok ? "Aggregate hardware execution completed; command evidence is not analog readback" : msg,
+                                        digest, ok && is_complete_configuration(req));
+      }
+      resp.set_success(ok);
+      resp.set_message(msg);
+    } catch (const std::exception& e) {
       resp.set_success(false);
-      resp.set_message("Bad ConfigureRequest payload");
-      out = serialize_or_empty(resp);
-      return;
+      resp.set_message(e.what());
+      if (d.runtime && d.runtime->snapshot().configuration_in_progress())
+        d.runtime->finish_configuration(false, e.what());
     }
-
-    std::string msg;
-    const bool ok = configureDaphne(req, d, mode, full_stream_mmio.get(), msg);
-
-    resp.set_success(ok);
-    resp.set_message(msg);
+    if (d.runtime) {
+      const auto state = d.runtime->snapshot();
+      *resp.mutable_execution() = state.last_configuration_result();
+      resp.set_applied_configuration_hash(state.applied_configuration_hash());
+      resp.set_applied_configuration_valid(state.applied_configuration_valid());
+    }
     out = serialize_or_empty(resp);
   };
 
@@ -2426,7 +2480,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     out = serialize_or_empty(resp);
   };
 
-  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode](const std::string& in, std::string& out, Daphne& d) {
+  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode, admitted_identity](const std::string& in, std::string& out, Daphne& d) {
     daphne::ReadSystemStatusRequest req;
     daphne::SystemStatusSnapshot resp;
     add_register_capabilities(resp, mode);
@@ -2437,7 +2491,13 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
         throw std::invalid_argument("Only level=0 without I2C scans, xmutil probes or SFP diagnostics is supported");
       ReadOnlyMmio identity_mmio(kGatewareIdentityMagicAddress, 16);
       const auto identity = probe_gateware_identity(identity_mmio);
-      validate_gateware_identity(identity, mode);
+      try {
+        validate_gateware_identity(identity, mode, admitted_identity ?
+            std::optional<uint32_t>(admitted_identity->build_id) : std::nullopt);
+      } catch (...) {
+        if (d.runtime) d.runtime->invalidate("Observed gateware no longer matches the admitted profile");
+        throw;
+      }
       auto* id = resp.mutable_gateware_identity();
       id->set_magic(identity.magic);
       id->set_abi(identity.abi);
@@ -2463,6 +2523,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       resp.mutable_endpoint()->set_observation_quality(daphne::MEASUREMENT_ERROR);
       resp.mutable_endpoint()->set_message(e.what());
     }
+    if (d.runtime) *resp.mutable_server_state() = d.runtime->snapshot();
     out = serialize_or_empty(resp);
   };
 
@@ -2946,6 +3007,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
 
     std::string msg;
     const bool ok = alignAFE(req, resp, d, msg);
+    if (!ok && d.runtime) d.runtime->invalidate("AFE alignment failed; configuration readiness no longer established");
     resp.set_success(ok);
     resp.set_message(msg);
     out = serialize_or_empty(resp);

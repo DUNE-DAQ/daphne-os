@@ -12,6 +12,13 @@ template<class F> void fails(F function) {
 }
 int main() {
   using namespace daphne_sc;
+  require(invalidates_configuration(daphne::MT2_DO_AFE_RESET_REQ));
+  require(invalidates_configuration(daphne::MT2_WRITE_OFFSET_CH_REQ));
+  require(invalidates_configuration(daphne::MT2_CONFIGURE_CLKS_REQ));
+  require(!invalidates_configuration(daphne::MT2_CONFIGURE_FE_REQ)); // Aggregate has transactional preflight handling.
+  require(!invalidates_configuration(daphne::MT2_READ_AFE_REG_REQ));
+  require(!invalidates_configuration(daphne::MT2_READ_CURRENT_MONITOR_REQ));
+  require(!invalidates_configuration(daphne::MT2_DO_SOFTWARE_TRIGGER_REQ));
   std::atomic<uint64_t> now{1};
   auto clock = [&] { return ObservationTime{now.load(), 100}; };
   RuntimeState state("instance-a", "boot-a", clock);

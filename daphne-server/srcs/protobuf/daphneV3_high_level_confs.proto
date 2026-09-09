@@ -61,7 +61,13 @@ message ConfigureRequest {
   // Present in ZMQ; keep it so both sides can filter FS channels consistently
   repeated uint32 full_stream_channels = 12;
 }
-message ConfigureResponse { bool success = 1; string message = 2; }
+message ConfigureResponse {
+  bool success = 1;
+  string message = 2;
+  ConfigurationResult execution = 3;
+  string applied_configuration_hash = 4;
+  bool applied_configuration_valid = 5;
+}
 
 // ----------------- Scrap -----------------
 
@@ -570,6 +576,7 @@ message ControlEnvelopeV2 {
 
   // Timing (optional, useful when debugging)
   uint64         timestamp_ns  = 20;
+  string         transport_error = 21; // nonempty: no successful typed response; do not parse an empty payload as data
 }
 
 
