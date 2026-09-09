@@ -12,6 +12,8 @@ public:
     SpiDevice(const std::string& devPath, const uint32_t &speedHz, const uint8_t &mode, const uint8_t &bitsPerWord);
 
     ~SpiDevice();
+    SpiDevice(const SpiDevice&) = delete;
+    SpiDevice& operator=(const SpiDevice&) = delete;
 
     std::vector<uint8_t> transfer(const std::vector<uint8_t>& tx);
 

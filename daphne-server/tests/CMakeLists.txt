@@ -1,3 +1,13 @@
+add_executable(ads1261_tests ads1261_tests.cpp)
+target_link_libraries(ads1261_tests PRIVATE daphne_current_adc)
+add_test(NAME ads1261_unit COMMAND ads1261_tests)
+set_tests_properties(ads1261_unit PROPERTIES LABELS unit)
+
+add_executable(board_spi_tests board_spi_tests.cpp)
+target_link_libraries(board_spi_tests PRIVATE daphne_current_adc)
+add_test(NAME board_spi_unit COMMAND board_spi_tests)
+set_tests_properties(board_spi_unit PROPERTIES LABELS unit)
+
 add_executable(board_i2c_tests board_i2c_tests.cpp)
 target_link_libraries(board_i2c_tests PRIVATE daphne_i2c_hw)
 add_test(NAME board_i2c_unit COMMAND board_i2c_tests)

@@ -46,12 +46,19 @@ inputs**, one per AFE:
 | 3 | AIN7 | AIN6 |
 | 4 | AIN9 | AIN8 |
 
-The old handler instead defaults to `(channel+1)` against AIN0 for channels
-0..9. That is not the schematic's five differential pairs. The schematic asks
+The old handler instead defaults to `(channel+1)` against mux code zero
+(**AINCOM**, not AIN0) for channels 0..9. That is not the schematic's five
+differential pairs. TI Table 43 encodes AIN0 as 1, AIN1 as 2, etc. The schematic asks
 for internal reference/clock and conversion-ready checking. Establish installed
 board revision, input polarity and shunt/conditioning scale before publishing
 amperes. Preserve raw signed codes and explicit quality. The absence of
-mezzanines does not imply the onboard ADC is absent.
+mezzanines does not imply the onboard ADC is absent. Sheet 5 adds the second
+selector: two ADG1609s per AFE select one of eight trim-current paths. Shared
+enable/address controls are at `0x94000010/14` in both ABIs. Use break-before-make
+(both disabled while changing address), select exactly one enable, and restore
+the previous safe state after measurement. The ADC's five pairs alone are not
+the workbook's 40 physical channels. No installed current calibration has yet
+been established.
 
 ## SFP wiring
 

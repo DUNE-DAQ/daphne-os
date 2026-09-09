@@ -68,6 +68,15 @@ target_include_directories(daphne_gateware PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/srcs
 )
 
+add_library(daphne_current_adc srcs/ADS1261.cpp srcs/BoardSPI.cpp srcs/SpiDevice.cpp)
+target_include_directories(daphne_current_adc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_link_libraries(daphne_current_adc PUBLIC daphne_gateware Threads::Threads)
+if(BUILD_TESTING)
+  add_executable(current_spi_probe tests/current_spi_probe.cpp)
+  target_link_libraries(current_spi_probe PRIVATE daphne_current_adc)
+  # Explicit diagnostic executable; never registered as an automatic hardware test.
+endif()
+
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
@@ -266,7 +275,6 @@ set(SOURCES
   srcs/FpgaReg.cpp
   srcs/Spi.cpp
   srcs/SpyBuffer.cpp
-  srcs/SpiDevice.cpp
   srcs/DaphneSpiDrivers.cpp
   srcs/Afe.cpp
   srcs/FrontEnd.cpp
@@ -304,6 +312,7 @@ target_include_directories(daphneServer PRIVATE
 )
 target_link_libraries(daphneServer PRIVATE
   daphne_i2c_hw
+  daphne_current_adc
   daphne_gateware
   daphne_proto
   daphne_telemetry_protocol
