@@ -5,6 +5,10 @@ confirms approximately doubled slopes on all 40 channels, with 36/40 meeting
 the same baseline criterion across five points. This page preserves the
 preceding full-configuration and single-point results.
 
+The zero-BIAS workaround described below was required by the server used for
+these runs. The later [aggregate BIAS fix](aggregate-bias-verification.md)
+removes that requirement; its dedicated verifier tests without the workaround.
+
 DAPHNE-015, 2026-09-09 (workstation date; board clock unverified).
 Deployed server: `b631271`; test clients: `9c6e2fa`, then `8da57ac`.
 Self-trigger ABI 2.0, firmware `0x03F17F1B`. This supersedes the earlier
@@ -45,7 +49,7 @@ not another alignment patch or a looser pass criterion.
 ## Configuration and safeguards
 
 - Before each full Configure: explicitly write **BIASCTRL=0 and all five
-  BIAS=0**. Aggregate Configure currently skips `v_bias=0`, so its zero-valued
+  BIAS=0**. The server used here skipped `v_bias=0`, so its zero-valued
   field alone does not clear a previous DAC setting. The explicit writes are
   a test workaround; skip-zero semantics were not changed here.
 - Preserve the existing enable policy. Normal Configure asserts the separate

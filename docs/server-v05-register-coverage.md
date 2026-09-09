@@ -5,6 +5,10 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
+Current DAPHNE-015 server: `53b6566`, including the
+[aggregate zero-BIAS correction](aggregate-bias-verification.md). Prior
+offset-gain measurements below retain their original server provenance.
+
 ## Scope and provenance
 
 The Server Platform tab contains 251 entries, including proposed interfaces
@@ -32,7 +36,8 @@ preserved history. Relevant prior work:
 | --- | --- | --- |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
 | I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Local sweep: x2/x1 slope ratios 1.934–2.062; 36/40 within 164 counts at all five points. Analog calibration unqualified |
-| Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | Full zero-bias configuration tested. Aggregate `v_bias=0` still skips a write; explicit zero commands used. Nonzero-bias operation unqualified |
+| Aggregate per-AFE BIAS | Every present AFE entry applies its BIAS code, including zero; order resolved by AFE ID | Two direct zero-only hardware configurations pass, without low-level workaround. Nonzero/mixed values tested with mocks; analog voltage unqualified |
+| Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | Full zero-bias configuration tested. Nonzero-bias operation unqualified |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
 | I293, bias and rail telemetry | One mutex-protected cache generation, quality, names/units, source and acquisition times | ADS7138 devices unavailable on the test board; real voltage acquisition unqualified |
 | M009, GeneralInfo temperature | Explicit unavailable quality and NaN, not default zero | Bind a specifically identified sensor before publishing temperature |
@@ -96,6 +101,11 @@ analog evidence; full-range DAC calibration and the residual A/B differences
 remain unqualified. See that report for the final offset and zero-bias settings.
 
 ## Protocol compatibility
+
+`53b6566` intentionally changes zero-BIAS semantics without changing the wire
+schema: a present AFE entry with zero/default `v_bias` now sends code zero,
+instead of retaining the previous code. No BIAS command is planned for an
+absent AFE entry. BIASCTRL and generator-enable behavior are unchanged.
 
 Existing field numbers and request IDs are retained. Additive fields carry
 measurement quality, source/acquisition metadata, hardware readback and

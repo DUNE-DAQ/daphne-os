@@ -4,6 +4,9 @@ DAPHNE-015, 2026-09-09 (workstation date). Verifier `877caa7`; unchanged
 server `b631271`, self-trigger ABI 2.0 firmware `0x03F17F1B`.
 Follows the [full-configuration test](offset-gain-full-configuration-verification.md).
 
+Later software follow-up: [aggregate zero-BIAS handling](aggregate-bias-verification.md)
+is now fixed and deployed. This page preserves the earlier sweep's conditions.
+
 ## What it establishes
 
 **Gain selection works on all 40 channels; exact baseline equivalence is not
@@ -94,6 +97,6 @@ and internal checksums, raw captures, summaries, verifier/source and protobuf
 modules. Prior bundles remain intact.
 
 The offset-gain implementation needs no additional patch on this evidence.
-Remaining analog calibration/acceptance is separate. Next software item:
-explicit zero-BIAS handling in aggregate Configure, without changing the
-generator-enable policy or silently breaking omitted-field behavior.
+Remaining analog calibration/acceptance is separate. The subsequent
+[zero-BIAS correction](aggregate-bias-verification.md) is now deployed;
+its report documents the unchanged enable policy and default-zero semantics.
