@@ -118,10 +118,17 @@ add_library(daphne_telemetry_protocol
 )
 target_include_directories(daphne_telemetry_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto daphne_gateware daphne_i2c_hw Threads::Threads)
-add_library(daphne_configuration srcs/server_controller/configuration_plan.cpp)
+add_library(daphne_configuration
+  srcs/server_controller/configuration_plan.cpp
+  srcs/server_controller/runtime_state.cpp
+)
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_configuration PUBLIC daphne_proto)
 if(BUILD_TESTING)
+  add_executable(runtime_state_tests tests/runtime_state_tests.cpp)
+  target_link_libraries(runtime_state_tests PRIVATE daphne_configuration Threads::Threads)
+  add_test(NAME runtime_state_unit COMMAND runtime_state_tests)
+  set_tests_properties(runtime_state_unit PROPERTIES LABELS unit)
   add_executable(service_status_tests tests/service_status_tests.cpp)
   target_link_libraries(service_status_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME service_status_unit COMMAND service_status_tests)

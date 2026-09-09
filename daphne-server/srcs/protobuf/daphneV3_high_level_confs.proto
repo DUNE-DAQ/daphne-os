@@ -328,8 +328,52 @@ message SystemStatusSnapshot {
   repeated RegisterCapability capabilities = 20;
   repeated ServiceStatus services = 21;
   string server_instance_id = 22; // systemd InvocationID, only when MainPID is this process; NOT authentication
+  ServerState server_state = 23;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
+}
+
+// Bookkeeping-only request: no MMIO, I2C, SPI or child-process collection.
+// Served independently of the serialized hardware executor, including while
+// Configure runs. External observers must detect a missing/stale heartbeat.
+message ReadServerStateRequest {}
+enum ConfigurationOutcome {
+  CONFIGURATION_NEVER_ATTEMPTED = 0;
+  CONFIGURATION_RUNNING = 1;
+  CONFIGURATION_SUCCEEDED = 2;
+  CONFIGURATION_REJECTED = 3; // failed before hardware writes
+  CONFIGURATION_FAILED = 4;   // hardware may be partially changed
+}
+message ConfigurationResult {
+  uint64 attempt_sequence = 1;
+  uint64 task_id = 2;
+  uint64 request_msg_id = 3;
+  ConfigurationOutcome outcome = 4;
+  string reason = 5;
+  bool hardware_started = 6;
+  uint64 started_monotonic_ns = 7;
+  uint64 completed_monotonic_ns = 8;
+  uint64 completed_host_unix_ns = 9; // unverified host wall clock
+}
+message ServerState {
+  bool success = 1;
+  string message = 2;
+  uint64 heartbeat_sequence = 3;
+  uint64 heartbeat_monotonic_ns = 4;
+  bool configuration_in_progress = 5;
+  string applied_configuration_hash = 6; // sha256, canonical successful evidence; never a requested hash
+  bool applied_configuration_valid = 7; // known executor invalidations; not analog calibration
+  string invalidation_reason = 8;
+  ConfigurationResult last_configuration_result = 9;
+  string instance_id = 10;
+  string boot_id = 11;
+  bool executor_busy = 12;
+  uint64 executor_task_id = 13;
+  uint64 executor_request_msg_id = 14;
+  uint32 executor_request_type = 15;
+  uint64 observed_monotonic_ns = 16;
+  uint64 observed_host_unix_ns = 17;
+  string configuration_scope = 18;
 }
 
 // Allow-listed systemd observations. Active/exited + success is a successful
@@ -500,6 +544,7 @@ enum MessageTypeV2 {
   MT2_READ_GENERAL_INFO_REQ          = 322; MT2_READ_GENERAL_INFO_RESP          = 323;
   // Preserve the IDs from daphneZMQ marroyav/ps-system-status-protobuf.
   MT2_READ_SYSTEM_STATUS_REQ          = 324; MT2_READ_SYSTEM_STATUS_RESP          = 325;
+  MT2_READ_SERVER_STATE_REQ           = 326; MT2_READ_SERVER_STATE_RESP           = 327;
   
   // HD Mezzanine-specific commands
   MT2_SET_HDMEZZ_BLOCK_ENABLE_REQ   = 400;   MT2_SET_HDMEZZ_BLOCK_ENABLE_RESP = 401;
