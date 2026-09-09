@@ -128,6 +128,32 @@ message GeneralInfo {
   double power_plus2p5v = 7;
   double power_ce       = 8;
   double temperature    = 9;
+  // Fields 1..9 stay wire-compatible; NaN means no valid measurement.
+  // Legacy power_* fields actually contain voltages: prefer named_voltages.
+  BoardVoltageStatus board_voltage_status = 10;
+  MeasurementQuality temperature_quality = 11;
+  string temperature_detail = 12;
+}
+
+enum MeasurementQuality {
+  MEASUREMENT_UNAVAILABLE = 0;
+  MEASUREMENT_GOOD = 1;
+  MEASUREMENT_STALE = 2;
+  MEASUREMENT_ERROR = 3;
+}
+message NamedVoltage {
+  string name = 1;
+  double volts = 2;
+  string source = 3;
+}
+message BoardVoltageStatus {
+  MeasurementQuality quality = 1;
+  string detail = 2;
+  // Acquisition completion on the PS, not an FPGA timestamp or verified UTC.
+  uint64 observed_host_unix_ns = 3;
+  uint64 observed_monotonic_ns = 4;
+  // One cache generation, but ADC channels are acquired sequentially.
+  repeated NamedVoltage named_voltages = 5;
 }
 message InfoResponse {
   StreamInfo           stream_info  = 1;

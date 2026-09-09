@@ -27,6 +27,7 @@
 #include "SpyBuffer.hpp"
 #include "DaphneI2CDrivers.hpp"
 #include "DaphneSpiDrivers.hpp"
+#include "server_controller/board_monitor.hpp"
 
 class Daphne {
 public:
@@ -85,17 +86,7 @@ public:
     std::array<std::atomic<bool>, 5>   HDMezz_5V_alert{false, false, false, false, false};
     std::array<std::atomic<bool>, 5>   HDMezz_3V3_alert{false, false, false, false, false};
 
-    std::atomic<double> _1V8A_voltage;
-    std::atomic<double> _3V3A_voltage;
-    std::atomic<double> _n5VA_voltage;
-
-    std::atomic<double> _3V3PDS_voltage;
-    std::atomic<double> _1V8PDS_voltage;
-    std::atomic<double> _VBIAS_0_voltage;
-    std::atomic<double> _VBIAS_1_voltage;
-    std::atomic<double> _VBIAS_2_voltage;
-    std::atomic<double> _VBIAS_3_voltage;
-    std::atomic<double> _VBIAS_4_voltage;
+    daphne_sc::BoardMonitor board_monitor;
 
 private:
     std::unique_ptr<Afe> afe;

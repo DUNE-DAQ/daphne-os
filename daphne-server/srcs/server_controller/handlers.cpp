@@ -34,6 +34,7 @@
 #include "reg.hpp"
 #include "server_controller/gateware.hpp"
 #include "server_controller/register_reads.hpp"
+#include "server_controller/telemetry_protocol.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -2144,12 +2145,10 @@ bool readBiasVoltageMonitor(const cmd_readBiasVoltageMonitor& request,
                             Daphne& daphne,
                             std::string& response_msg) {
   const uint32_t afe_block = request.afeblock();
+  const auto sample = daphne.board_monitor.snapshot();
   const std::array<double, 5> biases = {
-      daphne._VBIAS_0_voltage.load(),
-      daphne._VBIAS_1_voltage.load(),
-      daphne._VBIAS_2_voltage.load(),
-      daphne._VBIAS_3_voltage.load(),
-      daphne._VBIAS_4_voltage.load(),
+      sample.valid_voltage(2), sample.valid_voltage(3), sample.valid_voltage(4),
+      sample.valid_voltage(5), sample.valid_voltage(6),
   };
 
   if (afe_block >= biases.size()) {
@@ -2159,15 +2158,20 @@ bool readBiasVoltageMonitor(const cmd_readBiasVoltageMonitor& request,
 
   const double bias_volts = biases[afe_block];
   response.set_afeblock(afe_block);
+  if (!std::isfinite(bias_volts) || bias_volts < 0 ||
+      bias_volts * 1000.0 > std::numeric_limits<uint32_t>::max()) {
+    response_msg = "Bias voltage unavailable: " + sample.detail;
+    return false;
+  }
   response.set_biasvoltagevalue(static_cast<uint32_t>(std::lround(bias_volts * 1000.0)));
 
   std::ostringstream oss;
   oss << std::fixed << std::setprecision(5);
-  oss << "3V3PDS:" << daphne._3V3PDS_voltage.load() << " V, "
-      << "1V8PDS:" << daphne._1V8PDS_voltage.load() << " V. "
-      << "3V3A:" << daphne._3V3A_voltage.load() << " V, "
-      << "1V8A:" << daphne._1V8A_voltage.load() << " V, "
-      << "-5VA:" << daphne._n5VA_voltage.load() << " V. "
+  oss << "3V3PDS:" << sample.valid_voltage(0) << " V, "
+      << "1V8PDS:" << sample.valid_voltage(1) << " V. "
+      << "3V3A:" << sample.valid_voltage(8) << " V, "
+      << "1V8A:" << sample.valid_voltage(7) << " V, "
+      << "-5VA:" << sample.valid_voltage(9) << " V. "
       << "BIAS0:" << biases[0] << " V, "
       << "BIAS1:" << biases[1] << " V, "
       << "BIAS2:" << biases[2] << " V, "
@@ -2462,21 +2466,14 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
   handlers[daphne::MT2_READ_GENERAL_INFO_REQ] = [](const std::string& in, std::string& out, Daphne& d) {
     InfoRequest req;
     if (!req.ParseFromString(in)) {
-      GeneralInfo resp;
-      out = serialize_or_empty(resp);
+      BoardMonitorSnapshot invalid;
+      invalid.quality = MonitorQuality::kError;
+      invalid.detail = "Bad InfoRequest payload";
+      out = serialize_or_empty(make_general_info(invalid));
       return;
     }
 
-    GeneralInfo resp;
-    resp.set_v_bias_0(d._VBIAS_0_voltage.load());
-    resp.set_v_bias_1(d._VBIAS_1_voltage.load());
-    resp.set_v_bias_2(d._VBIAS_2_voltage.load());
-    resp.set_v_bias_3(d._VBIAS_3_voltage.load());
-    resp.set_v_bias_4(d._VBIAS_4_voltage.load());
-    resp.set_power_minus5v(d._n5VA_voltage.load());
-    resp.set_power_plus2p5v(d._3V3PDS_voltage.load());
-    resp.set_power_ce(d._1V8A_voltage.load());
-    out = serialize_or_empty(resp);
+    out = serialize_or_empty(make_general_info(d.board_monitor.snapshot()));
   };
 
   handlers[daphne::MT2_READ_BIAS_VOLTAGE_MONITOR_REQ] = [](const std::string& in, std::string& out, Daphne& d) {

@@ -30,6 +30,7 @@ endif()
 option(DAPHNE_BUILD_PY_PROTO "Generate python *_pb2.py into build tree" ON)
 option(DAPHNE_BUNDLE_ZEROMQ "Build bundled libzmq from third_party" OFF)
 option(DAPHNE_BUILD_SERVER "Build the full ZMQ server" ON)
+option(DAPHNE_BUILD_PROTOCOL_TESTS "Build hardware-free protobuf tests (also on x86)" OFF)
 option(DAPHNE_ENABLE_HARDWARE_TESTS "Enable tests that access real DAPHNE hardware" OFF)
 set(DAPHNE_DEPS_TARBALL_DIR "" CACHE PATH "Directory containing the pinned dependency tarball (see deps/deps.lock.cmake)")
 include(CTest)
@@ -80,8 +81,10 @@ if(OpenMP_CXX_FOUND)
 else()
   message(STATUS "OpenMP not found; continuing without it")
 endif()
+endif()
 
 # ---------------- Protobuf --------------
+if(DAPHNE_BUILD_SERVER OR DAPHNE_BUILD_PROTOCOL_TESTS)
 find_package(Protobuf REQUIRED)
 message(STATUS "Using protoc: ${Protobuf_PROTOC_EXECUTABLE}")
 include_directories(${Protobuf_INCLUDE_DIRS})
@@ -103,6 +106,16 @@ target_include_directories(daphne_proto PUBLIC
   ${PROTO_DIR}
 )
 target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
+
+add_library(daphne_telemetry_protocol srcs/server_controller/telemetry_protocol.cpp)
+target_include_directories(daphne_telemetry_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto Threads::Threads)
+if(BUILD_TESTING)
+  add_executable(board_monitor_tests tests/board_monitor_tests.cpp)
+  target_link_libraries(board_monitor_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME board_monitor_unit COMMAND board_monitor_tests)
+  set_tests_properties(board_monitor_unit PROPERTIES LABELS unit)
+endif()
 
 if(DAPHNE_BUILD_PY_PROTO)
   # Also regenerate Python stubs in the build tree so clients can import the
@@ -126,8 +139,10 @@ if(DAPHNE_BUILD_PY_PROTO)
     ${PY_PROTO_OUT}/daphneV3_low_level_confs_pb2.py
   )
 endif()
+endif()
 
 # ---------------- cppzmq / libzmq -------
+if(DAPHNE_BUILD_SERVER)
 find_package(cppzmq CONFIG QUIET)
 if(cppzmq_FOUND)
   message(STATUS "cppzmq package found")
@@ -239,6 +254,7 @@ target_link_libraries(daphneServer PRIVATE
   daphne_i2c_hw
   daphne_gateware
   daphne_proto
+  daphne_telemetry_protocol
   cppzmq
   ${DAPHNE_ZMQ_TARGET}
   CLI11::CLI11

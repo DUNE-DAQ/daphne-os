@@ -79,6 +79,7 @@ void i2c_1_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
         auto* adc0x10 = daphne.getADS7138_Driver_addr_0x10();
         auto* adc0x17 = daphne.getADS7138_Driver_addr_0x17();
         if (!adc0x10 || !adc0x17) {
+          daphne.board_monitor.invalidate("Required ADS7138 drivers are unavailable");
           if (!warned_missing_adc) {
             std::cerr << "ADS7138 drivers not available; skipping I2C_1 monitor." << std::endl;
             warned_missing_adc = true;
@@ -92,24 +93,12 @@ void i2c_1_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
         std::vector<double> adc_values_0x17 = adc0x17->readData(3);
         daphne.is_vbias_voltage_monitor_reading.store(false);
 
-        if (adc_values_0x10.size() >= 7) {
-          daphne._3V3PDS_voltage.store(adc_values_0x10[0] * 2.0);
-          daphne._1V8PDS_voltage.store(adc_values_0x10[1] * 2.0);
-          daphne._VBIAS_0_voltage.store(adc_values_0x10[2] * 39.314);
-          daphne._VBIAS_1_voltage.store(adc_values_0x10[3] * 39.314);
-          daphne._VBIAS_2_voltage.store(adc_values_0x10[4] * 39.314);
-          daphne._VBIAS_3_voltage.store(adc_values_0x10[5] * 39.314);
-          daphne._VBIAS_4_voltage.store(adc_values_0x10[6] * 39.314);
-        }
-
-        if (adc_values_0x17.size() >= 3) {
-          daphne._1V8A_voltage.store(adc_values_0x17[0] * 2.0);
-          daphne._3V3A_voltage.store(adc_values_0x17[1] * 2.0);
-          daphne._n5VA_voltage.store(adc_values_0x17[2] * (-2.0));
-        }
+        daphne.board_monitor.publish(adc_values_0x10, adc_values_0x17,
+                                     host_unix_time_ns(), monotonic_time_ns());
       }
     } catch (const std::exception& e) {
       daphne.is_vbias_voltage_monitor_reading.store(false);
+      daphne.board_monitor.invalidate(e.what());
       std::cerr << "I2C_1 monitor error: " << e.what() << std::endl;
     }
 
@@ -127,4 +116,3 @@ std::vector<std::thread> start_monitoring(Daphne& daphne, const MonitoringOption
 }
 
 }  // namespace daphne_sc
-
