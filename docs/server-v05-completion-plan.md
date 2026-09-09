@@ -11,7 +11,7 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 | Onboard regulators | Schematic-backed PL bus binding and read-only telemetry; do not introduce regulator configuration writes | Pending |
 | Server bookkeeping | Independent heartbeat; observable configuration-in-progress; successful canonical applied-config hash, validity/invalidation, correlated last result; restart and failure tests | Implemented, native/ARM and live configuration tests passed; see bookkeeping qualification |
 | Database identity | Authoritative crate/slot/detector, management IP, timing address and per-Hermes MAC/IP; typed provenance/revision and unavailable handling; distinguish assigned from observed, never change network identity implicitly | Candidate DAPHNE-15 OKS placement/Hermes records located on ONL; timing assignment and source confirmation still needed |
-| Temperature alarms | Configurable high initial thresholds, Good/Warning/High/Critical/Missing/Invalid distinction, boundary/stale tests; observation only, no new shutdown policy | Pending |
+| Temperature alarms | Configurable high initial thresholds, Good/Warning/High/Critical/Missing/Invalid/Stale distinction, boundary/stale tests; observation only, no new shutdown policy | Implemented; 14 native/ARM suites and live normal-temperature/all-channel checks passed. High/fault cases synthetic, not physical trips |
 | SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Pending |
 | FPGA health | Actual loaded/admitted FPGA identity, configuration state, clocks/reset/timing, transport/link observations and clear degraded/unknown reasons; no service-active shortcut | Pending |
 | Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Pending |
@@ -34,3 +34,10 @@ Evidence found so far:
   placement records plus a Hermes network-interface assignment. No timing
   endpoint assignment was found there yet. Separate VST JSON files inspected
   identify board 61, not 15; do not apply their settings to DAPHNE-015.
+- [ADC and SFP schematic details](server-remaining-hardware-evidence.md): U6
+  has five differential DA/DB pairs, not the legacy default ten single-ended
+  selections. All six SFP I2C routes are drawn; the installed-board wiring caveat
+  still needs qualification. No current/SFP hardware reads were enabled yet.
+- [Temperature alarm qualification](temperature-alarm-verification.md):
+  provisional 85/95/105 C monitoring thresholds, configurable at startup and
+  returned with each evaluation. No automatic protection action was added.

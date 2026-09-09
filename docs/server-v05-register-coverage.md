@@ -5,7 +5,9 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `56b390f`, including
+Current DAPHNE-015 server: `4558bbf`, including
+[responsive bookkeeping](server-bookkeeping-verification.md),
+[observation-only temperature alarms](temperature-alarm-verification.md),
 [schematic-backed voltage/carrier telemetry and services](carrier-telemetry-and-services-verification.md),
 [named AMS temperatures and the voltage scan-count fix](telemetry-ams-verification.md)
 and the [aggregate zero-BIAS correction](aggregate-bias-verification.md). Prior
@@ -42,9 +44,11 @@ preserved history. Relevant prior work:
 | Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | Full zero-bias configuration tested. Nonzero-bias operation unqualified |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
 | I293, bias and rail telemetry | One complete scan per ADC; coherent cache, quality, names/units and times; schematic-backed PS I2C1 binding | Real acquisition/freshness tested; five supply rails near nominal. Bias residuals and external calibration remain unqualified |
-| I200–I202, named temperatures | Three AMS die sensors plus identified carrier U9 MCP9808; Celsius, quality and host observation times | Four readings deployed and tested. Not thermal-alarm thresholds, all possible sensors or ADC conversion timestamps |
+| I200–I202, named temperatures | Three AMS die sensors plus identified carrier U9 MCP9808; Celsius, quality and host observation times | Four readings deployed and tested. Not all possible sensors or ADC conversion timestamps |
+| Temperature-alarm follow-up | Active startup thresholds and Good/Warning/High/Critical/Missing/Invalid/Stale evaluation on each temperature | Deployed with provisional 85/95/105 C thresholds; boundary/fault tests synthetic. Monitoring only, not protection or safe ratings |
 | M009, GeneralInfo temperature | Bound to identified carrier U9; additive source/time metadata; failures NaN with quality | Real carrier readout tested; not calibrated ambient temperature |
 | Service observations / proposed SV017 instance | Eight allow-listed systemd unit observations, available PID/restart/exit data; same-PID invocation ID and uptime | Deployed; service state is not hardware readiness, heartbeat or authentication. Configured app name is not live xmutil inventory |
+| SV016–SV021, server bookkeeping | Responsive request 326, heartbeat/process/boot identity, in-progress execution, canonical successful configuration hash/validity and correlated last result | Deployed and observed during full Configure. Known local invalidations only; no claim to detect all external resets or prove analog readback |
 | I264, timing usable | Endpoint source + both MMCM locks + FSM 8 + timestamp-valid + no reset requests | Sampled observation only; not a continuous lock guarantee |
 | I273/TI001, live timestamp | Explicit unsupported capability; never interpret spy-capture words as a live timestamp | Requires a firmware-supported coherent export |
 | I058/I059/I061, legacy identity offsets | Explicit unsupported crate/slot/detector readback; expose common ABI identity instead | Do not read self-trigger controls under old identity names |
