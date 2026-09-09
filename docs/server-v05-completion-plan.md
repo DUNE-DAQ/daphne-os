@@ -9,8 +9,8 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 | --- | --- | --- |
 | ADS1261 current readout | Reuse/reconcile legacy current handler; stable controller ownership, schematic mux mapping, device/status/timeout checks, signed/scaled values and quality; mocks and board readings | Investigating |
 | Onboard regulators | Schematic-backed PL bus binding and read-only telemetry; do not introduce regulator configuration writes | Pending |
-| Server bookkeeping | Independent heartbeat; observable configuration-in-progress; successful canonical applied-config hash, validity/invalidation, correlated last result; restart and failure tests | Implementing |
-| Database identity | Authoritative crate/slot/detector, management IP, timing address and per-Hermes MAC/IP; typed provenance/revision and unavailable handling; distinguish assigned from observed, never change network identity implicitly | Authoritative placement/Hermes record requested |
+| Server bookkeeping | Independent heartbeat; observable configuration-in-progress; successful canonical applied-config hash, validity/invalidation, correlated last result; restart and failure tests | Implemented, native/ARM and live configuration tests passed; see bookkeeping qualification |
+| Database identity | Authoritative crate/slot/detector, management IP, timing address and per-Hermes MAC/IP; typed provenance/revision and unavailable handling; distinguish assigned from observed, never change network identity implicitly | Candidate DAPHNE-15 OKS placement/Hermes records located on ONL; timing assignment and source confirmation still needed |
 | Temperature alarms | Configurable high initial thresholds, Good/Warning/High/Critical/Missing/Invalid distinction, boundary/stale tests; observation only, no new shutdown policy | Pending |
 | SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Pending |
 | FPGA health | Actual loaded/admitted FPGA identity, configuration state, clocks/reset/timing, transport/link observations and clear degraded/unknown reasons; no service-active shortcut | Pending |
@@ -27,7 +27,10 @@ Evidence found so far:
 - The companion `hardware-database` board-config v1 schema contains management
   network and timing assignments, but no crate/slot/detector or Hermes-link fields.
   No example or observed seed is accepted as an approved DAPHNE-015 assignment.
-- The existing router executes hardware requests synchronously. Merely adding
-  a configuration-in-progress field would not make it observable during a long
-  Configure. Keep hardware execution serialized while providing a responsive
-  bookkeeping-only request on the existing endpoint.
+- The router now provides a responsive bookkeeping-only request while a single
+  worker serializes hardware execution. See
+  [implementation and live qualification](server-bookkeeping-verification.md).
+- ONL's `ehn1-vst-daphne15` OKS configuration contains matching board and stream
+  placement records plus a Hermes network-interface assignment. No timing
+  endpoint assignment was found there yet. Separate VST JSON files inspected
+  identify board 61, not 15; do not apply their settings to DAPHNE-015.
