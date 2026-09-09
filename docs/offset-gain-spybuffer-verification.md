@@ -1,5 +1,11 @@
 # Offset DAC gain: spybuffer verification
 
+**Historical, superseded:** this run lacked the full FE configuration. Its
+near-zero baseline response and AFE0 exclusion do not describe normal configured
+operation. See the [full-configuration follow-up](offset-gain-full-configuration-verification.md)
+for the deployed fix, successful alignment of all five AFEs and remaining
+analog differences. Statements below describe only the earlier run.
+
 DAPHNE-015, 2026-09-09 (workstation date; board wall clock is unverified).
 Client/test commit `2f7fa3e`; running server `c267a6c`; self-trigger ABI 2.0,
 firmware build `0x03F17F1B`. No server update or firmware reload was required.

@@ -31,8 +31,8 @@ preserved history. Relevant prior work:
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
-| I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Analog equivalence verified through the low-level path on 32 channels; aggregate fix not deployed; AFE0 excluded |
-| Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | No valid aggregate HV/configuration campaign performed |
+| I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Final initialized A/B/A comparison: 37/40 within 164 counts; maximum 236. Not a full-range calibration |
+| Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | Full zero-bias configuration tested. Aggregate `v_bias=0` still skips a write; explicit zero commands used. Nonzero-bias operation unqualified |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
 | I293, bias and rail telemetry | One mutex-protected cache generation, quality, names/units, source and acquisition times | ADS7138 devices unavailable on the test board; real voltage acquisition unqualified |
 | M009, GeneralInfo temperature | Explicit unavailable quality and NaN, not default zero | Bind a specifically identified sensor before publishing temperature |
@@ -70,10 +70,13 @@ protobuf round trips and 32,768 x1/x2 encoder comparisons. The complete ARM64
 server builds with runtime path `/usr/lib/daphne-server`; the Python counter
 failure test passes. Candidate SHA-256:
 `ad15adf71cb02e62a83911f946f3ae2f95d98ae41ebd14f49733c3c4d5cee1c5`.
-This aggregate-handler follow-up has not been installed. Subsequent
-[spybuffer verification](offset-gain-spybuffer-verification.md) using the
-existing server's low-level offset command confirmed 2200/x1 ≈ 1100/x2 on
-32 channels, within 2 ADC counts. AFE0 failed alignment and is excluded.
+This aggregate-handler follow-up is now installed. The
+[full-configuration verification](offset-gain-full-configuration-verification.md)
+exercised Configure on all 40 channels with BIAS/BIASCTRL=0. All five AFEs align
+after full initialization; no alignment patch was needed. The final offset-only
+A/B/A comparison passes the 164-count criterion on 37/40 channels, with a
+maximum difference of 236 counts and repeat drift no larger than 5.5 counts.
+The earlier 32-channel result lacked the full FE setup and is superseded.
 The previous deployment and its qualification below remain separate.
 
 Use the updated `verify_server_v05.py`: its invalid-gain probe now uses **3**.
@@ -82,8 +85,8 @@ is now valid, and a valid aggregate Configure request can enable HV.
 
 The DAC's final SDO is not connected, so a cached code or FPGA command register
 cannot prove analog gain. The subsequent waveform comparison provides bounded
-analog evidence; aggregate Configure end-to-end, AFE0 and full-range DAC
-calibration remain unqualified. See that report for the final offset settings.
+analog evidence; full-range DAC calibration and the residual A/B differences
+remain unqualified. See that report for the final offset and zero-bias settings.
 
 ## Protocol compatibility
 
