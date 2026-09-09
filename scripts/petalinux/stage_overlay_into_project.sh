@@ -100,6 +100,10 @@ PROJECT_DIR="$(unset CDPATH; cd -- "$PROJECT_ARG" && pwd)"
 SELF_OUTPUT="$(unset CDPATH; cd -- "$SELF_OUTPUT" && pwd)"
 FULL_OUTPUT="$(unset CDPATH; cd -- "$FULL_OUTPUT" && pwd)"
 META_LAYER_DIR="$PROJECT_DIR/project-spec/meta-daphne"
+if [[ -L "$META_LAYER_DIR" ]]; then
+  echo "ERROR: shared layer symlink; run bootstrap_kr260_project.sh to create a project-owned copy before staging." >&2
+  exit 2
+fi
 STAGED_DIR="$META_LAYER_DIR/recipes-firmware/daphne-overlay/files/staged"
 VERSION_INC="$META_LAYER_DIR/recipes-firmware/daphne-overlay/daphne-overlay-version.inc"
 SELF_PROFILE="$META_LAYER_DIR/recipes-core/daphne-services/files/daphne-gateware-self-trigger.conf"

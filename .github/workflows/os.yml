@@ -34,7 +34,7 @@ jobs:
           python3 scripts/check_documentation.py
           sh -n petalinux/meta-daphne/recipes-core/daphne-services/files/daphne-fw-stop.sh
           python3 -m py_compile petalinux/meta-daphne/recipes-core/daphne-services/files/daphne-gateware
-          bash -n scripts/server/build_native.sh scripts/security/scan.sh
+          bash -n scripts/server/build_native.sh scripts/security/scan.sh scripts/petalinux/*.sh scripts/deploy/daphne_deploy.sh
 
   native-server:
     # The preserved server uses ARM NEON; compile it natively on AArch64.

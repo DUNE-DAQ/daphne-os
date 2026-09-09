@@ -199,7 +199,7 @@ need_cmd() {
 
 need_cmd ssh
 if (( ! verify_only )); then
-  need_cmd sha256sum
+  need_cmd python3
   need_cmd stat
 fi
 if (( ! verify_only && ! dry_run )); then
@@ -260,20 +260,9 @@ if (( ! verify_only )); then
   kernel_img="$bundle_dir_abs/boot/Image"
   dtb_img="$bundle_dir_abs/boot/system.dtb"
   ramdisk_img="$bundle_dir_abs/boot/ramdisk.cpio.gz.u-boot"
-  for path in "$rootfs_img" "$kernel_img" "$dtb_img" "$ramdisk_img"; do
-    if [[ ! -f "$path" ]]; then
-      echo "ERROR: missing bundle artifact: $path" >&2
-      exit 2
-    fi
-  done
-  if [[ ! -f "$bundle_dir_abs/SHA256SUMS" ]]; then
-    echo "ERROR: bundle has no SHA256SUMS: $bundle_dir_abs" >&2
-    exit 2
-  fi
-  if ! (cd "$bundle_dir_abs" && sha256sum --quiet -c SHA256SUMS); then
-    echo "ERROR: bundle checksum verification failed" >&2
-    exit 2
-  fi
+  # Kept beside the deployer, including in a campaign's immutable snapshot.
+  deploy_tool_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+  python3 -B "$deploy_tool_dir/daphne_bundle.py" "$bundle_dir_abs"
   rootfs_bytes="$(stat -c '%s' "$rootfs_img")"
 
   if [[ -z "$board_config_dir" ]]; then

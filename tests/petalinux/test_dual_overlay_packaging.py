@@ -184,6 +184,20 @@ class DualOverlayPackagingTests(unittest.TestCase):
         self.assertEqual(self.self_profile.read_text(), self.original_self_profile)
         self.assertEqual(self.full_profile.read_text(), self.original_full_profile)
 
+    def test_shared_layer_symlink_is_rejected_without_modifying_source(self) -> None:
+        output = self.base / "output"
+        output.mkdir()
+        self.make_bundle(output, "self-trigger", "abcdef1", layout="amba")
+        self.make_bundle(output, "full-stream", "1234abc", layout="fragment")
+        layer = self.project / "project-spec/meta-daphne"
+        source = self.base / "shared-layer"
+        layer.rename(source)
+        layer.symlink_to(source, target_is_directory=True)
+        result = self.run_stage(output, output)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("shared layer symlink", result.stderr)
+        self.assert_prior_state_preserved()
+
     def test_stages_two_exact_apps_and_local_manifests(self) -> None:
         self_output = self.base / "self-output"
         full_output = self.base / "full-output"

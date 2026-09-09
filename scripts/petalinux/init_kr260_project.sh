@@ -27,7 +27,7 @@ Options:
   --runtime-bundle TGZ   Stage this qualified DAPHNE runtime bundle
   --skip-stage-overlay   Do not stage overlay artifacts
   --skip-stage-runtime   Do not stage the runtime bundle
-  --copy-layer           Copy meta-daphne into the project instead of symlinking
+  --copy-layer           Compatibility flag; layers are always project-owned
   -h, --help             Show this help
 
 Environment:
@@ -59,7 +59,7 @@ FULL_STREAM_SHA=""
 RUNTIME_BUNDLE=""
 STAGE_OVERLAY=1
 STAGE_RUNTIME=1
-LAYER_MODE="symlink"
+LAYER_MODE="copy"
 IMAGE_PROFILE="minimal"
 
 while [[ $# -gt 0 ]]; do

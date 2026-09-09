@@ -11,7 +11,7 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import shlex
 import shutil
@@ -20,6 +20,14 @@ import subprocess
 import sys
 import time
 
+from daphne_bundle import (
+    BundleError as CampaignError,
+    REQUIRED_BUNDLE_PATHS,
+    resolve_directory,
+    sha256_file,
+    utc_now,
+    verify_bundle,
+)
 
 REQUIRED_COLUMNS = {"board", "host", "board_config", "host_key_sha256"}
 OPTIONAL_COLUMNS = {"user", "control_host"}
@@ -35,13 +43,6 @@ MAC_RE = re.compile(r"^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$")
 FORBIDDEN_MAC_SETTER_RE = re.compile(
     r"^[ \t]*(?:MACAddress|ethaddr|eth1addr)[ \t]*=", re.MULTILINE
 )
-CHECKSUM_RE = re.compile(r"^([0-9a-fA-F]{64}) ([ *])(.+)$")
-REQUIRED_BUNDLE_PATHS = {
-    "boot/Image",
-    "boot/system.dtb",
-    "boot/ramdisk.cpio.gz.u-boot",
-    "rootfs/rootfs.ext4",
-}
 REQUIRED_BOARD_CONFIG_FILES = {
     "manifest.env",
     "hostname",
@@ -49,10 +50,6 @@ REQUIRED_BOARD_CONFIG_FILES = {
     "20-daphne-mgmt.network",
     "21-daphne-unused.network",
 }
-
-
-class CampaignError(ValueError):
-    pass
 
 
 class CampaignSignal(Exception):
@@ -74,33 +71,6 @@ class BoardTarget:
     firmware_release: str
     board_config_sha256: dict[str, str]
     board_config_files: dict[str, bytes]
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def resolve_directory(value: str, base: Path, label: str) -> Path:
-    try:
-        path = Path(value).expanduser()
-        if not path.is_absolute():
-            path = base / path
-        path = path.resolve(strict=True)
-    except (OSError, ValueError, RuntimeError) as exc:
-        raise CampaignError(f"{label} does not exist: {value}") from exc
-    if not path.is_dir():
-        raise CampaignError(f"{label} is not a directory: {value}")
-    return path
 
 
 def manifest_value(text: str, label: Path, key: str) -> str:
@@ -318,70 +288,6 @@ def load_campaign(path: Path) -> tuple[list[BoardTarget], str, bytes]:
     return targets, hashlib.sha256(csv_bytes).hexdigest(), csv_bytes
 
 
-def normalize_manifest_path(raw_name: str, bundle: Path, line_number: int) -> tuple[str, Path]:
-    relative = PurePosixPath(raw_name)
-    if relative.is_absolute() or ".." in relative.parts or "\\" in raw_name:
-        raise CampaignError(
-            f"unsafe path in {bundle / 'SHA256SUMS'} line {line_number}: {raw_name!r}"
-        )
-    normalized = str(relative)
-    if normalized in {"", "."}:
-        raise CampaignError(
-            f"empty path in {bundle / 'SHA256SUMS'} line {line_number}"
-        )
-    candidate = bundle.joinpath(*relative.parts)
-    if candidate.is_symlink() or not candidate.is_file():
-        raise CampaignError(f"missing regular bundle artifact: {candidate}")
-    try:
-        candidate.resolve(strict=True).relative_to(bundle)
-    except (OSError, ValueError, RuntimeError) as exc:
-        raise CampaignError(f"bundle manifest path escapes bundle: {raw_name}") from exc
-    return normalized, candidate
-
-
-def verify_bundle(bundle_arg: Path) -> tuple[Path, dict[str, object]]:
-    bundle = resolve_directory(str(bundle_arg), Path.cwd(), "release bundle")
-    manifest = bundle / "SHA256SUMS"
-    if manifest.is_symlink() or not manifest.is_file():
-        raise CampaignError(f"release bundle has no SHA256SUMS: {bundle}")
-
-    manifest_bytes = manifest.read_bytes()
-    manifest_text = manifest_bytes.decode("utf-8")
-    verified: dict[str, str] = {}
-    for line_number, line in enumerate(manifest_text.splitlines(), start=1):
-        if not line:
-            continue
-        match = CHECKSUM_RE.fullmatch(line)
-        if not match:
-            raise CampaignError(
-                f"malformed checksum record in {manifest} line {line_number}"
-            )
-        expected, _, raw_name = match.groups()
-        normalized, artifact = normalize_manifest_path(
-            raw_name, bundle, line_number
-        )
-        if normalized in verified:
-            raise CampaignError(f"duplicate bundle checksum path: {normalized}")
-        actual = sha256_file(artifact)
-        if actual != expected.lower():
-            raise CampaignError(f"bundle checksum mismatch: {normalized}")
-        verified[normalized] = actual
-
-    missing = sorted(REQUIRED_BUNDLE_PATHS - set(verified))
-    if missing:
-        raise CampaignError(
-            f"bundle manifest does not cover required artifacts: {', '.join(missing)}"
-        )
-    return bundle, {
-        "manifest": str(manifest),
-        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-        "verified_utc": utc_now(),
-        "verified_entries": len(verified),
-        "required_entries": sorted(REQUIRED_BUNDLE_PATHS),
-        "artifacts_sha256": verified,
-    }
-
-
 def snapshot_file(path: Path, data: bytes, mode: int) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -412,6 +318,9 @@ def snapshot_inputs(
     campaign_sha256 = snapshot_file(campaign_snapshot, campaign_bytes, 0o444)
     deploy_snapshot = root / "daphne_deploy.sh"
     deploy_sha256 = snapshot_file(deploy_snapshot, deploy_bytes, 0o555)
+    validator_source = Path(__file__).with_name("daphne_bundle.py")
+    validator_snapshot = root / validator_source.name
+    validator_sha256 = snapshot_file(validator_snapshot, validator_source.read_bytes(), 0o444)
 
     artifact_hashes = {
         str(name): str(digest)
@@ -458,6 +367,11 @@ def snapshot_inputs(
             "source": str(deploy_source),
             "snapshot": str(deploy_snapshot),
             "sha256": deploy_sha256,
+        },
+        "bundle_validator": {
+            "source": str(validator_source),
+            "snapshot": str(validator_snapshot),
+            "sha256": validator_sha256,
         },
         "bundle": {
             "source": str(bundle_source),
@@ -562,11 +476,13 @@ def verify_launch_inputs(
     bundle_manifest_sha256: str,
     deploy_script: Path,
     deploy_script_sha256: str,
+    validator: dict[str, str],
 ) -> None:
     require_unchanged_file(
         bundle_manifest, bundle_manifest_sha256, "bundle manifest"
     )
     require_unchanged_file(deploy_script, deploy_script_sha256, "deploy script")
+    require_unchanged_file(Path(validator["snapshot"]), validator["sha256"], "bundle validator")
     for name, expected in target.board_config_sha256.items():
         require_unchanged_file(
             board_config / name, expected, f"board_config for {target.board}"
@@ -838,6 +754,7 @@ def main(argv: list[str] | None = None) -> int:
                 bundle_manifest_sha256,
                 deploy_script,
                 deploy_script_sha256,
+                input_snapshot["bundle_validator"],
             )
             command = deploy_command(
                 deploy_script,

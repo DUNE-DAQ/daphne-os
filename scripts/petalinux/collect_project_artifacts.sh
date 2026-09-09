@@ -20,6 +20,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -lt 1 || $# -gt 2 ]]; then
 fi
 
 ROOT_DIR="${DAPHNE_OS_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_DIR="$(CDPATH= cd -- "$1" && pwd)"
 PROJECT_NAME="$(basename "$PROJECT_DIR")"
 BUNDLE_DIR_INPUT="${2:-$ROOT_DIR/petalinux/output/$PROJECT_NAME}"
@@ -55,6 +56,8 @@ need_cmd() {
 
 need_cmd find
 need_cmd sort
+need_cmd python3
+need_cmd sha256sum
 
 if [[ ! -d "$PROJECT_DIR/project-spec" || ! -d "$PROJECT_DIR/build/conf" ]]; then
   echo "ERROR: $PROJECT_DIR does not look like an initialized PetaLinux project." >&2
@@ -197,32 +200,18 @@ EOF
   find . -type f | sort > MANIFEST.txt
 )
 
-checksum_cmd=()
-if command -v sha256sum >/dev/null 2>&1; then
-  checksum_cmd=(sha256sum)
-elif command -v shasum >/dev/null 2>&1; then
-  checksum_cmd=(shasum -a 256)
-else
-  checksum_cmd=()
-fi
+(
+  cd "$BUNDLE_DIR"
+  while IFS= read -r -d '' path; do
+    sha256sum "$path"
+  done < <(find . -type f ! -path ./SHA256SUMS -print0 | sort -z)
+) > "$BUNDLE_DIR/SHA256SUMS"
 
-if (( ${#checksum_cmd[@]} > 0 )); then
-  (
-    cd "$BUNDLE_DIR"
-    while IFS= read -r -d '' path; do
-      "${checksum_cmd[@]}" "$path"
-    done < <(find . -type f ! -path ./SHA256SUMS -print0 | sort -z)
-  ) > "$BUNDLE_DIR/SHA256SUMS"
-fi
-
-if [[ -e "$FINAL_BUNDLE_DIR" ]]; then
-  if [[ ! -f "$FINAL_BUNDLE_DIR/meta/COLLECT-METADATA.txt" ]]; then
-    echo "ERROR: refusing to replace an output directory not created by this collector: $FINAL_BUNDLE_DIR" >&2
-    exit 2
-  fi
-  rm -rf -- "$FINAL_BUNDLE_DIR"
-fi
-mv -- "$BUNDLE_DIR" "$FINAL_BUNDLE_DIR"
+# Complete images and manifest coverage are checked before the last good
+# bundle is touched. The shared publisher restores it if publication fails.
+python3 "$SCRIPT_DIR/../deploy/daphne_bundle.py" "$BUNDLE_DIR" --require-wic
+python3 "$SCRIPT_DIR/project_files.py" publish "$BUNDLE_DIR" "$FINAL_BUNDLE_DIR" \
+  --marker meta/COLLECT-METADATA.txt
 BUNDLE_DIR=""
 trap - EXIT
 

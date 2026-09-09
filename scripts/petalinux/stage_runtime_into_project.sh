@@ -31,6 +31,10 @@ PROJECT_DIR="$(unset CDPATH; cd -- "$1" && pwd)"
 RUNTIME_BUNDLE_INPUT="$2"
 RUNTIME_BUNDLE="$(unset CDPATH; cd -- "$(dirname -- "$RUNTIME_BUNDLE_INPUT")" && pwd)/$(basename -- "$RUNTIME_BUNDLE_INPUT")"
 META_LAYER_DIR="$PROJECT_DIR/project-spec/meta-daphne"
+if [[ -L "$META_LAYER_DIR" ]]; then
+  echo "ERROR: shared layer symlink; run bootstrap_kr260_project.sh to create a project-owned copy before staging." >&2
+  exit 2
+fi
 RECIPE_DIR="$META_LAYER_DIR/recipes-apps/daphne-server"
 STAGED_DIR="$RECIPE_DIR/files/staged"
 CONTRACT_INC="$RECIPE_DIR/daphne-server-contract.inc"

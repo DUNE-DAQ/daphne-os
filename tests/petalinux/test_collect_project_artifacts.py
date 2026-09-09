@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -11,6 +12,56 @@ COLLECT = ROOT / "scripts" / "petalinux" / "collect_project_artifacts.sh"
 
 
 class CollectProjectArtifactsTests(unittest.TestCase):
+    @staticmethod
+    def complete_fixture(root: Path) -> tuple[Path, Path, Path]:
+        project = root / "project"
+        (project / "project-spec").mkdir(parents=True)
+        (project / "build/conf").mkdir(parents=True)
+        (project / "build/conf/local.conf").write_text('DAPHNE_IMAGE_PROFILE = "developer"\n')
+        images = project / "images/linux"
+        images.mkdir(parents=True)
+        for name in ("Image", "system.dtb", "ramdisk.cpio.gz.u-boot", "rootfs.ext4", "rootfs.wic.gz"):
+            (images / name).write_text(f"fixture:{name}\n")
+        return project, images, root / "bundle"
+
+    @staticmethod
+    def snapshot(path: Path) -> dict[str, bytes]:
+        return {str(item.relative_to(path)): item.read_bytes() for item in path.rglob("*") if item.is_file()}
+
+    def test_incomplete_recollection_preserves_previous_bundle(self) -> None:
+        for missing in ("rootfs.ext4", "rootfs.wic.gz", "Image"):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                project, images, bundle = self.complete_fixture(root)
+                result = subprocess.run([str(COLLECT), str(project), str(bundle)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                before = self.snapshot(bundle)
+                (images / missing).rename(root / "saved-artifact")
+                result = subprocess.run([str(COLLECT), str(project), str(bundle)], capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("does not cover required artifacts", result.stderr)
+                self.assertEqual(self.snapshot(bundle), before)
+                self.assertEqual(list(root.glob(".project.tmp.*")), [])
+
+    def test_bad_generated_checksums_preserve_previous_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project, _, bundle = self.complete_fixture(root)
+            subprocess.run([str(COLLECT), str(project), str(bundle)], check=True, capture_output=True)
+            before = self.snapshot(bundle)
+            stubs = root / "stubs"
+            stubs.mkdir()
+            checksum = stubs / "sha256sum"
+            checksum.write_text('#!/bin/sh\nprintf "%064d  %s\\n" 0 "$1"\n')
+            checksum.chmod(0o755)
+            result = subprocess.run(
+                [str(COLLECT), str(project), str(bundle)], capture_output=True, text=True,
+                env={**os.environ, "PATH": f"{stubs}:{os.environ['PATH']}"},
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("bundle checksum mismatch", result.stderr)
+            self.assertEqual(self.snapshot(bundle), before)
+
     def test_collects_xsdb_ram_boot_inputs_wic_and_both_gatewares(self) -> None:
         with tempfile.TemporaryDirectory() as root_text:
             root = Path(root_text)
@@ -50,6 +101,8 @@ class CollectProjectArtifactsTests(unittest.TestCase):
                 "u-boot-dtb.elf",
                 "Image",
                 "system.dtb",
+                "rootfs.ext4",
+                "ramdisk.cpio.gz.u-boot",
                 "rootfs.wic.gz",
             ):
                 (images / name).write_text(f"{name}\n", encoding="utf-8")
@@ -163,6 +216,8 @@ class CollectProjectArtifactsTests(unittest.TestCase):
             images.mkdir(parents=True)
             overlay.mkdir(parents=True)
             (images / "rootfs.wic.gz").write_text("wic\n", encoding="utf-8")
+            for name in ("Image", "system.dtb", "ramdisk.cpio.gz.u-boot", "rootfs.ext4"):
+                (images / name).write_text(f"fixture:{name}\n")
             for mode in ("self-trigger", "full-stream"):
                 (overlay / mode).mkdir()
                 (overlay / mode / "stale.dtbo").write_text(

@@ -65,7 +65,7 @@ class BootstrapKr260ProjectTests(unittest.TestCase):
             )
 
             env = os.environ.copy()
-            env["DAPHNE_META_LAYER_MODE"] = "symlink"
+            env["DAPHNE_META_LAYER_MODE"] = "copy"
             # A hardware-build environment must not redirect the OS layer.
             env["DAPHNE_FIRMWARE_ROOT"] = str(Path(root_text) / "missing-firmware")
             env["DAPHNE_OS_ROOT"] = str(ROOT)
@@ -133,7 +133,7 @@ class BootstrapKr260ProjectTests(unittest.TestCase):
             subprocess.run(
                 [str(BOOTSTRAP), str(project), "--image-profile", "minimal"],
                 check=True,
-                env={**os.environ, "DAPHNE_META_LAYER_MODE": "symlink"},
+                env={**os.environ, "DAPHNE_META_LAYER_MODE": "copy"},
                 text=True,
                 capture_output=True,
             )
@@ -217,16 +217,16 @@ class BootstrapKr260ProjectTests(unittest.TestCase):
             (project / "project-spec" / "configs" / "config").write_text(
                 "", encoding="utf-8"
             )
-            for profile in ("developer", "minimal", "provisioning", "developer"):
+            layer = project / "project-spec/meta-daphne"
+            staged_input = layer / "recipes-apps/daphne-server/files/staged/project-input"
+            env = {**os.environ, "DAPHNE_OS_ROOT": str(ROOT)}
+            env.pop("DAPHNE_META_LAYER_MODE", None)
+            for index, profile in enumerate(("developer", "minimal", "provisioning", "developer")):
                 with self.subTest(profile=profile):
                     subprocess.run(
                         [str(BOOTSTRAP), str(project), "--image-profile", profile],
                         check=True,
-                        env={
-                            **os.environ,
-                            "DAPHNE_OS_ROOT": str(ROOT),
-                            "DAPHNE_META_LAYER_MODE": "copy",
-                        },
+                        env=env,
                         text=True,
                         capture_output=True,
                     )
@@ -241,6 +241,17 @@ class BootstrapKr260ProjectTests(unittest.TestCase):
                         / DEVELOPER_WKS.name
                     )
                     self.assertEqual(template.read_bytes(), DEVELOPER_WKS.read_bytes())
+                    self.assertFalse(layer.is_symlink())
+                    if index == 0:
+                        staged_input.write_text("preserve staged runtime input")
+                    else:
+                        self.assertEqual(staged_input.read_text(), "preserve staged runtime input")
+            result = subprocess.run(
+                [str(BOOTSTRAP), str(project)], capture_output=True, text=True,
+                env={**env, "DAPHNE_META_LAYER_MODE": "symlink"},
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(staged_input.read_text(), "preserve staged runtime input")
 
 
 if __name__ == "__main__":

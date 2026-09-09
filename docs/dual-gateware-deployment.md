@@ -73,8 +73,9 @@ before contacting the first board.
 
 The wrapper is sequential and stops on the first failure. Its default makes no
 board writes. It does create a local evidence directory containing read-only
-snapshots of the exact deployer, board configurations, and required image
-files; relay mode may also create temporary files on the control host.
+snapshots of the exact deployer, its shared bundle validator, board configurations,
+and required image files; relay mode may also create temporary files on the
+control host.
 
 ```bash
 python3 scripts/deploy/daphne_deploy_campaign.py campaign.csv \

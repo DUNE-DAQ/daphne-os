@@ -138,6 +138,17 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
             self.original_version,
         )
 
+    def test_shared_layer_symlink_is_rejected_without_modifying_source(self) -> None:
+        bundle, _ = self.make_bundle()
+        layer = self.project / "project-spec/meta-daphne"
+        source = self.base / "shared-layer"
+        layer.rename(source)
+        layer.symlink_to(source, target_is_directory=True)
+        result = self.run_stage(bundle)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("shared layer symlink", result.stderr)
+        self.assert_prior_state_preserved()
+
     def test_preserves_and_qualifies_metadata_bound_runtime(self) -> None:
         bundle, bundle_sha = self.make_bundle()
         source_metadata = (bundle.parent / "BUILD-METADATA.txt").read_bytes()

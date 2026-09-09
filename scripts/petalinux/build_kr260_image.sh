@@ -25,7 +25,7 @@ Project creation/config options:
   --runtime-bundle TGZ   Qualified DAPHNE runtime bundle for image staging
   --skip-stage-overlay   Do not stage overlay artifacts
   --skip-stage-runtime   Do not stage the runtime bundle
-  --copy-layer           Copy meta-daphne instead of symlinking it
+  --copy-layer           Compatibility flag; layers are always project-owned
 
 Build/package options:
   --bundle-dir DIR       Repo-owned collection directory for resulting images
@@ -131,24 +131,9 @@ if (( COLLECT )); then
   "$ROOT_DIR/scripts/petalinux/collect_project_artifacts.sh" "$PROJECT_DIR" "$BUNDLE_DIR"
 fi
 
-missing=()
-if (( COLLECT )); then
-  for rel in \
-    "boot/Image" \
-    "boot/system.dtb" \
-    "boot/ramdisk.cpio.gz.u-boot" \
-    "rootfs/rootfs.ext4"
-  do
-    if [[ ! -f "$BUNDLE_DIR/$rel" ]]; then
-      missing+=("$rel")
-    fi
-  done
-fi
-
-if (( ${#missing[@]} > 0 )); then
-  printf 'ERROR: build completed but the collected bundle is still missing expected artifacts:\n' >&2
-  printf '  %s\n' "${missing[@]}" >&2
-  exit 3
+if (( ! COLLECT )); then
+  echo "Build complete; artifact collection was skipped."
+  exit 0
 fi
 
 cat <<EOF

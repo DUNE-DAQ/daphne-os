@@ -2,8 +2,7 @@
 
 ## Operators
 
-- [Image profiles and staging](../petalinux/README.md)
-- [PetaLinux build guide](kr260-petalinux-build-guide.md)
+- [PetaLinux profiles, staging and builds](kr260-petalinux-build-guide.md)
 - [Dual-gateware deployment and QSPI environment](dual-gateware-deployment.md)
 - [Board enrollment](daphne-board-enrollment-runbook.md)
 - [SOM identity and production policy](kria-board-identity-and-production-deployment.md)
@@ -12,6 +11,7 @@
 
 ## Developers and maintainers
 
+- [Follow-up work and qualification gates](TODO.md)
 - [On-board server builds and client protobuf generation](server-development.md)
 - [Server register/transport contract](server-contract.md)
 - [Repository ownership and preserved history](repository-split.md)
@@ -22,3 +22,7 @@
 `pl-i2c-binding-blocker.md` is a historical incident record. The imported
 `daphne-server/docs/` tree retains upstream documentation unchanged; use the
 current OS runbooks above for deployment policy.
+
+Earlier QSPI experiments and DAPHNE-015 observations are preserved in
+[historical bring-up notes](history/kr260-bringup-2026-05.md), not current
+installation instructions.

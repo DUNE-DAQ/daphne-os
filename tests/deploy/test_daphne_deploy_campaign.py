@@ -626,6 +626,21 @@ class DaphneDeployCampaignTests(unittest.TestCase):
         self.assertEqual(self.calls(), [])
         self.assertFalse(evidence.exists())
 
+    def test_validator_snapshot_is_captured_and_tampering_stops_next_board(self) -> None:
+        campaign = self.campaign_csv([
+            self.row("BOARD-A", "board-a.example", "A"),
+            self.row("BOARD-B", "board-b.example", "B"),
+        ])
+        evidence = self.base / "validator-tamper"
+        self.env["DAPHNE_TEST_MUTATE_AFTER_BOARD"] = "BOARD-A"
+        self.env["DAPHNE_TEST_MUTATE_PATH"] = str(evidence / "inputs/daphne_bundle.py")
+        result = self.run_campaign(campaign, evidence)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("bundle validator changed after campaign preflight", result.stderr)
+        self.assertEqual([call["board"] for call in self.calls()], ["BOARD-A"])
+        captured = self.summary(evidence)["input_snapshot"]["bundle_validator"]
+        self.assertEqual(captured["sha256"], self.digest(ROOT / "scripts/deploy/daphne_bundle.py"))
+
     def test_interrupt_records_active_board_and_stops_campaign(self) -> None:
         campaign = self.campaign_csv(
             [
