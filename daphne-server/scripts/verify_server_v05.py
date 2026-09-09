@@ -13,12 +13,46 @@ from pathlib import Path
 import sys
 
 
+def check_ams_temperatures(readings, high, require_all=False):
+    """Validate the named-sensor contract without equating die and ambient temperature."""
+    expected = {"Temp_LPD", "Temp_FPD", "Temp_PL"}
+    names = [item.name for item in readings]
+    if len(names) != len(set(names)) or (readings and set(names) != expected):
+        raise RuntimeError("Incorrect AMS temperature identities")
+    if require_all and set(names) != expected:
+        raise RuntimeError("Missing AMS temperatures; update the server")
+    report = []
+    for item in readings:
+        good = item.quality == high.MEASUREMENT_GOOD
+        if item.valid != good or (require_all and not good):
+            raise RuntimeError("Invalid AMS temperature quality: " + item.name)
+        if good:
+            if (not math.isfinite(item.temperature_c) or item.temperature_c < -273.15
+                    or not item.observed_host_unix_ns or not item.observed_monotonic_ns):
+                raise RuntimeError("Invalid AMS value or observation time: " + item.name)
+            if "xilinx-ams" not in item.source or item.name not in item.source or "_input" not in item.source:
+                raise RuntimeError("Missing AMS sensor provenance: " + item.name)
+        elif (not math.isnan(item.temperature_c) or item.observed_host_unix_ns
+              or item.observed_monotonic_ns or item.quality not in
+              (high.MEASUREMENT_UNAVAILABLE, high.MEASUREMENT_ERROR)):
+            raise RuntimeError("Unavailable AMS temperature looks measured: " + item.name)
+        if not item.source or not item.message:
+            raise RuntimeError("Missing AMS source/detail: " + item.name)
+        report.append({"name": item.name, "temperature_c": item.temperature_c if good else None,
+                       "quality": high.MeasurementQuality.Name(item.quality), "source": item.source,
+                       "message": item.message, "observed_host_unix_ns": item.observed_host_unix_ns,
+                       "observed_monotonic_ns": item.observed_monotonic_ns})
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--proto-dir", type=Path, required=True)
     parser.add_argument("--expected-build-id", type=lambda text: int(text, 0), required=True)
     parser.add_argument("--mode", choices=("self-trigger", "full-stream"), required=True)
+    parser.add_argument("--require-ams-temperatures", action="store_true",
+                        help="Require all three named AMS die sensors and advancing host observation times")
     parser.add_argument("--check-rejections", action="store_true",
                         help="Send intentionally invalid configuration requests; no writes expected")
     parser.add_argument("--afe-readback", action="store_true",
@@ -74,6 +108,15 @@ def main():
         capabilities = {item.name: item.supported for item in status.capabilities}
         for name in ("LiveTimingTimestamp", "ProtocolErrorCount", "CommandDecoderMap", "CrateSlotDetectorReadback"):
             require(capabilities.get(name) is False, "Incorrect capability: " + name)
+        temperatures = check_ams_temperatures(status.temperatures, high, args.require_ams_temperatures)
+        if args.require_ams_temperatures:
+            require(capabilities.get("AMSTemperatures") is True, "Missing AMS capability")
+            again = call(high.MT2_READ_SYSTEM_STATUS_REQ, high.ReadSystemStatusRequest(), high.SystemStatusSnapshot)
+            require(again.success, again.message)
+            newer = check_ams_temperatures(again.temperatures, high, True)
+            previous_times = {item["name"]: item["observed_monotonic_ns"] for item in temperatures}
+            require(all(item["observed_monotonic_ns"] > previous_times[item["name"]] for item in newer),
+                    "AMS observation times did not advance")
 
         info = call(high.MT2_READ_GENERAL_INFO_REQ, high.InfoRequest(), high.GeneralInfo)
         require(info.HasField("board_voltage_status"), "Missing telemetry quality metadata")
@@ -104,6 +147,9 @@ def main():
                    timing.endpoint_clock_status_raw, timing.endpoint_control_raw, timing.endpoint_status_raw],
                   "voltage_quality": high.MeasurementQuality.Name(volts.quality),
                   "voltage_detail": volts.detail, "counter_channels": len(counters.snapshots)}
+        report["ams_temperatures"] = temperatures
+        if args.require_ams_temperatures:
+            report["ams_observation_times_advanced"] = True
         if args.check_rejections:
             for request in (high.ReadTriggerCountersRequest(channels=[40]),
                             high.ReadTriggerCountersRequest(base_addr=0x94000000)):
