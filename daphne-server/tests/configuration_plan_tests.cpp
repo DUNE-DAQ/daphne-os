@@ -53,6 +53,10 @@ int main() {
   }
   rejects([] { apply_verified_afe_function({"PGA_GAIN_CONTROL", 1},
                                           [](const std::string&, uint32_t) { return 0; }); });
+  unsigned writes = 0;
+  rejects([&] { apply_verified_afe_function({"PGA_GAIN_CONTROL", 65536},
+                                           [&](const std::string&, uint32_t) { ++writes; return 0; }); });
+  require(writes == 0);
   auto invalid = [&](const auto& modify) {
     auto bad = request;
     modify(bad);

@@ -891,7 +891,11 @@ bool writeAFERegister(const cmd_writeAFEReg& request,
     uint32_t afe_block = afe_definitions::AFE_board2PL_map.at(request.afeblock());
     const uint32_t reg_addr = request.regaddress();
     const uint32_t reg_value = request.regvalue();
-    returned_value = daphne.getAfe()->setRegister(afe_block, reg_addr, reg_value);
+    returned_value = apply_verified_afe_function(
+        {"register " + std::to_string(reg_addr), reg_value},
+        [&](const std::string&, uint32_t value) {
+          return daphne.getAfe()->setRegister(afe_block, reg_addr, value);
+        });
     response_str = "AFE Register " + std::to_string(reg_addr) + " written with value " + std::to_string(reg_value) +
                    " for AFE " + std::to_string(afe_definitions::AFE_PL2board_map.at(afe_block)) +
                    ". Returned value: " + std::to_string(returned_value) + ".";
@@ -2016,10 +2020,14 @@ bool writeAFEFunction(const cmd_writeAFEFunction& request,
     if (afe_block > 4) throw std::invalid_argument("AFE out of range (0..4)");
     const std::string afe_function_name = request.function();
     const uint32_t conf_value = request.configvalue();
-    const uint32_t returned = daphne.getAfe()->setAFEFunction(afe_block, afe_function_name, conf_value);
+    const uint32_t returned = apply_verified_afe_function(
+        {afe_function_name, conf_value},
+        [&](const std::string& function, uint32_t value) {
+          return daphne.getAfe()->setAFEFunction(afe_block, function, value);
+        });
     response.set_function(afe_function_name);
     response.set_configvalue(returned);
-    response.set_afeblock(afe_block);
+    response.set_afeblock(request.afeblock());
     response_str = "Function " + afe_function_name + " configured correctly for AFE " +
                    std::to_string(afe_definitions::AFE_PL2board_map.at(afe_block)) + ". Returned value: " +
                    std::to_string(returned) + ".";

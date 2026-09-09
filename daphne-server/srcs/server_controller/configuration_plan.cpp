@@ -54,6 +54,8 @@ void validate_analog_configuration(const daphne::ConfigureRequest& config) {
 uint32_t apply_verified_afe_function(
     const AfeFunctionWrite& write,
     const std::function<uint32_t(const std::string&, uint32_t)>& set_and_read) {
+  if (write.value > 0xFFFF)
+    throw std::invalid_argument("AFE value out of range (0..65535); refusing implicit narrowing");
   const auto actual = set_and_read(write.function, write.value);
   if (actual != write.value)
     throw std::runtime_error("AFE " + write.function + " readback mismatch: requested " +
