@@ -31,7 +31,7 @@ preserved history. Relevant prior work:
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
-| I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Software-tested and cross-built; this follow-up is not deployed or analog-qualified |
+| I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Analog equivalence verified through the low-level path on 32 channels; aggregate fix not deployed; AFE0 excluded |
 | Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | No valid aggregate HV/configuration campaign performed |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
 | I293, bias and rail telemetry | One mutex-protected cache generation, quality, names/units, source and acquisition times | ADS7138 devices unavailable on the test board; real voltage acquisition unqualified |
@@ -70,18 +70,20 @@ protobuf round trips and 32,768 x1/x2 encoder comparisons. The complete ARM64
 server builds with runtime path `/usr/lib/daphne-server`; the Python counter
 failure test passes. Candidate SHA-256:
 `ad15adf71cb02e62a83911f946f3ae2f95d98ae41ebd14f49733c3c4d5cee1c5`.
-This follow-up has not been installed or tested against the board's analog
-outputs. The previous deployment and its qualification below remain separate.
+This aggregate-handler follow-up has not been installed. Subsequent
+[spybuffer verification](offset-gain-spybuffer-verification.md) using the
+existing server's low-level offset command confirmed 2200/x1 ≈ 1100/x2 on
+32 channels, within 2 ADC counts. AFE0 failed alignment and is excluded.
+The previous deployment and its qualification below remain separate.
 
 Use the updated `verify_server_v05.py`: its invalid-gain probe now uses **3**.
 Do not run the previous script against the corrected server: its gain=1 probe
 is now valid, and a valid aggregate Configure request can enable HV.
 
 The DAC's final SDO is not connected, so a cached code or FPGA command register
-cannot prove analog gain. Remaining qualification needs a known starting
-configuration, an offset-only test with a measured voltage or waveform
-pedestal, and restoration of the known settings. No such writes were made
-for this follow-up.
+cannot prove analog gain. The subsequent waveform comparison provides bounded
+analog evidence; aggregate Configure end-to-end, AFE0 and full-range DAC
+calibration remain unqualified. See that report for the final offset settings.
 
 ## Protocol compatibility
 
