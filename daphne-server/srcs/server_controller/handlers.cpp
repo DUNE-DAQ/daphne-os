@@ -36,6 +36,8 @@
 #include "server_controller/register_reads.hpp"
 #include "server_controller/telemetry_protocol.hpp"
 #include "server_controller/configuration_plan.hpp"
+#include "server_controller/timing_status.hpp"
+#include "server_controller/readonly_mmio.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -2410,6 +2412,38 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     TestRegResponse resp;
     resp.set_value(0xDEADBEEF);
     resp.set_message("ok");
+    out = serialize_or_empty(resp);
+  };
+
+  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode](const std::string& in, std::string& out, Daphne&) {
+    daphne::ReadSystemStatusRequest req;
+    daphne::SystemStatusSnapshot resp;
+    add_register_capabilities(resp, mode);
+    try {
+      if (!req.ParseFromString(in)) throw std::invalid_argument("Bad ReadSystemStatusRequest payload");
+      if (req.level() != 0 || req.include_i2c_scan() || req.include_xmutil() ||
+          req.include_sfp_diagnostics() || req.include_ps_values())
+        throw std::invalid_argument("Only level=0 with all optional probes disabled is supported; no bus scan performed");
+      ReadOnlyMmio identity_mmio(kGatewareIdentityMagicAddress, 16);
+      const auto identity = probe_gateware_identity(identity_mmio);
+      validate_gateware_identity(identity, mode);
+      auto* id = resp.mutable_gateware_identity();
+      id->set_magic(identity.magic);
+      id->set_abi(identity.abi);
+      id->set_variant(identity.variant);
+      id->set_build_id(identity.build_id);
+      ReadOnlyMmio timing_mmio(kTimingRegisterBase, 16);
+      *resp.mutable_endpoint() = read_timing_status(timing_mmio);
+      resp.set_ps_local_unix_ns(resp.endpoint().observed_host_unix_ns());
+      resp.set_success(true);
+      resp.set_message("Gateware identity and timing registers read. Other inventory fields are not collected; "
+                        "consult capabilities. Success does not mean timing is ready");
+    } catch (const std::exception& e) {
+      resp.set_success(false);
+      resp.set_message(e.what());
+      resp.mutable_endpoint()->set_observation_quality(daphne::MEASUREMENT_ERROR);
+      resp.mutable_endpoint()->set_message(e.what());
+    }
     out = serialize_or_empty(resp);
   };
 
