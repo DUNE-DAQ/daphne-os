@@ -28,6 +28,9 @@ message ChannelConfig  { uint32 id=1; uint32 trim=2; uint32 offset=3; uint32 gai
 message AFEConfig {
   uint32   id           = 1;
   uint32   attenuators  = 2;  // ZMQ name preserved
+  // Every present AFE entry applies this DAC code, including 0. An omitted
+  // scalar defaults to 0; it no longer means 'retain previous BIAS'. To omit
+  // an AFE's BIAS command, omit that AFE entry. BIASCTRL/enable are separate.
   uint32   v_bias       = 3;
   ADCConfig adc         = 4;
   PGAConfig pga         = 5;

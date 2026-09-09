@@ -833,13 +833,12 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
           << ". Returned value: " << daphne.getAfeAttenuationDictValue(afe_pl) << ".\n";
 
       const uint32_t bias = afe_config.v_bias();
-      if (bias > 4095) throw std::invalid_argument("BIAS out of range for AFE " + std::to_string(afe_board));
-      if (bias != 0) {
-        daphne.getDac()->setDacBias(afe_pl, bias);
-        daphne.setBiasVoltageDictValue(afe_pl, bias);
-        out << "AFE bias value written successfully for AFE " << afe_board << ". Bias value: " << bias
-            << ". Returned value: " << daphne.getBiasVoltageDictValue(afe_pl) << ".\n";
-      }
+      apply_afe_bias_command(afe_config, [&](uint32_t target_pl, uint32_t code) {
+        daphne.getDac()->setDacBias(target_pl, code);
+        daphne.setBiasVoltageDictValue(target_pl, code);
+      });
+      out << "AFE BIAS command sent for AFE " << afe_board << ". BIAS code: " << bias
+          << ". No DAC hardware readback; code is software-cached.\n";
 
       for (const auto& write : make_afe_function_plan(afe_config)) {
         const uint32_t r = apply_verified_afe_function(

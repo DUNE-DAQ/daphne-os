@@ -80,6 +80,16 @@ void validate_analog_configuration(const daphne::ConfigureRequest& config) {
   }
 }
 
+void apply_afe_bias_command(
+    const daphne::AFEConfig& config,
+    const std::function<void(uint32_t, uint32_t)>& write_bias) {
+  if (config.v_bias() > 4095)
+    throw std::invalid_argument("AFE BIAS out of range (0..4095)");
+  const auto afe_pl = afe_definitions::AFE_board2PL_map.at(config.id());
+  // Zero is a requested DAC code, not an instruction to retain the old code.
+  write_bias(afe_pl, config.v_bias());
+}
+
 uint32_t apply_verified_afe_function(
     const AfeFunctionWrite& write,
     const std::function<uint32_t(const std::string&, uint32_t)>& set_and_read) {

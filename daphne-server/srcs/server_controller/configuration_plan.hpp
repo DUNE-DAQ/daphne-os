@@ -17,6 +17,11 @@ std::vector<AfeFunctionWrite> make_afe_function_plan(const daphne::AFEConfig& co
 // 0 (omitted legacy field) and 1 select x1; 2 selects x2. Reject other values.
 bool offset_gain_bit(uint32_t gain);
 void validate_analog_configuration(const daphne::ConfigureRequest& config);
+// Apply the BIAS code for one present AFE entry, including zero. The callback
+// receives the mapped PL AFE index; completing it is not analog readback.
+void apply_afe_bias_command(
+    const daphne::AFEConfig& config,
+    const std::function<void(uint32_t, uint32_t)>& write_bias);
 uint32_t apply_verified_afe_function(
     const AfeFunctionWrite& write,
     const std::function<uint32_t(const std::string&, uint32_t)>& set_and_read);

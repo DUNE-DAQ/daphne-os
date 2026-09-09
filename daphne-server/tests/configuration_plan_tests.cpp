@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <array>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -19,6 +21,66 @@ void rejects(Function function) {
 
 int main() {
   using namespace daphne_sc;
+  // Five distinct codes, mixed zeros and all zeros, in every input order.
+  // These are mock writes, never nonzero-bias hardware tests.
+  const std::array<uint32_t, 5> board_to_pl = {0, 4, 3, 2, 1};
+  const std::array<std::array<uint32_t, 5>, 3> bias_cases = {{
+      {17, 513, 1025, 2049, 4095}, {0, 11, 0, 22, 0}, {0, 0, 0, 0, 0}}};
+  unsigned bias_commands = 0;
+  for (const auto& codes : bias_cases) {
+    std::array<uint32_t, 5> order = {0, 1, 2, 3, 4};
+    do {
+      daphne::ConfigureRequest bias_request;
+      for (const auto id : order) {
+        auto* entry = bias_request.add_afes();
+        entry->set_id(id);
+        entry->set_v_bias(codes[id]);
+      }
+      daphne::ConfigureRequest decoded;
+      require(decoded.ParseFromString(bias_request.SerializeAsString()));
+      validate_analog_configuration(decoded);
+      std::map<uint32_t, uint32_t> observed;
+      for (const auto& entry : decoded.afes()) {
+        apply_afe_bias_command(entry, [&](uint32_t pl, uint32_t code) {
+          require(pl == board_to_pl[entry.id()] && code == codes[entry.id()]);
+          require(observed.emplace(pl, code).second);
+          ++bias_commands;
+        });
+      }
+      require(observed.size() == 5);
+    } while (std::next_permutation(order.begin(), order.end()));
+  }
+  require(bias_commands == 1800);
+  // The proto3 default in a present entry is also a real zero command.
+  daphne::AFEConfig default_bias;
+  default_bias.set_id(4);
+  apply_afe_bias_command(default_bias, [&](uint32_t pl, uint32_t code) {
+    require(pl == 1 && code == 0);
+    ++bias_commands;
+  });
+  auto run_bias_request = [&](const daphne::ConfigureRequest& config) {
+    validate_analog_configuration(config); // Complete preflight precedes writes.
+    for (const auto& entry : config.afes())
+      apply_afe_bias_command(entry, [&](uint32_t, uint32_t) { ++bias_commands; });
+  };
+  run_bias_request(daphne::ConfigureRequest{}); // No AFE entry: no BIAS command.
+  require(bias_commands == 1801);
+  for (unsigned problem = 0; problem < 3; ++problem) {
+    daphne::ConfigureRequest bad;
+    bad.add_afes()->set_id(0); // Valid entry must not be written before rejection.
+    auto* entry = bad.add_afes();
+    entry->set_id(problem == 0 ? 5 : (problem == 1 ? 0 : 1));
+    entry->set_v_bias(problem == 2 ? 4096 : 0);
+    rejects([&] { run_bias_request(bad); });
+    require(bias_commands == 1801);
+  }
+  for (bool bad_id : {false, true}) {
+    daphne::AFEConfig bad;
+    bad.set_id(bad_id ? 5 : 0);
+    bad.set_v_bias(bad_id ? 0 : 4096);
+    rejects([&] { apply_afe_bias_command(bad, [&](uint32_t, uint32_t) { ++bias_commands; }); });
+    require(bias_commands == 1801);
+  }
   daphne::ConfigureRequest request;
   request.set_biasctrl(4095);
   auto* channel = request.add_channels();
@@ -138,5 +200,6 @@ int main() {
   invalid([](auto& r) { r.mutable_afes(0)->mutable_pga()->set_lpf_cut_frequency(1); });
   invalid([](auto& r) { r.mutable_afes(0)->mutable_lna()->set_gain(4); });
   invalid([](auto& r) { r.mutable_afes(0)->mutable_lna()->set_clamp(4); });
-  std::cout << "Configuration preflight, offset DAC x1/x2, PGA gain and readback tests passed\n";
+  std::cout << "Configuration preflight, 1800 five-AFE BIAS writes including zero, "
+               "offset DAC x1/x2, PGA gain and readback tests passed\n";
 }
