@@ -1,5 +1,10 @@
 # Offset gain after full configuration
 
+Follow-up: the [local unsaturated sweep](offset-gain-sweep-verification.md)
+confirms approximately doubled slopes on all 40 channels, with 36/40 meeting
+the same baseline criterion across five points. This page preserves the
+preceding full-configuration and single-point results.
+
 DAPHNE-015, 2026-09-09 (workstation date; board clock unverified).
 Deployed server: `b631271`; test clients: `9c6e2fa`, then `8da57ac`.
 Self-trigger ABI 2.0, firmware `0x03F17F1B`. This supersedes the earlier

@@ -31,7 +31,7 @@ preserved history. Relevant prior work:
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
-| I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Final initialized A/B/A comparison: 37/40 within 164 counts; maximum 236. Not a full-range calibration |
+| I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Local sweep: x2/x1 slope ratios 1.934–2.062; 36/40 within 164 counts at all five points. Analog calibration unqualified |
 | Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | Full zero-bias configuration tested. Aggregate `v_bias=0` still skips a write; explicit zero commands used. Nonzero-bias operation unqualified |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
 | I293, bias and rail telemetry | One mutex-protected cache generation, quality, names/units, source and acquisition times | ADS7138 devices unavailable on the test board; real voltage acquisition unqualified |
@@ -78,6 +78,13 @@ A/B/A comparison passes the 164-count criterion on 37/40 channels, with a
 maximum difference of 236 counts and repeat drift no larger than 5.5 counts.
 The earlier 32-channel result lacked the full FE setup and is superseded.
 The previous deployment and its qualification below remain separate.
+
+The subsequent [unsaturated local sweep](offset-gain-sweep-verification.md)
+(`877caa7`) confirms approximately doubled slopes on all 40 channels, without
+changing the server or FE profile. It retains the baseline criterion: 36/40
+pass across all five points; channels 15/19/36/38 have remaining analog
+differences. No calibration correction or further gain/alignment patch was
+applied. This distinguishes working gain selection from calibrated equivalence.
 
 Use the updated `verify_server_v05.py`: its invalid-gain probe now uses **3**.
 Do not run the previous script against the corrected server: its gain=1 probe
