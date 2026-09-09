@@ -6,6 +6,7 @@
 #include <thread>
 
 #include "Daphne.hpp"
+#include "server_controller/board_voltage_acquisition.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -89,12 +90,8 @@ void i2c_1_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
         }
 
         daphne.is_vbias_voltage_monitor_reading.store(true);
-        std::vector<double> adc_values_0x10 = adc0x10->readData(7);
-        std::vector<double> adc_values_0x17 = adc0x17->readData(3);
+        acquire_board_voltages(daphne.board_monitor, *adc0x10, *adc0x17);
         daphne.is_vbias_voltage_monitor_reading.store(false);
-
-        daphne.board_monitor.publish(adc_values_0x10, adc_values_0x17,
-                                     host_unix_time_ns(), monotonic_time_ns());
       }
     } catch (const std::exception& e) {
       daphne.is_vbias_voltage_monitor_reading.store(false);

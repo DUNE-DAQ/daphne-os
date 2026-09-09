@@ -4,6 +4,7 @@
 #include <thread>
 
 #include "server_controller/telemetry_protocol.hpp"
+#include "server_controller/board_voltage_acquisition.hpp"
 
 namespace {
 void require(bool ok) {
@@ -19,6 +20,30 @@ void rejects(Function function) {
 
 int main() {
   using namespace daphne_sc;
+  struct FakeAdc {
+    size_t enabled_channels;
+    unsigned scans_requested = 0;
+    std::vector<double> readData(uint8_t scans) {
+      scans_requested += scans;
+      return std::vector<double>(enabled_channels * scans, 1.0);
+    }
+  };
+  FakeAdc adc10{7}, adc17{3};
+  BoardMonitor acquired;
+  acquire_board_voltages(acquired, adc10, adc17);
+  require(adc10.scans_requested == 1 && adc17.scans_requested == 1);
+  require(acquired.snapshot().quality == MonitorQuality::kGood);
+  require(acquired.snapshot().volts[2] == 39.314);
+  require(acquired.snapshot().host_unix_ns > 0);
+  FakeAdc incomplete{2};
+  rejects([&] { acquire_board_voltages(acquired, adc10, incomplete); });
+  struct FailingAdc {
+    std::vector<double> readData(uint8_t) { throw std::runtime_error("ADC read failed"); }
+  } failing;
+  rejects([&] { acquire_board_voltages(acquired, adc10, failing); });
+  // Failed/short reads must not publish a half-new generation; the monitor
+  // loop catches these exceptions and invalidates the retained sample.
+  require(acquired.snapshot().volts[2] == 39.314);
   BoardMonitor monitor;
   auto initial = make_general_info(monitor.snapshot());
   require(std::isnan(initial.v_bias_0()) && std::isnan(initial.temperature()));
