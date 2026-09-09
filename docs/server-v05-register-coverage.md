@@ -20,17 +20,19 @@ preserved history. Relevant prior work:
   register telemetry and high/low/high counter reads. Adapt selectively:
   its exhausted-retry counter fallback, live-timestamp interpretation and
   old identity offsets are not valid for this deployment.
-- No aggregate `ChannelConfig.gain` hardware implementation was found in the
-  advertised branch tips. A boolean DAC gain bit exists at low level, but
-  that does not establish the DAQ field's 1/2 mapping or polarity.
+- `server` at `4be8e3a`: `writeChannelOffset()` already forwards the boolean
+  `offsetGain` to `Dac::setDacOffset()`. Commit `bc5b1e9` encodes that flag in
+  AD5327 bit 13. The aggregate path still hardcoded `false`, ignoring
+  `ChannelConfig.gain`. The operator confirmed this field means offset DAC
+  gain; the AD5327 datasheet establishes the 1/2 mapping below.
 
 ## Corrections
 
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
-| I315/C013, channel gain | Nonzero values fail explicitly before configuration writes; 0 retains unspecified/legacy DAC-bit behavior | Confirm mapping before implementing gain 1/2. Do not silently clear client requests |
-| Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and unsupported gain before reset/quiesce/writes | No valid aggregate HV/configuration campaign performed |
+| I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Software-tested and cross-built; this follow-up is not deployed or analog-qualified |
+| Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | No valid aggregate HV/configuration campaign performed |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
 | I293, bias and rail telemetry | One mutex-protected cache generation, quality, names/units, source and acquisition times | ADS7138 devices unavailable on the test board; real voltage acquisition unqualified |
 | M009, GeneralInfo temperature | Explicit unavailable quality and NaN, not default zero | Bind a specifically identified sensor before publishing temperature |
@@ -46,6 +48,40 @@ The PGA mapping follows the existing register dictionary and the
 [TI AFE5808A datasheet](https://www.ti.com/lit/ds/symlink/afe5808a.pdf):
 0 = 24 dB, 1 = 30 dB. Timing bits were checked against the deployed self-trigger
 firmware's `ep_axi.vhd` at `3f17f1b`, including clock-control bit 0 (MMCM0 reset).
+
+### Offset DAC gain follow-up (`b631271`)
+
+This is the offset/pedestal DAC multiplier, **not PGA gain**. The
+[AD5327 datasheet, p. 17](https://www.analog.com/media/en/technical-documentation/data-sheets/ad5307_5317_5327.pdf)
+specifies per-output GAIN bit 13: clear for x1, set for x2. The deployed
+firmware identifies AD5327 devices in `spim_afe.vhd`; `spim_dac2.vhd` sends
+the packed words unchanged. No firmware modification is needed for this field.
+
+The aggregate handler now uses the existing low-level DAC path. Low-level
+`offsetGain` stays a boolean hardware bit; high-level `ChannelConfig.gain`
+stays a multiplier. Do not cast 1/2 directly to bool (both would become true).
+An omitted/zero high-level field retains x1 and its legacy 0..4095 code range.
+Explicit gains use the existing `daphnemodules` client limits: x1 <=2700,
+x2 <=1500. Invalid requests fail in preflight; trim, PGA, LNA and HV gain
+handling are unchanged. Protobuf field numbers and types are unchanged.
+
+Verification: all six host C++ tests pass, including 240 channel/gain/boundary
+protobuf round trips and 32,768 x1/x2 encoder comparisons. The complete ARM64
+server builds with runtime path `/usr/lib/daphne-server`; the Python counter
+failure test passes. Candidate SHA-256:
+`ad15adf71cb02e62a83911f946f3ae2f95d98ae41ebd14f49733c3c4d5cee1c5`.
+This follow-up has not been installed or tested against the board's analog
+outputs. The previous deployment and its qualification below remain separate.
+
+Use the updated `verify_server_v05.py`: its invalid-gain probe now uses **3**.
+Do not run the previous script against the corrected server: its gain=1 probe
+is now valid, and a valid aggregate Configure request can enable HV.
+
+The DAC's final SDO is not connected, so a cached code or FPGA command register
+cannot prove analog gain. Remaining qualification needs a known starting
+configuration, an offset-only test with a measured voltage or waveform
+pedestal, and restoration of the known settings. No such writes were made
+for this follow-up.
 
 ## Protocol compatibility
 
@@ -90,7 +126,7 @@ before transferring a binary. The current service dependencies can stop the
 whole runtime and reload the same FPGA application during an update. Verify
 the server has actually stopped, then restart `daphne-runtime.target`.
 
-## Hardware checks and exclusions
+## Previous hardware checks and exclusions (`c267a6c`)
 
 On DAPHNE-015, the six ARM64 test executables run successfully without hardware
 access. The protocol checks exercise the self-trigger ABI identity, four timing
