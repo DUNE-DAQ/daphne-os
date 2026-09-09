@@ -61,7 +61,7 @@ int main() {
   for (auto mode : {GatewareMode::kSelfTrigger, GatewareMode::kFullStream}) {
     daphne::SystemStatusSnapshot status;
     add_register_capabilities(status, mode);
-    require(status.capabilities_size() == 13);
+    require(status.capabilities_size() == 14);
     require(status.capabilities(2).supported() == supports_trigger_counters(mode));
     for (int i = 3; i < 7; ++i)
       require(!status.capabilities(i).supported() && !status.capabilities(i).reason().empty());
@@ -72,6 +72,7 @@ int main() {
     require(status.capabilities(10).name() == "RuntimeServices" && status.capabilities(10).supported());
     require(status.capabilities(11).name() == "ServerBookkeeping" && status.capabilities(11).supported());
     require(status.capabilities(12).name() == "TemperatureAlarms" && status.capabilities(12).supported());
+    require(status.capabilities(13).name() == "CurrentMonitorRaw" && status.capabilities(13).supported());
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
   const int fd = mkstemp(filename);

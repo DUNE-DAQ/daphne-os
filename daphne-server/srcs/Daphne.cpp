@@ -31,13 +31,6 @@ Daphne::Daphne(bool enable_mezzanines, std::shared_ptr<daphne_sc::RuntimeState> 
 		}
 
 		try {
-			current_monitor = std::make_unique<CurrentMonitorDrivers::CurrentMonitor>();
-		} catch (const std::exception &e) {
-			std::cerr << "Warning: current monitor unavailable: " << e.what() << std::endl;
-			current_monitor.reset();
-		}
-
-		try {
 			ads7138driver_addr_0x10 = std::make_unique<I2CADCsDrivers::ADS7138_Driver>(0x10);
 			ads7138driver_addr_0x10->setEnabledChannels({true, true, true, true,
 			                                            true, true, true, false});
@@ -106,10 +99,6 @@ I2CADCsDrivers::ADS7138_Driver* Daphne::getADS7138_Driver_addr_0x10(){
 
 I2CADCsDrivers::ADS7138_Driver* Daphne::getADS7138_Driver_addr_0x17(){
 	return this->ads7138driver_addr_0x17.get();
-}
-
-CurrentMonitorDrivers::CurrentMonitor* Daphne::getCurrentMonitorDriver(){
-	return this->current_monitor.get();
 }
 
 std::optional<std::pair<uint32_t, uint32_t>> Daphne::longestIdenticalSubsequenceIndices(const std::vector<uint32_t>& nums){

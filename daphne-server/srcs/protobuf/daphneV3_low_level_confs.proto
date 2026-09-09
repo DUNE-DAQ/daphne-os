@@ -331,13 +331,41 @@ message cmd_readVbiasControl_response {
 
 message cmd_readCurrentMonitor {
   int32  id                   = 1;
-  uint32 currentMonitorChannel= 2;
+  uint32 currentMonitorChannel= 2; // Legacy ambiguous ADC-input selector; not a physical-channel address.
+  optional uint32 physical_channel = 3; // Required by corrected server: board channels 0..39, AFE*8+local.
+}
+enum CurrentMonitorQuality {
+  CURRENT_MONITOR_UNSPECIFIED = 0;
+  CURRENT_MONITOR_GOOD = 1;
+  CURRENT_MONITOR_UNAVAILABLE = 2;
+  CURRENT_MONITOR_ERROR = 3;
+  CURRENT_MONITOR_SATURATED = 4;
 }
 message cmd_readCurrentMonitor_response {
   bool   success              = 1;
   string message              = 2;
   uint32 currentMonitorChannel= 3;
-  uint32 currentValue         = 4;
+  uint32 currentValue         = 4; // Legacy sign-extended raw code, only when success=true; not amperes.
+  optional sint32 raw_code = 5; // CRC-checked diagnostic data can be present with non-Good quality.
+  optional double differential_volts = 6; // V(DA)-V(DB); populated only for a Good ADC sample.
+  CurrentMonitorQuality quality = 7;
+  optional uint32 adc_id = 8;
+  optional uint32 adc_status = 9;
+  optional uint32 adc_input_mux = 10;
+  uint32 pga_gain = 11;
+  bool pga_bypassed = 12;
+  double nominal_reference_volts = 13;
+  uint64 observed_monotonic_ns = 14;
+  uint64 observed_host_unix_ns = 15; // Host observation, not certified timing or conversion timestamp.
+  string source = 16;
+  bool saturated = 17;
+  optional double current_amperes = 18;
+  CurrentMonitorQuality current_quality = 19;
+  string calibration_source = 20;
+  optional bool carrier_mux_restored = 21;
+  uint32 carrier_mux_enable = 22;
+  uint32 carrier_mux_address = 23;
+  string current_detail = 24;
 }
 
 message cmd_readBiasVoltageMonitor {

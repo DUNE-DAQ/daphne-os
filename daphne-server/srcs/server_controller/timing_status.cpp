@@ -77,5 +77,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("TemperatureAlarms", true,
       "Named temperature observations carry active startup thresholds and Good/Warning/High/Critical/Missing/Invalid/Stale evaluation. "
       "Provisional monitoring limits only; no power action, sensor comparator changes or protection permit");
+  add("CurrentMonitorRaw", true,
+      "Request 244 with explicit physical_channel 0..39: carrier mux + identified kernel SPI ADS1261, CRC/status/DRDY and restoration checks. "
+      "Measurement performs ADC/mux writes only. Raw code and nominal differential volts; calibrated current requires an approved calibration");
 }
 }

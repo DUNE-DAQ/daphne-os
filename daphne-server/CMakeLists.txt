@@ -121,13 +121,14 @@ add_library(daphne_telemetry_protocol
   srcs/server_controller/ams_temperature.cpp
   srcs/server_controller/carrier_temperature.cpp
   srcs/server_controller/temperature_alarm.cpp
+  srcs/server_controller/current_monitor_protocol.cpp
   srcs/server_controller/service_status.cpp
   srcs/server_controller/telemetry_protocol.cpp
   srcs/server_controller/timing_status.cpp
   srcs/server_controller/readonly_mmio.cpp
 )
 target_include_directories(daphne_telemetry_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
-target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto daphne_gateware daphne_i2c_hw Threads::Threads)
+target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto daphne_gateware daphne_i2c_hw daphne_current_adc Threads::Threads)
 add_library(daphne_configuration
   srcs/server_controller/configuration_plan.cpp
   srcs/server_controller/runtime_state.cpp
@@ -136,6 +137,10 @@ add_library(daphne_configuration
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_configuration PUBLIC daphne_proto daphne_gateware)
 if(BUILD_TESTING)
+  add_executable(current_mux_tests tests/current_mux_tests.cpp)
+  target_link_libraries(current_mux_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME current_mux_unit COMMAND current_mux_tests)
+  set_tests_properties(current_mux_unit PROPERTIES LABELS unit)
   add_executable(temperature_alarm_tests tests/temperature_alarm_tests.cpp)
   target_link_libraries(temperature_alarm_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME temperature_alarm_unit COMMAND temperature_alarm_tests)
@@ -275,13 +280,13 @@ set(SOURCES
   srcs/FpgaReg.cpp
   srcs/Spi.cpp
   srcs/SpyBuffer.cpp
-  srcs/DaphneSpiDrivers.cpp
   srcs/Afe.cpp
   srcs/FrontEnd.cpp
   srcs/Endpoint.cpp
   srcs/Dac.cpp
   srcs/Daphne.cpp
   srcs/server_controller/handlers.cpp
+  srcs/server_controller/current_monitor.cpp
   srcs/server_controller/devmem_mmio.cpp
   srcs/server_controller/monitoring.cpp
   srcs/server_controller/spybuffer_chunker.cpp
