@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import time
 
 
 def check_ams_temperatures(readings, high, require_all=False):
@@ -45,6 +46,54 @@ def check_ams_temperatures(readings, high, require_all=False):
     return report
 
 
+def check_carrier_temperature(readings, high, required=False):
+    if not readings and not required:
+        return None
+    if len(readings) != 1 or readings[0].name != "Carrier_U9_MCP9808":
+        raise RuntimeError("Missing or ambiguous carrier temperature identity")
+    item = readings[0]
+    good = item.quality == high.MEASUREMENT_GOOD
+    if item.valid != good or (required and not good):
+        raise RuntimeError("Carrier temperature unavailable or inconsistent")
+    if good:
+        if (not math.isfinite(item.temperature_c) or not -256 <= item.temperature_c < 256
+                or not item.observed_monotonic_ns or not item.observed_host_unix_ns
+                or not all(value in item.source for value in ("U9 MCP9808", "ff030000", "0x18"))):
+            raise RuntimeError("Invalid carrier temperature/source/time")
+    elif not math.isnan(item.temperature_c) or item.observed_monotonic_ns or item.observed_host_unix_ns:
+        raise RuntimeError("Invalid carrier reading looks measured")
+    return {"name": item.name, "temperature_c": item.temperature_c if good else None,
+            "quality": high.MeasurementQuality.Name(item.quality), "source": item.source,
+            "observed_monotonic_ns": item.observed_monotonic_ns}
+
+
+def check_service_status(status, high, required=False):
+    from google.protobuf.json_format import MessageToDict
+    units = {"daphne-runtime.target", "daphne-gateware-prepare.service", "firmware.service",
+             "daphne-gateware-verify.service", "clockchip.service", "endpoint.service",
+             "hermes.service", "daphne.service"}
+    names = [item.name for item in status.services]
+    if not names and not required:
+        return []
+    if set(names) != units or len(names) != len(units):
+        raise RuntimeError("Missing, duplicate or unexpected runtime-chain unit")
+    for item in status.services:
+        if item.quality == high.MEASUREMENT_GOOD:
+            if not all((item.load_state, item.active_state, item.sub_state, item.observed_monotonic_ns,
+                        item.observed_host_unix_ns, item.message)):
+                raise RuntimeError("Incomplete good service observation")
+        elif required or item.observed_monotonic_ns or item.HasField("main_pid"):
+            raise RuntimeError("Service observation unavailable or falsely measured")
+    if required:
+        server = next(item for item in status.services if item.name == "daphne.service")
+        if (server.active_state != "active" or server.sub_state != "running" or not server.main_pid
+                or not server.HasField("automatic_restarts") or len(server.invocation_id) != 32
+                or status.server_instance_id != server.invocation_id or not status.server_uptime_ms
+                or not status.hostname or not status.kernel_release or not status.petalinux_version):
+            raise RuntimeError("Missing server process identity, uptime or host metadata")
+    return [MessageToDict(item, preserving_proto_field_name=True) for item in status.services]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True)
@@ -53,6 +102,11 @@ def main():
     parser.add_argument("--mode", choices=("self-trigger", "full-stream"), required=True)
     parser.add_argument("--require-ams-temperatures", action="store_true",
                         help="Require all three named AMS die sensors and advancing host observation times")
+    parser.add_argument("--require-carrier-temperature", action="store_true")
+    parser.add_argument("--require-voltages", action="store_true",
+                        help="Require good voltage acquisition and refreshed cache timestamps")
+    parser.add_argument("--require-services", action="store_true",
+                        help="Require eight service observations and matching server process identity")
     parser.add_argument("--check-rejections", action="store_true",
                         help="Send intentionally invalid configuration requests; no writes expected")
     parser.add_argument("--afe-readback", action="store_true",
@@ -108,20 +162,33 @@ def main():
         capabilities = {item.name: item.supported for item in status.capabilities}
         for name in ("LiveTimingTimestamp", "ProtocolErrorCount", "CommandDecoderMap", "CrateSlotDetectorReadback"):
             require(capabilities.get(name) is False, "Incorrect capability: " + name)
-        temperatures = check_ams_temperatures(status.temperatures, high, args.require_ams_temperatures)
+        def die_readings(snapshot):
+            return [item for item in snapshot.temperatures if item.name != "Carrier_U9_MCP9808"]
+        temperatures = check_ams_temperatures(die_readings(status), high, args.require_ams_temperatures)
+        carrier = check_carrier_temperature([item for item in status.temperatures if item.name == "Carrier_U9_MCP9808"],
+                                            high, args.require_carrier_temperature)
+        services = check_service_status(status, high, args.require_services)
         if args.require_ams_temperatures:
             require(capabilities.get("AMSTemperatures") is True, "Missing AMS capability")
             again = call(high.MT2_READ_SYSTEM_STATUS_REQ, high.ReadSystemStatusRequest(), high.SystemStatusSnapshot)
             require(again.success, again.message)
-            newer = check_ams_temperatures(again.temperatures, high, True)
+            newer = check_ams_temperatures(die_readings(again), high, True)
             previous_times = {item["name"]: item["observed_monotonic_ns"] for item in temperatures}
             require(all(item["observed_monotonic_ns"] > previous_times[item["name"]] for item in newer),
                     "AMS observation times did not advance")
 
         info = call(high.MT2_READ_GENERAL_INFO_REQ, high.InfoRequest(), high.GeneralInfo)
         require(info.HasField("board_voltage_status"), "Missing telemetry quality metadata")
-        require(info.temperature_quality == high.MEASUREMENT_UNAVAILABLE and math.isnan(info.temperature),
-                "Unbound temperature was reported as a measurement")
+        if info.temperature_quality == high.MEASUREMENT_GOOD:
+            require(math.isfinite(info.temperature) and "U9 MCP9808" in info.temperature_detail,
+                    "Unnamed temperature has no identified carrier source")
+        else:
+            require(math.isnan(info.temperature), "Invalid temperature looks measured")
+        if args.require_carrier_temperature:
+            require(info.temperature_quality == high.MEASUREMENT_GOOD, "GeneralInfo carrier binding unavailable")
+            require(info.HasField("temperature_status"), "Missing carrier observation metadata")
+            check_carrier_temperature([info.temperature_status], high, True)
+            require(info.temperature == info.temperature_status.temperature_c, "Mixed carrier temperature observations")
         volts = info.board_voltage_status
         require(len(volts.named_voltages) == 10, "Expected ten named voltage channels")
         legacy = [info.v_bias_0, info.v_bias_1, info.v_bias_2, info.v_bias_3, info.v_bias_4,
@@ -132,6 +199,16 @@ def main():
         else:
             require(all(math.isnan(value) for value in legacy), "Unavailable telemetry contains apparent measurements")
             require(all(math.isnan(item.volts) for item in volts.named_voltages), "Invalid named voltage")
+        if args.require_voltages:
+            require(volts.quality == high.MEASUREMENT_GOOD, "Voltage acquisition unavailable")
+            require(all("ff030000" in item.source for item in volts.named_voltages), "Wrong ADC controller provenance")
+            require([item.source.rsplit(" ", 1)[-1] for item in volts.named_voltages[7:]] == ["2", "5", "7"],
+                    "Wrong physical ADC channel labels")
+            time.sleep(0.6)
+            fresh = call(high.MT2_READ_GENERAL_INFO_REQ, high.InfoRequest(), high.GeneralInfo)
+            require(fresh.board_voltage_status.quality == high.MEASUREMENT_GOOD and
+                    fresh.board_voltage_status.observed_monotonic_ns > volts.observed_monotonic_ns,
+                    "Voltage acquisition did not refresh")
 
         counters = call(high.MT2_READ_TRIGGER_COUNTERS_REQ, high.ReadTriggerCountersRequest(),
                         high.ReadTriggerCountersResponse)
@@ -148,6 +225,19 @@ def main():
                   "voltage_quality": high.MeasurementQuality.Name(volts.quality),
                   "voltage_detail": volts.detail, "counter_channels": len(counters.snapshots)}
         report["ams_temperatures"] = temperatures
+        report["carrier_temperature"] = carrier
+        report["general_info_temperature_c"] = info.temperature if math.isfinite(info.temperature) else None
+        report["voltages"] = [{"name": item.name, "volts": item.volts if math.isfinite(item.volts) else None,
+                               "source": item.source} for item in volts.named_voltages]
+        report["services"] = services
+        report["server_instance_id"] = status.server_instance_id
+        report["server_uptime_ms"] = status.server_uptime_ms
+        report["kernel_release"] = status.kernel_release
+        report["petalinux_version"] = status.petalinux_version
+        report["host_values"] = [{"name": item.name, "value": item.value, "source": item.source,
+                                  "valid": item.valid} for item in status.ps_values]
+        if args.require_voltages:
+            report["voltage_observation_times_advanced"] = True
         if args.require_ams_temperatures:
             report["ams_observation_times_advanced"] = True
         if args.check_rejections:
