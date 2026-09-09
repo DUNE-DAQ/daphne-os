@@ -106,22 +106,17 @@ def main():
             msg = ("Timeout waiting for server reply "
                    "(check server running, port reachable, and that it speaks V2).")
         message = f"Client-side fallback: {msg}"
-        # Fabricate zeros so the table shows structure
+        # No measurement was received. Do not fabricate apparently real zeros.
         resp = P.ReadTriggerCountersResponse()
-        ch_list = chans if chans else list(range(40))
-        for ch in ch_list:
-            s = resp.snapshots.add()
-            s.channel = ch
-            s.threshold = 0
-            s.record_count = 0
-            s.busy_count = 0
-            s.full_count = 0
 
     print(f"\nEndpoint: {endpoint}")
     print(f"Route   : {args.route}")
     if base is not None: print(f"Base    : 0x{base:08X}")
     print(f"Result  : {'SUCCESS' if success else 'FAIL'}")
     if message: print(f"Message : {message}")
+    if not success:
+        print("Counter measurements unavailable.")
+        return 1
 
     snaps = getattr(resp, "snapshots", [])
     if not snaps:
@@ -139,4 +134,4 @@ def main():
                    f"{s.full_count:,}".replace(",","_"))))
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
