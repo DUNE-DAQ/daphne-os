@@ -110,7 +110,14 @@ target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
 add_library(daphne_telemetry_protocol srcs/server_controller/telemetry_protocol.cpp)
 target_include_directories(daphne_telemetry_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto Threads::Threads)
+add_library(daphne_configuration srcs/server_controller/configuration_plan.cpp)
+target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_link_libraries(daphne_configuration PUBLIC daphne_proto)
 if(BUILD_TESTING)
+  add_executable(configuration_plan_tests tests/configuration_plan_tests.cpp)
+  target_link_libraries(configuration_plan_tests PRIVATE daphne_configuration)
+  add_test(NAME configuration_plan_unit COMMAND configuration_plan_tests)
+  set_tests_properties(configuration_plan_unit PROPERTIES LABELS unit)
   add_executable(board_monitor_tests tests/board_monitor_tests.cpp)
   target_link_libraries(board_monitor_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME board_monitor_unit COMMAND board_monitor_tests)
@@ -255,6 +262,7 @@ target_link_libraries(daphneServer PRIVATE
   daphne_gateware
   daphne_proto
   daphne_telemetry_protocol
+  daphne_configuration
   cppzmq
   ${DAPHNE_ZMQ_TARGET}
   CLI11::CLI11

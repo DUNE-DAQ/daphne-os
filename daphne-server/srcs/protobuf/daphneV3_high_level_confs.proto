@@ -17,6 +17,8 @@ message ConfigureCLKsResponse {
 
 // ----------------- Configure FE -----------------
 
+// gain=0 means unspecified (legacy DAC gain-bit behavior). Nonzero gain is
+// rejected before hardware writes until its 1/2 hardware mapping is qualified.
 message ChannelConfig  { uint32 id=1; uint32 trim=2; uint32 offset=3; uint32 gain=4; }
 
 // Note: using 'attenuators' (ZMQ naming) and keeping v_bias; DAQ had v_gain earlier.
@@ -31,6 +33,7 @@ message AFEConfig {
 }
 
 message ADCConfig      { bool resolution=1; bool output_format=2; bool sb_first=3; }
+// PGA gain: false = 24 dB, true = 30 dB (AFE5808A register 51 bit 13).
 message PGAConfig      { uint32 lpf_cut_frequency=1; bool integrator_disable=2; bool gain=3; }
 message LNAConfig      { uint32 clamp=1; uint32 gain=2; bool integrator_disable=3; }
 

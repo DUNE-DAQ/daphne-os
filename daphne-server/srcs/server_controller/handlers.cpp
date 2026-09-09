@@ -35,6 +35,7 @@
 #include "server_controller/gateware.hpp"
 #include "server_controller/register_reads.hpp"
 #include "server_controller/telemetry_protocol.hpp"
+#include "server_controller/configuration_plan.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -753,6 +754,7 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
     // any hardware. List order is the output-stream order.
     const std::vector<RegisterWrite> mode_register_plan =
         make_mode_register_plan(mode, full_stream_channels);
+    validate_analog_configuration(requested_cfg);
     if (mode == GatewareMode::kFullStream) {
       if (full_stream_mmio == nullptr) {
         throw std::logic_error("Full-stream MMIO window is not configured");
@@ -763,12 +765,6 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
       disable_full_stream_outputs(*full_stream_mmio);
       out << "[FULL_STREAM_MUX]\nVerified all 32 outputs disabled with 0xFF before configuration.\n";
     }
-
-    const bool requested_bias_for_any_afe =
-        std::any_of(requested_cfg.afes().begin(),
-                    requested_cfg.afes().end(),
-                    [](const AFEConfig& afe_cfg) { return afe_cfg.v_bias() > 0; });
-    bool bias_control_applied = false;
 
     if (config_resets_enabled()) {
       daphne.getAfe()->doReset();
@@ -814,25 +810,11 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
 
     {
       const uint32_t ctrl = requested_cfg.biasctrl();
-      if (ctrl <= 4095) {
-        const uint32_t returnedControlValue = daphne.getDac()->setDacHvBias(ctrl, false, false);
-        const uint32_t returnedBiasEnable = daphne.getDac()->setBiasEnable(true);
-        daphne.setBiasControlDictValue(ctrl);
-        bias_control_applied = true;
-        out << "Bias Control value written successfully. Bias Control value: " << ctrl << " and Enable: "
-            << returnedBiasEnable << " Returned value: " << returnedControlValue << ".\n";
-      } else {
-        out << "Warning: Bias Control value " << ctrl << " out of range (0..4095). Skipping.\n";
-      }
-    }
-
-    if (!bias_control_applied && requested_bias_for_any_afe) {
-      const uint32_t ctrl = 4095;
       const uint32_t returnedControlValue = daphne.getDac()->setDacHvBias(ctrl, false, false);
       const uint32_t returnedBiasEnable = daphne.getDac()->setBiasEnable(true);
       daphne.setBiasControlDictValue(ctrl);
-      out << "Bias Control was not set in request but AFE bias values are present. Defaulting Bias Control to " << ctrl
-          << " and Enable: " << returnedBiasEnable << " Returned value: " << returnedControlValue << ".\n";
+      out << "Bias Control value written successfully. Bias Control value: " << ctrl << " and Enable: "
+          << returnedBiasEnable << " Returned value: " << returnedControlValue << ".\n";
     }
 
     for (const AFEConfig& afe_config : requested_cfg.afes()) {
@@ -855,46 +837,14 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
             << ". Returned value: " << daphne.getBiasVoltageDictValue(afe_pl) << ".\n";
       }
 
-      const uint32_t adc_res = afe_config.adc().resolution() ? 1u : 0u;
-      const uint32_t adc_out_fmt = afe_config.adc().output_format() ? 1u : 0u;
-      const uint32_t adc_sb_first = afe_config.adc().sb_first() ? 1u : 0u;
-
-      uint32_t r = daphne.getAfe()->setAFEFunction(afe_pl, "SERIALIZED_DATA_RATE", 1u);
-      out << "Function SERIALIZED_DATA_RATE in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "ADC_RESOLUTION_RESET", adc_res);
-      out << "Function ADC_RESOLUTION_RESET in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "ADC_OUTPUT_FORMAT", adc_out_fmt);
-      out << "Function ADC_OUTPUT_FORMAT in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "LSB_MSB_FIRST", adc_sb_first);
-      out << "Function LSB_MSB_FIRST in AFE " << afe_board << " configured correctly.\nReturned value: " << r << "\n";
-
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "LPF_PROGRAMMABILITY", afe_config.pga().lpf_cut_frequency());
-      out << "Function LPF_PROGRAMMABILITY in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl,
-                                          "PGA_INTEGRATOR_DISABLE",
-                                          afe_config.pga().integrator_disable() ? 1u : 0u);
-      out << "Function PGA_INTEGRATOR_DISABLE in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "PGA_CLAMP_LEVEL", 2u);
-      out << "Function PGA_CLAMP_LEVEL in AFE " << afe_board << " configured correctly.\nReturned value: " << r << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "ACTIVE_TERMINATION_ENABLE", 0u);
-      out << "Function ACTIVE_TERMINATION_ENABLE in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
-
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "LNA_INPUT_CLAMP_SETTING", afe_config.lna().clamp());
-      out << "Function LNA_INPUT_CLAMP_SETTING in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "LNA_GAIN", afe_config.lna().gain());
-      out << "Function LNA_GAIN in AFE " << afe_board << " configured correctly.\nReturned value: " << r << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl,
-                                          "LNA_INTEGRATOR_DISABLE",
-                                          afe_config.lna().integrator_disable() ? 1u : 0u);
-      out << "Function LNA_INTEGRATOR_DISABLE in AFE " << afe_board << " configured correctly.\nReturned value: " << r
-          << "\n";
+      for (const auto& write : make_afe_function_plan(afe_config)) {
+        const uint32_t r = apply_verified_afe_function(
+            write, [&](const std::string& function, uint32_t value) {
+              return daphne.getAfe()->setAFEFunction(afe_pl, function, value);
+            });
+        out << "Function " << write.function << " in AFE " << afe_board
+            << " verified. Returned value: " << r << "\n";
+      }
     }
 
     if (config_resets_enabled()) {
