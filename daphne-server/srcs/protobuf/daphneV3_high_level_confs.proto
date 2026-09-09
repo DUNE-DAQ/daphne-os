@@ -17,8 +17,10 @@ message ConfigureCLKsResponse {
 
 // ----------------- Configure FE -----------------
 
-// gain=0 means unspecified (legacy DAC gain-bit behavior). Nonzero gain is
-// rejected before hardware writes until its 1/2 hardware mapping is qualified.
+// Offset DAC multiplier, not PGA gain: 1=x1 (AD5327 GAIN bit 0), 2=x2 (bit 1).
+// 0/omitted preserves legacy x1 behavior. Other values are rejected before writes.
+// Explicit gain 1 limits offset to 2700; gain 2 to 1500, matching the DAQ client.
+// Legacy gain 0 retains the 12-bit offset range. No DAC hardware readback exists.
 message ChannelConfig  { uint32 id=1; uint32 trim=2; uint32 offset=3; uint32 gain=4; }
 
 // Note: using 'attenuators' (ZMQ naming) and keeping v_bias; DAQ had v_gain earlier.

@@ -63,8 +63,10 @@ int main() {
     add_register_capabilities(status, mode);
     require(status.capabilities_size() == 8);
     require(status.capabilities(2).supported() == supports_trigger_counters(mode));
-    for (int i = 3; i < status.capabilities_size(); ++i)
+    for (int i = 3; i < 7; ++i)
       require(!status.capabilities(i).supported() && !status.capabilities(i).reason().empty());
+    require(status.capabilities(7).name() == "ChannelConfig.gain");
+    require(status.capabilities(7).supported() && !status.capabilities(7).reason().empty());
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
   const int fd = mkstemp(filename);

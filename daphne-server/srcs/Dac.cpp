@@ -1,4 +1,5 @@
 #include "Dac.hpp"
+#include "Ad5327.hpp"
 
 Dac::Dac()
 	: spi(std::make_unique<Spi>()){
@@ -184,7 +185,7 @@ uint32_t Dac::updateCurrentRegister(const std::string& reg_name, const uint32_t&
 	uint32_t chipCh = std::get<1>(chMap);
 	uint32_t dataToWrite = 0;
 	uint32_t compData = (comp_channel_value_it->second & 0xFFFF);
-	uint32_t chData = (chipCh & 0x3) << 14 | gain << 13 | buffer << 12 | value & 0xFFF;
+	uint32_t chData = ad5327::encode_word(chipCh, value, gain, buffer);
 	channel_value_it->second = chData;
 	if(compChPos == "L"){
 		dataToWrite = (chData & 0xFFFF) << 16 | (compData & 0xFFFF);
@@ -196,4 +197,3 @@ uint32_t Dac::updateCurrentRegister(const std::string& reg_name, const uint32_t&
 
 	return this->spi->setData(reg_name, dataToWrite);
 }
-

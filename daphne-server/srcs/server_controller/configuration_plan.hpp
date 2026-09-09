@@ -13,6 +13,9 @@ struct AfeFunctionWrite {
   uint32_t value;
 };
 std::vector<AfeFunctionWrite> make_afe_function_plan(const daphne::AFEConfig& config);
+// ChannelConfig.gain is an offset DAC multiplier, NOT the raw low-level bit.
+// 0 (omitted legacy field) and 1 select x1; 2 selects x2. Reject other values.
+bool offset_gain_bit(uint32_t gain);
 void validate_analog_configuration(const daphne::ConfigureRequest& config);
 uint32_t apply_verified_afe_function(
     const AfeFunctionWrite& write,

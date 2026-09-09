@@ -59,6 +59,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("CommandDecoderMap", false, "I277: optical decoder wrapper output is not implemented");
   add("ProtocolErrorCount", false, "I281: optical register is hardwired zero, not a measured counter");
   add("CrateSlotDetectorReadback", false, "I058/I059/I061: legacy addresses overlap ABI-2 self-trigger controls");
-  add("ChannelConfig.gain", false, "I315/C013: 1/2 to hardware mapping is unqualified; nonzero requests rejected");
+  add("ChannelConfig.gain", true,
+      "I315/C013: offset DAC x1/x2 -> AD5327 bit 13 = 0/1; 0 retains legacy x1. "
+      "Explicit x1/x2 offset limits 2700/1500. Command support, not DAC readback or analog qualification");
 }
 }

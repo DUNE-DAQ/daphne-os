@@ -804,10 +804,12 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
       out << "Trim value written successfully for Channel " << ch << ". Trim value: " << ch_config.trim()
           << ". Returned value: " << daphne.getChTrimDictValue(ch) << ".\n";
 
-      daphne.getDac()->setDacOffset(afe_pl, idx, ch_config.offset(), false, false);
+      const bool offset_gain = offset_gain_bit(ch_config.gain());
+      daphne.getDac()->setDacOffset(afe_pl, idx, ch_config.offset(), offset_gain, false);
       daphne.setChOffsetDictValue(ch, ch_config.offset());
-      out << "Offset value written successfully for Channel " << ch << ". Offset value: " << ch_config.offset()
-          << ". Returned value: " << daphne.getChOffsetDictValue(ch) << ".\n";
+      out << "Offset command sent for Channel " << ch << ". Offset code: " << ch_config.offset()
+          << ". Offset DAC gain: x" << (offset_gain ? 2 : 1)
+          << ". No DAC hardware readback; code is software-cached.\n";
     }
 
     {

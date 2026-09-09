@@ -117,9 +117,11 @@ def main():
             require(not bad.success, "Unsupported bus scan accepted")
             # A valid full-stream list gets past mode validation to exercise analog preflight.
             config = high.ConfigureRequest(full_stream_channels=[0] if args.mode == "full-stream" else [])
-            config.channels.add(id=0, gain=1)
+            # Gain 1/2 are valid offset multipliers now. Never send those as a
+            # rejection-only probe: a valid Configure request also enables HV.
+            config.channels.add(id=0, gain=3)
             result = call(high.MT2_CONFIGURE_FE_REQ, config, high.ConfigureResponse)
-            require(not result.success and "ChannelConfig.gain" in result.message, "Unsupported gain accepted")
+            require(not result.success and "ChannelConfig.gain" in result.message, "Invalid gain accepted")
             config.channels[0].gain = 0
             config.biasctrl = 4096
             result = call(high.MT2_CONFIGURE_FE_REQ, config, high.ConfigureResponse)

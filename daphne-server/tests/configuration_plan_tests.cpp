@@ -1,6 +1,7 @@
 #include <iostream>
 #include <map>
 #include <stdexcept>
+#include "Ad5327.hpp"
 #include "defines.hpp"
 #include "server_controller/configuration_plan.hpp"
 
@@ -32,6 +33,50 @@ int main() {
   afe->mutable_lna()->set_gain(3);
   afe->mutable_lna()->set_clamp(3);
   validate_analog_configuration(request);
+  for (uint32_t gain : {0u, 1u, 2u}) {
+    auto offset_request = request;
+    auto* offset = offset_request.mutable_channels(0);
+    offset->set_gain(gain);
+    const uint32_t limit = gain == 0 ? 4095 : (gain == 1 ? 2700 : 1500);
+    for (uint32_t code : {0u, limit}) {
+      offset->set_offset(code);
+      for (uint32_t id = 0; id < 40; ++id) {
+        offset->set_id(id);
+        daphne::ConfigureRequest decoded;
+        require(decoded.ParseFromString(offset_request.SerializeAsString()));
+        validate_analog_configuration(decoded);
+        const auto& c = decoded.channels(0);
+        const bool bit = offset_gain_bit(c.gain());
+        require(bit == (gain == 2));
+        const auto word = ad5327::encode_word(c.id() % 4, c.offset(), bit, false);
+        require(((word >> 14) & 3) == id % 4);
+        require(((word >> 13) & 1) == (gain == 2));
+        require((word & 0x1000) == 0 && (word & 0xFFF) == code);
+      }
+    }
+    offset->set_offset(limit + 1);
+    rejects([&] { validate_analog_configuration(offset_request); });
+  }
+  // Mixed per-channel gains are supported; AD5327 GAIN addresses one output.
+  auto mixed = request;
+  mixed.clear_channels();
+  for (uint32_t id = 0; id < 40; ++id) {
+    auto* c = mixed.add_channels();
+    c->set_id(id);
+    c->set_gain(1 + id % 2);
+    c->set_offset(1000);
+  }
+  validate_analog_configuration(mixed);
+  // Exhaust the actual encoder used by Dac::updateCurrentRegister. Changing
+  // offset gain must change ONLY bit 13, never address, buffer or DAC code.
+  for (uint32_t address = 0; address < 4; ++address)
+    for (uint32_t code = 0; code <= 4095; ++code)
+      for (bool buffer : {false, true}) {
+        const auto x1 = ad5327::encode_word(address, code, offset_gain_bit(1), buffer);
+        const auto x2 = ad5327::encode_word(address, code, offset_gain_bit(2), buffer);
+        require(x1 == (address << 14 | uint32_t(buffer) << 12 | code));
+        require((x1 ^ x2) == 0x2000);
+      }
   const auto gain_field = afe_definitions::afeFunctionDict.at("PGA_GAIN_CONTROL");
   require(gain_field.size() == 1 && gain_field.begin()->first == 51);
   require(gain_field.begin()->second == std::make_pair(13, 13));
@@ -82,8 +127,10 @@ int main() {
   invalid([](auto& r) { *r.add_channels() = r.channels(0); });
   invalid([](auto& r) { r.mutable_channels(0)->set_trim(4096); });
   invalid([](auto& r) { r.mutable_channels(0)->set_offset(4096); });
-  for (uint32_t gain : {1u, 2u, UINT32_MAX})
+  for (uint32_t gain : {3u, 4u, UINT32_MAX}) {
+    rejects([&] { offset_gain_bit(gain); });
     invalid([&](auto& r) { r.mutable_channels(0)->set_gain(gain); });
+  }
   invalid([](auto& r) { r.mutable_afes(0)->set_id(5); });
   invalid([](auto& r) { *r.add_afes() = r.afes(0); });
   invalid([](auto& r) { r.mutable_afes(0)->set_v_bias(4096); });
@@ -91,5 +138,5 @@ int main() {
   invalid([](auto& r) { r.mutable_afes(0)->mutable_pga()->set_lpf_cut_frequency(1); });
   invalid([](auto& r) { r.mutable_afes(0)->mutable_lna()->set_gain(4); });
   invalid([](auto& r) { r.mutable_afes(0)->mutable_lna()->set_clamp(4); });
-  std::cout << "Configuration preflight, PGA gain and readback tests passed\n";
+  std::cout << "Configuration preflight, offset DAC x1/x2, PGA gain and readback tests passed\n";
 }

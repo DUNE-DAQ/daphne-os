@@ -46,6 +46,13 @@ std::vector<AfeFunctionWrite> make_afe_function_plan(const daphne::AFEConfig& co
   };
 }
 
+bool offset_gain_bit(uint32_t gain) {
+  if (gain > 2)
+    throw std::invalid_argument("ChannelConfig.gain must be 1 (offset x1), 2 (offset x2), "
+                                "or 0 (omitted legacy field, x1)");
+  return gain == 2;
+}
+
 void validate_analog_configuration(const daphne::ConfigureRequest& config) {
   if (config.biasctrl() > 4095)
     throw std::invalid_argument("Bias Control out of range (0..4095)");
@@ -55,10 +62,13 @@ void validate_analog_configuration(const daphne::ConfigureRequest& config) {
       throw std::invalid_argument("Channel IDs must be unique and in 0..39");
     if (channel.trim() > 4095 || channel.offset() > 4095)
       throw std::invalid_argument("Channel trim/offset out of range (0..4095)");
-    if (channel.gain() != 0)
-      throw std::invalid_argument(
-          "ChannelConfig.gain is unsupported: the 1/2 to hardware mapping is unqualified; "
-          "0 means unspecified (legacy DAC gain-bit behavior). No configuration was applied");
+    offset_gain_bit(channel.gain());
+    // Match the existing DAQ client's operational limits for explicit gains.
+    // Keep the omitted-field legacy path (gain=0, 12-bit offset) compatible.
+    if ((channel.gain() == 1 && channel.offset() > 2700) ||
+        (channel.gain() == 2 && channel.offset() > 1500))
+      throw std::invalid_argument("Channel offset exceeds DAQ limit for ChannelConfig.gain: "
+                                  "x1 allows 0..2700; x2 allows 0..1500");
   }
   std::set<uint32_t> afes;
   for (const auto& afe : config.afes()) {
