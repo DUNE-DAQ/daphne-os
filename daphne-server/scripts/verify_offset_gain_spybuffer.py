@@ -7,6 +7,10 @@ trim or HV, or send an aggregate Configure request. Requires prior alignment.
 Sequence: 2200/x1, 1100/x2, 1100/x1 control, 2200/x1 repeat. Final setting is
 2200/x1, NOT restoration of unknown previous DAC state (there is no readback).
 This qualifies the low-level DAC path, not aggregate Configure end-to-end.
+With --configure-zero-bias, instead run full self-trigger Configure + AlignAFE
+for each setting, including AFE reset/power, trim=0, VGAIN=1700 and the reference
+AFE profile. Explicitly write all five BIAS=0 and BIASCTRL=0 first. The existing
+Configure enable behavior is retained. This option changes the full FE setup.
 """
 
 import argparse
@@ -16,6 +20,22 @@ import statistics
 import sys
 import time
 from pathlib import Path
+
+
+def zero_bias_profile(code, gain):
+    """Reference FE profile with the user's explicit zero-bias settings."""
+    if gain not in (1, 2) or not 0 <= code <= (2700 if gain == 1 else 1500):
+        raise ValueError("Invalid offset/gain for full zero-bias test")
+    return {
+        "slot": 0, "timeout_ms": 30000, "biasctrl": 0,
+        "self_trigger_threshold": 0xC, "self_trigger_xcorr": 0x68,
+        "tp_conf": 0x0010DB35, "compensator": 0xFFFFFFFFFF, "inverters": 0xFF00000000,
+        "channels": [{"id": ch, "trim": 0, "offset": code, "gain": gain} for ch in range(40)],
+        "afes": [{"id": afe, "attenuators": 1700, "v_bias": 0,
+                  "adc": {"resolution": False, "output_format": True, "sb_first": False},
+                  "pga": {"lpf_cut_frequency": 4, "integrator_disable": True, "gain": False},
+                  "lna": {"clamp": 2, "gain": 2, "integrator_disable": True}} for afe in range(5)],
+    }
 
 
 def summarize(frames, output_format="offset-binary"):
@@ -77,11 +97,15 @@ def main():
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--apply-offsets", action="store_true", required=True,
                         help="Acknowledge analog writes and final 2200/x1 setting")
+    parser.add_argument("--configure-zero-bias", action="store_true",
+                        help="Full self-trigger FE configuration + alignment at every setting; all 40 channels; BIAS/BIASCTRL=0")
     args = parser.parse_args()
     if len(set(args.afes)) != len(args.afes) or any(afe not in range(5) for afe in args.afes):
         parser.error("AFE indices must be unique and in 0..4")
     if not 2 <= args.waveforms <= 100 or not 1 <= args.samples <= 2048 or args.tolerance_adc <= 0:
         parser.error("Require 2..100 waveforms, 1..2048 samples and positive tolerance")
+    if args.configure_zero_bias and (args.mode != "self-trigger" or args.afes != list(range(5))):
+        parser.error("Full configuration requires self-trigger mode and --afes 0 1 2 3 4")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     # Exclusive creation prevents overwriting an earlier qualification run.
     raw = (args.output_dir / "captures.jsonl").open("x")
@@ -89,11 +113,12 @@ def main():
     import zmq
     import daphneV3_high_level_confs_pb2 as high
     import daphneV3_low_level_confs_pb2 as low
+    from google.protobuf.json_format import ParseDict
 
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.LINGER, 0)
-    socket.setsockopt(zmq.RCVTIMEO, 10000)
+    socket.setsockopt(zmq.RCVTIMEO, 45000 if args.configure_zero_bias else 10000)
     socket.setsockopt(zmq.SNDTIMEO, 5000)
     socket.connect(args.endpoint)
     sequence = 0
@@ -105,6 +130,9 @@ def main():
               "samples_per_waveform": args.samples, "tolerance_adc": args.tolerance_adc,
               "scope": "Low-level offset DAC path; not aggregate Configure",
               "final_requested_setting": {"offset": 2200, "gain": 1}}
+    if args.configure_zero_bias:
+        report["scope"] = "Full zero-bias Configure + explicit AlignAFE at every offset/gain setting"
+        report["aggregate_configurations"] = {}
 
     def require(ok, message):
         if not ok:
@@ -131,11 +159,41 @@ def main():
         require(result.afeBlock == afe and result.offsetValue == code and result.offsetGain == (gain == 2),
                 "Offset command acknowledgement mismatch (not hardware readback)")
 
+    def configure_zero_bias(label, code, gain):
+        entry = {"request": zero_bias_profile(code, gain), "explicit_zero_bias_commands": []}
+        report["aggregate_configurations"][label] = entry
+        # Do not rely on v_bias=0 in aggregate Configure: legacy code skips it.
+        ctrl = call(high.MT2_WRITE_VBIAS_CONTROL_REQ,
+                    low.cmd_writeVbiasControl(vBiasControlValue=0, enable=True),
+                    low.cmd_writeVbiasControl_response)
+        require(ctrl.vBiasControlValue == 0, "Zero BIASCTRL command acknowledgement mismatch")
+        entry["biasctrl_zero_acknowledged"] = True
+        for afe in args.afes:
+            bias = call(high.MT2_WRITE_AFE_BIAS_SET_REQ,
+                        low.cmd_writeAFEBiasSet(afeBlock=afe, biasValue=0),
+                        low.cmd_writeAFEBiasSet_response)
+            require(bias.afeBlock == afe and bias.biasValue == 0, "Zero BIAS command acknowledgement mismatch")
+            entry["explicit_zero_bias_commands"].append(afe)
+        touched[:] = args.afes
+        configured = call(high.MT2_CONFIGURE_FE_REQ,
+                          ParseDict(entry["request"], high.ConfigureRequest()), high.ConfigureResponse)
+        entry["configure_response"] = configured.message
+        require(configured.message.count("Offset DAC gain: x" + str(gain)) == 40,
+                "Full Configure did not report the requested gain on all 40 channels")
+        aligned = call(high.MT2_ALIGN_AFE_REQ, low.cmd_alignAFEs(), low.cmd_alignAFEs_response)
+        entry["alignment_response"] = aligned.message
+        entry["delay_pl_order"] = list(aligned.delay)
+        entry["bitslip_pl_order"] = list(aligned.bitslip)
+        require(len(aligned.delay) == 5 and len(aligned.bitslip) == 5
+                and aligned.message.count("verify=PASS") == 5,
+                "Not all five AFEs passed settled alignment verification")
+        print(label + ": full zero-bias Configure and all five AFEs aligned", flush=True)
+
     def read_afe_state():
         state = {}
         for afe in args.afes:
             registers = {}
-            for address in (2, 4, 51):
+            for address in (1, 2, 3, 4, 51, 52):
                 observed = []
                 for _ in range(2):
                     result = call(high.MT2_READ_AFE_REG_REQ,
@@ -148,6 +206,11 @@ def main():
                 registers[str(address)] = observed[0]
             require((registers["2"] >> 13) == 0, "AFE is emitting a test pattern, not analog samples")
             require((registers["4"] & 2) == 0, "This verifier requires 14-bit ADC resolution")
+            if args.configure_zero_bias:
+                for address, expected in {1: 0, 2: 0, 3: 0x2000, 4: 8, 51: 0x58, 52: 0x5400}.items():
+                    require(registers[str(address)] == expected,
+                            "Unexpected configured AFE {} register {}: 0x{:x}".format(
+                                afe, address, registers[str(address)]))
             state[str(afe)] = registers
         return state
 
@@ -179,16 +242,27 @@ def main():
                 "Unexpected firmware identity; no offset writes sent")
         report["aggregate_gain_capability"] = next(
             (item.supported for item in status.capabilities if item.name == "ChannelConfig.gain"), None)
-        report["afe_registers_before"] = read_afe_state()
-        report["adc_output_formats"] = {
-            afe: "offset-binary" if registers["4"] & 8 else "twos-complement"
-            for afe, registers in report["afe_registers_before"].items()}
+        if args.configure_zero_bias:
+            require(report["aggregate_gain_capability"] is True, "Server does not advertise aggregate offset gain support")
+        else:
+            report["afe_registers_before"] = read_afe_state()
         for label, code, gain in (("a_2200_x1", 2200, 1), ("b_1100_x2", 1100, 2),
                                   ("control_1100_x1", 1100, 1), ("repeat_2200_x1", 2200, 1)):
-            for afe in args.afes:
-                if afe not in touched:
-                    touched.append(afe)  # Include an AFE even if its write times out.
-                write_offset(afe, code, gain)
+            if args.configure_zero_bias:
+                configure_zero_bias(label, code, gain)
+                registers = read_afe_state()
+                report["aggregate_configurations"][label]["afe_registers"] = registers
+                if "afe_registers_before" not in report:
+                    report["afe_registers_before"] = registers
+                require(registers == report["afe_registers_before"], "Full configuration changed the fixed AFE profile")
+            else:
+                for afe in args.afes:
+                    if afe not in touched:
+                        touched.append(afe)  # Include an AFE even if its write times out.
+                    write_offset(afe, code, gain)
+            report["adc_output_formats"] = {
+                afe: "offset-binary" if registers["4"] & 8 else "twos-complement"
+                for afe, registers in report["afe_registers_before"].items()}
             time.sleep(0.2)
             frames = {str(ch): [] for ch in channels}
             for number in range(args.waveforms):

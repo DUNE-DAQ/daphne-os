@@ -10,6 +10,23 @@ spec.loader.exec_module(module)
 
 
 class OffsetComparisonTests(unittest.TestCase):
+    def test_full_profile_is_zero_bias_and_complete(self):
+        for code, gain in ((2200, 1), (1100, 2), (1100, 1)):
+            profile = module.zero_bias_profile(code, gain)
+            self.assertEqual(profile["biasctrl"], 0)
+            self.assertEqual([c["id"] for c in profile["channels"]], list(range(40)))
+            self.assertTrue(all(c["offset"] == code and c["gain"] == gain and c["trim"] == 0
+                                for c in profile["channels"]))
+            self.assertEqual([a["id"] for a in profile["afes"]], list(range(5)))
+            self.assertTrue(all(a["v_bias"] == 0 and a["attenuators"] == 1700
+                                and a["adc"]["resolution"] is False and a["adc"]["output_format"] is True
+                                for a in profile["afes"]))
+
+    def test_full_profile_rejects_invalid_offset_gain(self):
+        for code, gain in ((2200, 2), (2701, 1), (-1, 1), (1100, 0), (1100, 3)):
+            with self.assertRaises(ValueError):
+                module.zero_bias_profile(code, gain)
+
     def noisy(self, baseline):
         return module.summarize([[baseline - 1, baseline, baseline + 1],
                                  [baseline + 1, baseline - 1, baseline]])
