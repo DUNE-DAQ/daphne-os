@@ -2,8 +2,27 @@
 
 #include <set>
 #include <stdexcept>
+#include "defines.hpp"
+#include "server_controller/board_monitor.hpp"
 
 namespace daphne_sc {
+daphne::cmd_readAFEReg_response read_live_afe_register(
+    const daphne::cmd_readAFEReg& request,
+    const std::function<uint32_t(uint32_t, uint32_t)>& read_register) {
+  const auto afe_pl = afe_definitions::AFE_board2PL_map.at(request.afeblock());
+  // The AFE driver's register allowlist is checked before it starts SPI.
+  const auto value = read_register(afe_pl, request.regaddress());
+  daphne::cmd_readAFEReg_response response;
+  response.set_afeblock(request.afeblock());
+  response.set_regaddress(request.regaddress());
+  response.set_regvalue(value);
+  response.set_hardware_readback(true);
+  response.set_observed_monotonic_ns(monotonic_time_ns());
+  response.set_success(true);
+  response.set_message("Fresh AFE SPI register readback (not the software command cache)");
+  return response;
+}
+
 std::vector<AfeFunctionWrite> make_afe_function_plan(const daphne::AFEConfig& config) {
   const auto lpf = config.pga().lpf_cut_frequency();
   if (lpf != 0 && lpf != 2 && lpf != 3 && lpf != 4)

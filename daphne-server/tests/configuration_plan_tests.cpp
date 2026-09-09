@@ -57,6 +57,21 @@ int main() {
   rejects([&] { apply_verified_afe_function({"PGA_GAIN_CONTROL", 65536},
                                            [&](const std::string&, uint32_t) { ++writes; return 0; }); });
   require(writes == 0);
+  daphne::cmd_readAFEReg read_request;
+  read_request.set_afeblock(4);
+  read_request.set_regaddress(51);
+  unsigned reads = 0;
+  auto read_response = read_live_afe_register(read_request, [&](uint32_t afe_pl, uint32_t address) {
+    ++reads;
+    require(afe_pl == 1 && address == 51);
+    return 0x2345;
+  });
+  require(reads == 1 && read_response.regvalue() == 0x2345);
+  require(read_response.afeblock() == 4 && read_response.hardware_readback());
+  require(read_response.observed_monotonic_ns() > 0);
+  read_request.set_afeblock(5);
+  rejects([&] { read_live_afe_register(read_request, [&](uint32_t, uint32_t) { ++reads; return 0; }); });
+  require(reads == 1);
   auto invalid = [&](const auto& modify) {
     auto bad = request;
     modify(bad);

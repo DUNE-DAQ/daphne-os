@@ -231,6 +231,9 @@ message cmd_readAFEReg_response {
   uint32 afeBlock  = 3;
   uint32 regAddress= 4;
   uint32 regValue  = 5;
+  // True only after a fresh SPI read, never for the software command cache.
+  bool hardware_readback = 6;
+  uint64 observed_monotonic_ns = 7;
 }
 
 message cmd_readAFEVgain {

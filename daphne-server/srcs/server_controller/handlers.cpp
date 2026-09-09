@@ -1632,12 +1632,11 @@ bool readAFEReg(const cmd_readAFEReg& request,
   try {
     const uint32_t afe_block = afe_definitions::AFE_board2PL_map.at(request.afeblock());
     const uint32_t reg_addr = request.regaddress();
-    const uint32_t reg_value = daphne.getAfeRegDictValue(afe_block, reg_addr);
-    response.set_afeblock(request.afeblock());
-    response.set_regaddress(reg_addr);
-    response.set_regvalue(reg_value);
-    response_str = "AFE Register " + std::to_string(reg_addr) + " read successfully. Value: " +
-                   std::to_string(reg_value) + ".";
+    response = read_live_afe_register(request, [&](uint32_t afe, uint32_t reg) {
+      return daphne.getAfe()->getRegister(afe, reg);
+    });
+    daphne.setAfeRegDictValue(afe_block, reg_addr, response.regvalue());
+    response_str = response.message();
     return true;
   } catch (const std::exception& e) {
     response_str = std::string("Error reading AFE register: ") + e.what();
