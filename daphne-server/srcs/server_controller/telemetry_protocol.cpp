@@ -31,9 +31,9 @@ daphne::GeneralInfo make_general_info(const BoardMonitorSnapshot& sample) {
     auto* voltage = status->add_named_voltages();
     voltage->set_name(names[i]);
     voltage->set_volts(sample.valid_voltage(i));
-    voltage->set_source(std::string("ADS7138 /dev/i2c-1 ") +
+    voltage->set_source(std::string("ADS7138 PS I2C1 ff030000 / MIO24-25 ") +
                         (i < 7 ? "0x10 channel " : "0x17 channel ") +
-                        std::to_string(i < 7 ? i : i - 7));
+                        std::to_string(i < 7 ? i : (i == 7 ? 2 : (i == 8 ? 5 : 7))));
   }
   return result;
 }

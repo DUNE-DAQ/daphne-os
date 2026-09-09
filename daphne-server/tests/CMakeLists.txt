@@ -1,3 +1,8 @@
+add_executable(board_i2c_tests board_i2c_tests.cpp)
+target_link_libraries(board_i2c_tests PRIVATE daphne_i2c_hw)
+add_test(NAME board_i2c_unit COMMAND board_i2c_tests)
+set_tests_properties(board_i2c_unit PROPERTIES LABELS unit)
+
 add_executable(register_reads_tests register_reads_tests.cpp)
 target_link_libraries(register_reads_tests PRIVATE daphne_gateware)
 add_test(NAME register_reads_unit COMMAND register_reads_tests)

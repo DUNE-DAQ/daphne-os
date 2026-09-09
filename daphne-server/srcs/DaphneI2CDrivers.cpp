@@ -1,4 +1,5 @@
 #include "DaphneI2CDrivers.hpp"
+#include "BoardI2C.hpp"
 
 #include <cmath>
 #include <utility>
@@ -811,7 +812,7 @@ double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::decodeRaw(const uint16_t &r
 
 I2CADCsDrivers::ADS7138_Driver::ADS7138_Driver(const uint8_t &deviceAddress):
     deviceAddress(deviceAddress),
-    ADC_ADS7138("/dev/i2c-1", deviceAddress){
+    ADC_ADS7138(board_ps_i2c_adapter(), deviceAddress){
         this->configureDevice();
     }
 

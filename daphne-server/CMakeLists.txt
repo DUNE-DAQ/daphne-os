@@ -49,6 +49,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT I2C_LIB)
 endif()
 
 add_library(daphne_i2c_hw
+  srcs/BoardI2C.cpp
   srcs/I2CDevice.cpp
   srcs/DaphneI2CDrivers.cpp
 )
