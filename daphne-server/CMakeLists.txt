@@ -121,10 +121,15 @@ target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto daphne_gatew
 add_library(daphne_configuration
   srcs/server_controller/configuration_plan.cpp
   srcs/server_controller/runtime_state.cpp
+  srcs/server_controller/configuration_fingerprint.cpp
 )
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
-target_link_libraries(daphne_configuration PUBLIC daphne_proto)
+target_link_libraries(daphne_configuration PUBLIC daphne_proto daphne_gateware)
 if(BUILD_TESTING)
+  add_executable(configuration_fingerprint_tests tests/configuration_fingerprint_tests.cpp)
+  target_link_libraries(configuration_fingerprint_tests PRIVATE daphne_configuration)
+  add_test(NAME configuration_fingerprint_unit COMMAND configuration_fingerprint_tests)
+  set_tests_properties(configuration_fingerprint_unit PROPERTIES LABELS unit)
   add_executable(runtime_state_tests tests/runtime_state_tests.cpp)
   target_link_libraries(runtime_state_tests PRIVATE daphne_configuration Threads::Threads)
   add_test(NAME runtime_state_unit COMMAND runtime_state_tests)
