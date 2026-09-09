@@ -74,6 +74,8 @@ def v2_rpc(sock: zmq.Socket, mtype_req: int, payload_bytes: bytes, route: str, t
     rep = pb_high.ControlEnvelopeV2()
     if not rep.ParseFromString(reply_bytes):
         raise RuntimeError("Failed to parse ControlEnvelopeV2 reply")
+    if getattr(rep, "transport_error", ""):
+        raise RuntimeError(rep.transport_error)
     if rep.dir != pb_high.DIR_RESPONSE:
         raise RuntimeError(f"Unexpected dir={rep.dir} for type={mtype_req}")
     if rep.correl_id and rep.correl_id != env.msg_id:
@@ -167,7 +169,8 @@ def main() -> int:
     ap.add_argument("--afe-count", type=int, default=5, help="Default AFE count if --afes not provided")
 
     ap.add_argument("--skip-bias-monitor", action="store_true", help="Skip bias voltage monitor reads")
-    ap.add_argument("--current-monitor-channel", type=int, default=0, help="Current monitor channel (MT2_READ_CURRENT_MONITOR)")
+    ap.add_argument("--current-monitor-channel", type=int, choices=range(40),
+                    help="Explicitly measure physical channel 0..39: ADC setup and temporary carrier-mux writes; no BIAS writes")
     ap.add_argument("--afe-reg", nargs=2, action="append", metavar=("AFE", "REG"), help="Read/write AFE reg (repeatable)")
 
     ap.add_argument("--do-writes", action="store_true", help="Enable write-back tests where safe")
@@ -257,13 +260,15 @@ def main() -> int:
         return resp
 
     def do_read_current_monitor():
-        req = pb_low.cmd_readCurrentMonitor(currentMonitorChannel=args.current_monitor_channel)
+        req = pb_low.cmd_readCurrentMonitor(physical_channel=args.current_monitor_channel)
         rep = v2_rpc(sock, pb_high.MT2_READ_CURRENT_MONITOR_REQ, req.SerializeToString(), args.route, args.timeout_ms)
         if rep.type != pb_high.MT2_READ_CURRENT_MONITOR_RESP:
             raise RuntimeError(f"type mismatch {rep.type}")
         resp = pb_low.cmd_readCurrentMonitor_response()
         resp.ParseFromString(rep.payload)
-        print_status("READ_CURRENT_MONITOR", resp, f"ch={resp.currentMonitorChannel}")
+        print_status("READ_CURRENT_MONITOR", resp,
+                     f"physical_ch={resp.currentMonitorChannel} quality={pb_low.CurrentMonitorQuality.Name(resp.quality)} "
+                     f"raw={resp.raw_code if resp.HasField('raw_code') else 'unavailable'}; not calibrated amperes")
         return resp
 
     trim_single: Dict[int, int] = {}
@@ -277,7 +282,8 @@ def main() -> int:
     run("READ_TEST_REG", do_test_reg)
     run("READ_GENERAL_INFO", do_general_info)
     run("READ_TRIGGER_COUNTERS", do_trigger_counters)
-    run("READ_CURRENT_MONITOR", do_read_current_monitor)
+    if args.current_monitor_channel is not None:
+        run("READ_CURRENT_MONITOR", do_read_current_monitor)
 
     def read_trim_all_ch():
         req = pb_low.cmd_readTrim_allChannels()
