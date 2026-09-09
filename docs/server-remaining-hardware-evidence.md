@@ -14,10 +14,17 @@ Candidate directory on ONL:
   uses `NetworkInterface` `nw-np02-daphne-015-10g`, containing a Hermes MAC/IP.
   Its stream `GeoId` placement agrees with the board configuration.
 - The board management address resolves to the same IP as DAPHNE-015's DNS
-  record (comparison only; neither value published).
+  record; the Hermes sender's `control_host` also resolves to that same board
+  (comparisons only; no network values published). Placement agrees at
+  crate **4**, slot **1**, detector **8**. The application connects this board
+  configuration to `daphne15-connection` and sender `hds-daphne15`.
 - No timing-endpoint assignment was found in this candidate's XML files yet.
   Confirm the intended authoritative NP02/VST source and trace schema defaults
   or another assignment record before treating an omitted field as assigned.
+  `tp_conf` is present, but encodes trigger parameters, **not** a timing-endpoint
+  address; do not reinterpret it. The inspected records provide one Hermes
+  interface, not an assignment for every physical link, and do not supply a
+  management MAC assignment.
 - Several separately inspected `pds/configs/vst` JSON copies identify board
   **61**, not **15**. Do not use those as DAPHNE-015 assignments.
 
