@@ -13,11 +13,15 @@ With --configure-zero-bias, instead run full self-trigger Configure + AlignAFE
 for each setting, including AFE reset/power, trim=0, VGAIN=1700 and the reference
 AFE profile. Explicitly write all five BIAS=0 and BIASCTRL=0 first. The existing
 Configure enable behavior is retained. This option changes the full FE setup.
+With --sweep-equivalent-codes, instead bracket each even x1 code as A/B/A,
+using half that code at x2. No clipping control or full configuration is sent.
+This requires the reference AFE profile and cached BIAS/BIASCTRL commands zero.
 """
 
 import argparse
 import hashlib
 import json
+import math
 import statistics
 import sys
 import time
@@ -28,6 +32,65 @@ def setting_sequence():
     """Measure repeatability before the potentially saturating control."""
     return (("a_2200_x1", 2200, 1), ("b_1100_x2", 1100, 2),
             ("repeat_2200_x1", 2200, 1), ("control_1100_x1", 1100, 1))
+
+
+def sweep_sequence(codes):
+    if (not 3 <= len(codes) <= 7 or len(set(codes)) != len(codes)
+            or any(type(code) is not int or code % 2 or not 2 <= code <= 2700 for code in codes)):
+        raise ValueError("Require 3..7 distinct even x1 codes in 2..2700")
+    return tuple((f"eq_{code}_{phase}", code // gain, gain)
+                 for code in codes for phase, gain in (("a", 1), ("b", 2), ("repeat", 1))) + (
+                     ("final_2200_x1", 2200, 1),)
+
+
+def usable_capture(result):
+    return (result["rail_fraction"] < 0.01 and result["distinct_frames"] > 1
+            and result["low_rail"] < result["baseline"] < result["high_rail"])
+
+
+def fit_line(xs, ys):
+    center_x, center_y = statistics.mean(xs), statistics.mean(ys)
+    slope = sum((x - center_x) * (y - center_y) for x, y in zip(xs, ys)) / sum(
+        (x - center_x) ** 2 for x in xs)
+    intercept = center_y - slope * center_x
+    return {"slope": slope, "intercept": intercept,
+            "max_residual_adc": max(abs(y - slope * x - intercept) for x, y in zip(xs, ys))}
+
+
+def analyze_sweep(results, codes, channels, tolerance):
+    """Diagnostic local slopes, not a calibration or an automatic correction."""
+    output = {}
+    for ch in map(str, channels):
+        points, x1, x2 = {}, [], []
+        for code in codes:
+            a, b, repeat = (results[f"eq_{code}_{phase}"][ch] for phase in ("a", "b", "repeat"))
+            reference = (a["baseline"] + repeat["baseline"]) / 2
+            delta, drift = b["baseline"] - a["baseline"], repeat["baseline"] - a["baseline"]
+            points[str(code)] = {
+                "equivalent_delta_adc": delta, "repeat_delta_adc": drift,
+                "bracket_delta_adc": b["baseline"] - reference,
+                "usable_captures": all(usable_capture(row) for row in (a, b, repeat)),
+                "within_tolerance": abs(delta) <= tolerance and abs(drift) <= tolerance,
+            }
+            x1.append(reference)
+            x2.append(b["baseline"])
+        fit_x1, fit_x2 = fit_line(codes, x1), fit_line([code / 2 for code in codes], x2)
+        noise = max(results[label][ch]["within_frame_rms"] for label in results)
+        drift = max(abs(row["repeat_delta_adc"]) for row in points.values())
+        responsive = min(max(x1) - min(x1), max(x2) - min(x2)) > 5 * max(noise, drift, 1)
+        same_direction = fit_x1["slope"] * fit_x2["slope"] > 0
+        for row in points.values():
+            row["equivalent_x1_code_difference"] = (
+                row["bracket_delta_adc"] / fit_x1["slope"] if responsive and same_direction else None)
+        output[ch] = {
+            "points": points, "x1_fit_per_dac_code": fit_x1, "x2_fit_per_dac_code": fit_x2,
+            "slope_ratio_x2_over_x1": fit_x2["slope"] / fit_x1["slope"]
+                if responsive and same_direction else None,
+            "offset_response_observed": responsive, "same_slope_direction": same_direction,
+            "comparison_pass": responsive and same_direction and usable_capture(results["final_2200_x1"][ch])
+                and all(row["usable_captures"] and row["within_tolerance"] for row in points.values()),
+        }
+    return output
 
 
 def zero_bias_profile(code, gain):
@@ -107,13 +170,26 @@ def main():
                         help="Acknowledge analog writes and final 2200/x1 setting")
     parser.add_argument("--configure-zero-bias", action="store_true",
                         help="Full self-trigger FE configuration + alignment at every setting; all 40 channels; BIAS/BIASCTRL=0")
+    parser.add_argument("--sweep-equivalent-codes", type=int, nargs="+",
+                        help="Diagnostic A/B/A sweep: 3..7 distinct even x1 codes; x2 uses half each code")
+    parser.add_argument("--settle-seconds", type=float, default=0.2,
+                        help="Wait after each offset setting before capturing (0.2..10 seconds)")
     args = parser.parse_args()
     if len(set(args.afes)) != len(args.afes) or any(afe not in range(5) for afe in args.afes):
         parser.error("AFE indices must be unique and in 0..4")
-    if not 2 <= args.waveforms <= 100 or not 1 <= args.samples <= 2048 or args.tolerance_adc <= 0:
+    if (not 2 <= args.waveforms <= 100 or not 1 <= args.samples <= 2048
+            or not math.isfinite(args.tolerance_adc) or args.tolerance_adc <= 0):
         parser.error("Require 2..100 waveforms, 1..2048 samples and positive tolerance")
+    if not 0.2 <= args.settle_seconds <= 10:
+        parser.error("Settling interval must be 0.2..10 seconds")
     if args.configure_zero_bias and (args.mode != "self-trigger" or args.afes != list(range(5))):
         parser.error("Full configuration requires self-trigger mode and --afes 0 1 2 3 4")
+    if args.configure_zero_bias and args.sweep_equivalent_codes:
+        parser.error("Sweep requires prior full initialization; cannot combine with full Configure")
+    try:
+        settings = sweep_sequence(args.sweep_equivalent_codes) if args.sweep_equivalent_codes else setting_sequence()
+    except ValueError as error:
+        parser.error(str(error))
     args.output_dir.mkdir(parents=True, exist_ok=True)
     # Exclusive creation prevents overwriting an earlier qualification run.
     raw = (args.output_dir / "captures.jsonl").open("x")
@@ -137,11 +213,15 @@ def main():
               "afes": args.afes, "channels": channels, "waveforms_per_setting": args.waveforms,
               "samples_per_waveform": args.samples, "tolerance_adc": args.tolerance_adc,
               "scope": "Low-level offset DAC path; not aggregate Configure",
-              "setting_order": [label for label, _, _ in setting_sequence()],
+              "setting_order": [label for label, _, _ in settings],
+              "settle_seconds": args.settle_seconds,
               "final_requested_setting": {"offset": 2200, "gain": 1}}
     if args.configure_zero_bias:
         report["scope"] = "Full zero-bias Configure + explicit AlignAFE at every offset/gain setting"
         report["aggregate_configurations"] = {}
+    if args.sweep_equivalent_codes:
+        report["scope"] = "Offset-only A/B/A sweep on reference-configured zero-bias FE; no calibration claim"
+        report["sweep_equivalent_codes"] = args.sweep_equivalent_codes
 
     def require(ok, message):
         if not ok:
@@ -167,6 +247,18 @@ def main():
                       low.cmd_writeOFFSET_allAFE_response)
         require(result.afeBlock == afe and result.offsetValue == code and result.offsetGain == (gain == 2),
                 "Offset command acknowledgement mismatch (not hardware readback)")
+
+    def require_zero_bias_cache():
+        ctrl = call(high.MT2_READ_VBIAS_CONTROL_REQ, low.cmd_readVbiasControl(), low.cmd_readVbiasControl_response)
+        require(ctrl.vBiasControlValue == 0, "BIASCTRL command cache is not zero; no bias changes authorized here")
+        biases = {}
+        for afe in range(5):
+            value = call(high.MT2_READ_AFE_BIAS_SET_REQ, low.cmd_readAFEBiasSet(afeBlock=afe),
+                         low.cmd_readAFEBiasSet_response)
+            require(value.afeBlock == afe and value.biasValue == 0, "BIAS command cache is not zero")
+            biases[str(afe)] = value.biasValue
+        return {"biasctrl": ctrl.vBiasControlValue, "bias_by_afe": biases,
+                "source": "Server command cache, NOT physical voltage readback"}
 
     def configure_zero_bias(label, code, gain):
         entry = {"request": zero_bias_profile(code, gain), "explicit_zero_bias_commands": []}
@@ -215,7 +307,7 @@ def main():
                 registers[str(address)] = observed[0]
             require((registers["2"] >> 13) == 0, "AFE is emitting a test pattern, not analog samples")
             require((registers["4"] & 2) == 0, "This verifier requires 14-bit ADC resolution")
-            if args.configure_zero_bias:
+            if args.configure_zero_bias or args.sweep_equivalent_codes:
                 for address, expected in {1: 0, 2: 0, 3: 0x2000, 4: 8, 51: 0x58, 52: 0x5400}.items():
                     require(registers[str(address)] == expected,
                             "Unexpected configured AFE {} register {}: 0x{:x}".format(
@@ -255,7 +347,9 @@ def main():
             require(report["aggregate_gain_capability"] is True, "Server does not advertise aggregate offset gain support")
         else:
             report["afe_registers_before"] = read_afe_state()
-        for label, code, gain in setting_sequence():
+        if args.sweep_equivalent_codes:
+            report["zero_bias_cache_before"] = require_zero_bias_cache()
+        for label, code, gain in settings:
             if args.configure_zero_bias:
                 configure_zero_bias(label, code, gain)
                 registers = read_afe_state()
@@ -271,7 +365,7 @@ def main():
             report["adc_output_formats"] = {
                 afe: "offset-binary" if registers["4"] & 8 else "twos-complement"
                 for afe, registers in report["afe_registers_before"].items()}
-            time.sleep(0.2)
+            time.sleep(args.settle_seconds)
             frames = {str(ch): [] for ch in channels}
             for number in range(args.waveforms):
                 data = capture()
@@ -283,14 +377,25 @@ def main():
                     frames[ch].append(values)
             results[label] = {ch: summarize(values, report["adc_output_formats"][str(int(ch) // 8)])
                               for ch, values in frames.items()}
-            print(label, {ch: values["baseline"] for ch, values in results[label].items()}, flush=True)
+            if args.sweep_equivalent_codes:
+                baseline = [value["baseline"] for value in results[label].values()]
+                print(f"{label}: baseline range {min(baseline)}..{max(baseline)}", flush=True)
+                require(all(usable_capture(value) for value in results[label].values()),
+                        "Sweep stopped: clipped or stale captures; remaining sweep settings were not sent")
+            else:
+                print(label, {ch: values["baseline"] for ch, values in results[label].items()}, flush=True)
         report["afe_registers_after"] = read_afe_state()
         require(report["afe_registers_after"] == report["afe_registers_before"],
                 "AFE format/test-pattern/PGA registers changed during the comparison")
-        report["channels_compared"] = {
-            str(ch): compare(*(results[label][str(ch)] for label in
-                              ("a_2200_x1", "b_1100_x2", "control_1100_x1", "repeat_2200_x1")),
-                             args.tolerance_adc) for ch in channels}
+        if args.sweep_equivalent_codes:
+            report["zero_bias_cache_after"] = require_zero_bias_cache()
+            report["channels_compared"] = analyze_sweep(results, args.sweep_equivalent_codes, channels,
+                                                      args.tolerance_adc)
+        else:
+            report["channels_compared"] = {
+                str(ch): compare(*(results[label][str(ch)] for label in
+                                  ("a_2200_x1", "b_1100_x2", "control_1100_x1", "repeat_2200_x1")),
+                                 args.tolerance_adc) for ch in channels}
     except Exception as error:
         report["error"] = str(error)
     finally:

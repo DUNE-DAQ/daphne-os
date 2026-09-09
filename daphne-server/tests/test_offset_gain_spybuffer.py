@@ -10,6 +10,58 @@ spec.loader.exec_module(module)
 
 
 class OffsetComparisonTests(unittest.TestCase):
+    def test_sweep_brackets_matching_outputs_and_finishes_at_2200(self):
+        sequence = module.sweep_sequence([2200, 2180, 2220])
+        self.assertEqual(sequence[:3], (("eq_2200_a", 2200, 1), ("eq_2200_b", 1100, 2),
+                                      ("eq_2200_repeat", 2200, 1)))
+        self.assertEqual(len(sequence), 10)
+        self.assertEqual(sequence[-1], ("final_2200_x1", 2200, 1))
+        self.assertNotIn("control_1100_x1", [row[0] for row in sequence])
+
+    def test_sweep_rejects_bad_codes_before_writes(self):
+        for codes in ([2200], [2200, 2200, 2180], [2200, 2181, 2220], [0, 2, 4],
+                      [2698, 2700, 2702], [2, 4, 6, 8, 10, 12, 14, 16], [2.0, 4, 6]):
+            with self.assertRaises(ValueError):
+                module.sweep_sequence(codes)
+
+    def sweep_data(self, difference=20, drift=2, slope=10):
+        codes = [2200, 2180, 2220]
+        results = {}
+        for code in codes:
+            base = 6000 + slope * (code - 2200)
+            for phase, offset in (("a", 0), ("b", difference), ("repeat", drift)):
+                results[f"eq_{code}_{phase}"] = {"0": self.noisy(base + offset)}
+        results["final_2200_x1"] = {"0": self.noisy(6000)}
+        return codes, results
+
+    def test_sweep_fits_slopes_in_actual_dac_codes(self):
+        codes, results = self.sweep_data()
+        row = module.analyze_sweep(results, codes, [0], 164)["0"]
+        self.assertTrue(row["comparison_pass"])
+        self.assertEqual(row["x1_fit_per_dac_code"]["slope"], 10)
+        self.assertEqual(row["x2_fit_per_dac_code"]["slope"], 20)
+        self.assertEqual(row["slope_ratio_x2_over_x1"], 2)
+        self.assertEqual(row["points"]["2200"]["bracket_delta_adc"], 19)
+        self.assertEqual(row["points"]["2200"]["equivalent_x1_code_difference"], 1.9)
+
+    def test_sweep_reports_large_difference_without_relaxing_tolerance(self):
+        codes, results = self.sweep_data(difference=236)
+        row = module.analyze_sweep(results, codes, [0], 164)["0"]
+        self.assertFalse(row["comparison_pass"])
+        self.assertEqual(row["slope_ratio_x2_over_x1"], 2)
+
+    def test_sweep_rejects_flat_drifting_or_clipped_data(self):
+        for settings in ({"slope": 0}, {"drift": 200}):
+            codes, results = self.sweep_data(**settings)
+            self.assertFalse(module.analyze_sweep(results, codes, [0], 164)["0"]["comparison_pass"])
+        codes, results = self.sweep_data()
+        results["eq_2200_b"]["0"] = module.summarize([[0, 0, 0], [0, 0, 1]])
+        self.assertFalse(module.usable_capture(results["eq_2200_b"]["0"]))
+        self.assertFalse(module.analyze_sweep(results, codes, [0], 164)["0"]["comparison_pass"])
+        codes, results = self.sweep_data()
+        results["final_2200_x1"]["0"] = module.summarize([[1, 2, 3]] * 2)
+        self.assertFalse(module.analyze_sweep(results, codes, [0], 164)["0"]["comparison_pass"])
+
     def test_repeat_precedes_potentially_clipping_control(self):
         self.assertEqual(module.setting_sequence(), (
             ("a_2200_x1", 2200, 1), ("b_1100_x2", 1100, 2),
