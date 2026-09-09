@@ -26,6 +26,32 @@ profile.
 The unload helper deliberately propagates `xmutil`, `dfx-mgr-client`, or
 `fpgautil` failures.
 
+Reading service status:
+
+```sh
+sudo systemctl status daphne --no-pager --full
+sudo daphne-gateware status
+sudo journalctl -u daphne -b --no-pager
+```
+
+`systemctl status daphne` includes a short `Status:` line with the configured
+mode, ABI, build and whether a timing profile was supplied. It is a startup
+configuration summary, not a live health check: `active (running)` means the
+server process is running, not that sensors or timing are qualified. Use
+`daphne-gateware status` for the live FPGA identity and the journal for driver
+warnings. A configured timing profile does not prove timing lock. The summary
+is refreshed on service starts/stops, not whenever someone edits a config file.
+
+The `disabled` label on `daphne.service` is expected: the enabled
+`daphne-runtime.target` owns startup and brings in the server as a dependency.
+Do not enable or restart the server independently to change FPGA modes; use
+`daphne-gateware switch` to retain the stop/load/verify ordering.
+
+The display helper sends only systemd `STATUS=` notifications. It does not
+change the main PID, announce readiness, probe/write registers, or configure
+the network. Reporting failures are non-fatal and notifications are bounded
+to three seconds. Logs retain all existing warnings under the `daphne` label.
+
 The two checked-in profile files contain fail-closed release placeholders for
 their immutable `daphne_selftrigger_ol_<7sha>` and
 `daphne_fullstream_ol_<7sha>` app directory names. Release packaging must

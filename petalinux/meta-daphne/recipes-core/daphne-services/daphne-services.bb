@@ -15,6 +15,7 @@ SRC_URI += " \
   file://daphne-gateware-prepare.service \
   file://daphne-gateware-verify.service \
   file://daphne-gateware \
+  file://daphne-service-status \
   file://daphne-gateware-self-trigger.conf \
   file://daphne-gateware-full-stream.conf \
   file://daphne-gateware-default-profile \
@@ -36,6 +37,7 @@ RDEPENDS:${PN} += " \
     python3-core \
     python3-fcntl \
     python3-io \
+    systemd-extra-utils \
     xmutil \
 "
 
@@ -75,7 +77,7 @@ do_install() {
         install -m 0644 ${WORKDIR}/${unit} ${D}${systemd_system_unitdir}/${unit}
     done
 
-    for script in daphne-fw.sh daphne-fw-stop.sh daphne-clockchip.sh daphne-endpoint-init.py; do
+    for script in daphne-fw.sh daphne-fw-stop.sh daphne-clockchip.sh daphne-endpoint-init.py daphne-service-status; do
         install -m 0755 ${WORKDIR}/${script} ${D}/usr/local/bin/${script}
     done
 }
@@ -94,6 +96,7 @@ FILES:${PN} += " \
     /usr/local/bin/daphne-fw-stop.sh \
     /usr/local/bin/daphne-clockchip.sh \
     /usr/local/bin/daphne-endpoint-init.py \
+    /usr/local/bin/daphne-service-status \
     ${datadir}/daphne-services/README.services \
     ${sysconfdir}/default/firmware \
     ${sysconfdir}/daphne-gateware/default-profile \
