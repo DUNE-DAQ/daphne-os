@@ -1,5 +1,15 @@
 # DAPHNE OS follow-up work
 
+## Resolve monitor/service device identities before retargeting buses
+
+DAPHNE-015 voltage acquisition remains unqualified. The scan-count software
+bug is fixed, but ADS7138 initialization still fails and legacy I2C/SPI node
+numbers do not match live enumeration. Establish the deployed controller/mux
+routes against board wiring, then use stable identities and narrowly targeted
+validation. Do not infer missing hardware from missing Linux clients or repair
+this through blind bus scans/renumbering. Preserve CERN MAC/IP and clock/bias
+policy. See [the telemetry audit](telemetry-ams-verification.md).
+
 ## Qualify unattended boot redundancy for underground deployment
 
 Do not adopt an A/B eMMC layout merely because both slots can be written and
