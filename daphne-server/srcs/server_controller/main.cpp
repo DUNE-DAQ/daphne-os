@@ -25,6 +25,7 @@ int main(int argc, char* argv[]) {
   std::string gateware_mode_value;
   std::string expected_gateware_build_id_value;
   bool disable_monitoring = false;
+  bool no_mezzanines = false;
   int monitor_period_ms = 200;
 
   daphne_sc::RouterServerOptions server_opts;
@@ -36,6 +37,9 @@ int main(int argc, char* argv[]) {
   app.add_option("--expected-gateware-build-id", expected_gateware_build_id_value,
                  "Optional expected 32-bit gateware build ID (decimal or 0x-prefixed hex)");
   app.add_flag("--disable-monitoring", disable_monitoring, "Disable background I2C monitoring threads");
+  app.add_flag("--no-mezzanines", no_mezzanines,
+               "Operator declares no mezzanines fitted: skip mux and downstream driver initialization")
+      ->envname("DAPHNE_NO_MEZZANINES");
   app.add_option("--monitor-period-ms", monitor_period_ms, "Monitoring period in milliseconds")
       ->default_val(monitor_period_ms);
 
@@ -103,7 +107,7 @@ int main(int argc, char* argv[]) {
   }
 
   zmq::context_t context(1);
-  Daphne daphne;
+  Daphne daphne(!no_mezzanines);
 
   std::vector<std::thread> monitor_threads;
   if (!disable_monitoring) {

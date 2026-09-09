@@ -33,7 +33,8 @@ class Daphne {
 public:
     // Constructor
 
-    Daphne();
+    explicit Daphne(bool enable_mezzanines = true);
+    const bool mezzanine_access_enabled;
 
     // Destructor
     ~Daphne();

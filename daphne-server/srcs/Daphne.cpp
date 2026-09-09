@@ -3,8 +3,9 @@
 #include <thread>
 #include <chrono>
 
-Daphne::Daphne()
-	: afe(std::make_unique<Afe>()),
+Daphne::Daphne(bool enable_mezzanines)
+	: mezzanine_access_enabled(enable_mezzanines),
+	  afe(std::make_unique<Afe>()),
 	  dac(std::make_unique<Dac>()),
 	  frontend(std::make_unique<FrontEnd>()),
 	  spyBuffer(std::make_unique<SpyBuffer>())
@@ -12,7 +13,10 @@ Daphne::Daphne()
 		this->initRegDictHistory();
 
 		try {
-			hdmezzdriver = std::make_unique<I2CMezzDrivers::HDMezzDriver>();
+			if (mezzanine_access_enabled)
+				hdmezzdriver = std::make_unique<I2CMezzDrivers::HDMezzDriver>();
+			else
+				std::cerr << "Mezzanine access disabled by operator population policy; no mux or downstream initialization" << std::endl;
 		} catch (const std::exception &e) {
 			std::cerr << "Warning: HDMezzDriver unavailable: " << e.what() << std::endl;
 			hdmezzdriver.reset();
