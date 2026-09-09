@@ -5,7 +5,8 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `2dd11b9`, including
+Current DAPHNE-015 server: `56b390f`, including
+[schematic-backed voltage/carrier telemetry and services](carrier-telemetry-and-services-verification.md),
 [named AMS temperatures and the voltage scan-count fix](telemetry-ams-verification.md)
 and the [aggregate zero-BIAS correction](aggregate-bias-verification.md). Prior
 offset-gain measurements below retain their original server provenance.
@@ -40,9 +41,10 @@ preserved history. Relevant prior work:
 | Aggregate per-AFE BIAS | Every present AFE entry applies its BIAS code, including zero; order resolved by AFE ID | Two direct zero-only hardware configurations pass, without low-level workaround. Nonzero/mixed values tested with mocks; analog voltage unqualified |
 | Analog configuration validation | Reject bad IDs, duplicates, DAC ranges, LPF/LNA codes and invalid gain before reset/quiesce/writes | Full zero-bias configuration tested. Nonzero-bias operation unqualified |
 | Counter reads, request 320 | ABI-2 address only; reject invalid channels; volatile ordered high/low/high reads; clear partial response on retry exhaustion | Not a common-time latch across counters or protection against concurrent external resets |
-| I293, bias and rail telemetry | One complete scan per ADC; one mutex-protected cache generation, quality, names/units, source and acquisition times | ADS7138 initialization fails on the configured bus; physical binding and real voltage acquisition unqualified |
-| I200–I202, named temperatures | Three identified AMS die sensors, Celsius, quality and host observation times | Deployed self-trigger test passes. Not ambient/other sensors, thermal-alarm thresholds or ADC conversion timestamps |
-| M009, GeneralInfo temperature | Explicit unavailable quality and NaN, not default zero | Bind a specifically identified sensor before publishing temperature |
+| I293, bias and rail telemetry | One complete scan per ADC; coherent cache, quality, names/units and times; schematic-backed PS I2C1 binding | Real acquisition/freshness tested; five supply rails near nominal. Bias residuals and external calibration remain unqualified |
+| I200–I202, named temperatures | Three AMS die sensors plus identified carrier U9 MCP9808; Celsius, quality and host observation times | Four readings deployed and tested. Not thermal-alarm thresholds, all possible sensors or ADC conversion timestamps |
+| M009, GeneralInfo temperature | Bound to identified carrier U9; additive source/time metadata; failures NaN with quality | Real carrier readout tested; not calibrated ambient temperature |
+| Service observations / proposed SV017 instance | Eight allow-listed systemd unit observations, available PID/restart/exit data; same-PID invocation ID and uptime | Deployed; service state is not hardware readiness, heartbeat or authentication. Configured app name is not live xmutil inventory |
 | I264, timing usable | Endpoint source + both MMCM locks + FSM 8 + timestamp-valid + no reset requests | Sampled observation only; not a continuous lock guarantee |
 | I273/TI001, live timestamp | Explicit unsupported capability; never interpret spy-capture words as a live timestamp | Requires a firmware-supported coherent export |
 | I058/I059/I061, legacy identity offsets | Explicit unsupported crate/slot/detector readback; expose common ABI identity instead | Do not read self-trigger controls under old identity names |
@@ -113,7 +115,8 @@ Existing field numbers and request IDs are retained. Additive fields carry
 measurement quality, source/acquisition metadata, hardware readback and
 capabilities. The original system-status schema is retained, but empty
 inventory fields are not claims that absent devices or values were measured.
-Only level 0 with optional probes disabled is supported; I2C scans are rejected.
+Only level 0 is supported. `include_ps_values` is accepted for the bounded host
+metadata already included at level 0; I2C scans, xmutil and SFP probes are rejected.
 
 Legacy GeneralInfo voltage doubles are NaN when invalid, stale or unavailable.
 Its `power_*` fields keep their old voltage mappings; named voltages state the

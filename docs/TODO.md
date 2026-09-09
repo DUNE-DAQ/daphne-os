@@ -1,14 +1,22 @@
 # DAPHNE OS follow-up work
 
-## Resolve monitor/service device identities before retargeting buses
+## Finish schematic-backed onboard monitor bindings
 
-DAPHNE-015 voltage acquisition remains unqualified. The scan-count software
-bug is fixed, but ADS7138 initialization still fails and legacy I2C/SPI node
-numbers do not match live enumeration. Establish the deployed controller/mux
-routes against board wiring, then use stable identities and narrowly targeted
-validation. Do not infer missing hardware from missing Linux clients or repair
-this through blind bus scans/renumbering. Preserve CERN MAC/IP and clock/bias
-policy. See [the telemetry audit](telemetry-ams-verification.md).
+The schematic-backed PS I2C1 binding now restores both ADS7138 voltage ADCs;
+carrier U9 MCP9808 and three AMS die temperatures are deployed and tested.
+See [the carrier/services qualification](carrier-telemetry-and-services-verification.md).
+Supply values are plausible, not externally calibrated; zero-command VBIAS0/1
+residual readings still need characterization without assuming physical zero.
+
+Next, reconcile onboard U6 ADS1261 (schematic sheet 7) with the legacy
+ADS1260-labelled current-monitor driver and its absent `/dev/spidev3.0` path.
+Also bind the onboard sheet-11/12 regulators, currently hardcoded to absent
+`/dev/i2c-2`, by verified PL-controller identity. Review initialization writes
+before retargeting either driver. No mezzanines are fitted on DAPHNE-015, but
+these onboard devices are not thereby absent. Do not use broad scans, infer
+physical absence from Linux clients, or change CERN MAC/IP and clock/bias
+policy. Temperature alarm thresholds and additional sensor coverage remain
+separate qualification work.
 
 ## Qualify unattended boot redundancy for underground deployment
 

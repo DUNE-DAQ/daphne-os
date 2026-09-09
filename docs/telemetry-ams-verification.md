@@ -1,5 +1,10 @@
 # DAPHNE-015: temperature export and voltage acquisition
 
+Historical report. The subsequent
+[schematic-backed carrier/services update](carrier-telemetry-and-services-verification.md)
+resolves the voltage bus binding and GeneralInfo carrier-temperature binding.
+The results below retain their original server provenance.
+
 2026-09-09 (workstation date). Server **`2dd11b9` deployed** on the existing
 self-trigger ABI 2.0 firmware `0x03F17F1B`; client verifier `9caab83`.
 No new OS/FPGA image, bus assignment or network configuration was installed.
