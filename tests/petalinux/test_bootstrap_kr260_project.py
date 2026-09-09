@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = ROOT / "scripts" / "petalinux" / "bootstrap_kr260_project.sh"
 LOCAL_APPEND = ROOT / "petalinux" / "config" / "kr260" / "local.conf.append"
 EMMC_WKS = ROOT / "petalinux" / "meta-daphne" / "wic" / "daphne-emmc.wks"
+DEVELOPER_WKS = EMMC_WKS.with_name("daphne-emmc-developer.wks.in")
 DEVELOPER_PACKAGEGROUP = (
     ROOT / "petalinux" / "meta-daphne" / "recipes-core" / "packagegroups"
     / "packagegroup-daphne-server-build.bb"
@@ -161,7 +163,9 @@ class BootstrapKr260ProjectTests(unittest.TestCase):
             fragment,
         )
         self.assertIn(
-            'WKS_FILE:pn-petalinux-image-minimal = "daphne-emmc.wks"',
+            'WKS_FILE:pn-petalinux-image-minimal = "'
+            "${@bb.utils.contains('DAPHNE_IMAGE_PROFILE', 'developer', "
+            "'daphne-emmc-developer.wks.in', 'daphne-emmc.wks', d)}\"",
             fragment,
         )
 
@@ -169,6 +173,74 @@ class BootstrapKr260ProjectTests(unittest.TestCase):
         self.assertIn("--fixed-size=128M", wks)
         self.assertIn("--label boot", wks)
         self.assertIn("--label root", wks)
+
+    def test_developer_workspace_budget_is_scoped_to_runtime_image(self) -> None:
+        fragment = LOCAL_APPEND.read_text(encoding="utf-8")
+        self.assertIn(
+            'IMAGE_ROOTFS_EXTRA_SPACE:pn-petalinux-image-minimal ?= "'
+            "${@bb.utils.contains('DAPHNE_IMAGE_PROFILE', 'developer', "
+            "'2097152', '0', d)}\"",
+            fragment,
+        )
+        self.assertNotIn("\nIMAGE_ROOTFS_EXTRA_SPACE =", fragment)
+
+    def test_developer_wic_only_adds_root_filesystem_workspace(self) -> None:
+        def partitions(path: Path) -> list[list[str]]:
+            return [
+                shlex.split(line)
+                for line in path.read_text(encoding="utf-8").splitlines()
+                if line.startswith("part ")
+            ]
+
+        compact = partitions(EMMC_WKS)
+        developer = partitions(DEVELOPER_WKS)
+        self.assertEqual(len(compact), 2)
+        self.assertEqual(len(developer), 2)
+        self.assertEqual(developer[0], compact[0])
+        # PetaLinux 2026.1 detects explicit --extra-space via the literal flag
+        # token; the equals form is parsed but then reset to its 10 MiB default.
+        self.assertEqual(
+            developer[1], compact[1] + ["--extra-space", "${IMAGE_ROOTFS_EXTRA_SPACE}K"]
+        )
+        self.assertFalse(any("--extra-space" in arg for part in compact for arg in part))
+
+    def test_profile_switch_refreshes_config_and_copies_developer_template(self) -> None:
+        with tempfile.TemporaryDirectory() as root_text:
+            project = Path(root_text) / "project"
+            (project / "build" / "conf").mkdir(parents=True)
+            (project / "project-spec" / "configs").mkdir(parents=True)
+            (project / "build" / "conf" / "bblayers.conf").write_text(
+                'BBLAYERS = ""\n', encoding="utf-8"
+            )
+            local_conf = project / "build" / "conf" / "local.conf"
+            local_conf.write_text("", encoding="utf-8")
+            (project / "project-spec" / "configs" / "config").write_text(
+                "", encoding="utf-8"
+            )
+            for profile in ("developer", "minimal", "provisioning", "developer"):
+                with self.subTest(profile=profile):
+                    subprocess.run(
+                        [str(BOOTSTRAP), str(project), "--image-profile", profile],
+                        check=True,
+                        env={
+                            **os.environ,
+                            "DAPHNE_OS_ROOT": str(ROOT),
+                            "DAPHNE_META_LAYER_MODE": "copy",
+                        },
+                        text=True,
+                        capture_output=True,
+                    )
+                    config = local_conf.read_text(encoding="utf-8")
+                    self.assertIn(f'DAPHNE_IMAGE_PROFILE = "{profile}"', config)
+                    self.assertEqual(config.count("\nDAPHNE_IMAGE_PROFILE ="), 1)
+                    self.assertEqual(config.count("\nWKS_FILE:"), 1)
+                    self.assertEqual(config.count("\nIMAGE_ROOTFS_EXTRA_SPACE:"), 1)
+                    self.assertIn(LOCAL_APPEND.read_text(encoding="utf-8"), config)
+                    template = (
+                        project / "project-spec" / "meta-daphne" / "wic"
+                        / DEVELOPER_WKS.name
+                    )
+                    self.assertEqual(template.read_bytes(), DEVELOPER_WKS.read_bytes())
 
 
 if __name__ == "__main__":

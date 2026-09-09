@@ -1,0 +1,9 @@
+# DAPHNE developer eMMC image: same boot layout and labels as daphne-emmc.wks.
+# Wic rebuilds the root filesystem, so explicitly retain the developer's
+# IMAGE_ROOTFS_EXTRA_SPACE (KiB) budget for native daphne-server builds.
+# This is additional filesystem space, not a fixed partition-size limit;
+# Wic's normal overhead factor still applies as the installed packages grow.
+# Keep --extra-space and its value as separate tokens: PetaLinux 2026.1's
+# parser silently replaces the equals form with its default 10 MiB budget.
+part /boot --source rootfs --change-directory=boot --fixed-size=128M --fstype=vfat --use-label --label boot --active --align 4
+part /     --source rootfs --exclude-path=boot/                     --fstype=ext4 --use-label --label root          --align 4 --extra-space ${IMAGE_ROOTFS_EXTRA_SPACE}K

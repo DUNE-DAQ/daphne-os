@@ -186,6 +186,40 @@ Current default:
 - use `--image-profile developer` only when you explicitly want the on-target
   build stack and are prepared to carry a larger image footprint
 
+### Developer build workspace
+
+The `developer` profile defaults `IMAGE_ROOTFS_EXTRA_SPACE` to `2097152` KiB
+(2 GiB), scoped to `petalinux-image-minimal`. Both `rootfs.ext4` and the root
+filesystem inside `rootfs.wic.gz` receive this extra-space budget. The developer
+WIC uses `daphne-emmc-developer.wks.in`: Wic's `rootfs` source rebuilds the
+filesystem instead of copying the already-sized `rootfs.ext4`, so the template
+explicitly passes `--extra-space ${IMAGE_ROOTFS_EXTRA_SPACE}K`. Keep the option
+and value as separate tokens: PetaLinux 2026.1's Wic parser silently resets the
+equals form to its 10 MiB default.
+
+To change that budget, set the recipe-scoped value in the project's
+`project-spec/meta-user/conf/petalinuxbsp.conf`, for example:
+
+```bitbake
+IMAGE_ROOTFS_EXTRA_SPACE:pn-petalinux-image-minimal = "2097152"
+```
+
+Wic's normal overhead factor still applies; the budget is not an exact free
+space guarantee after filesystem metadata and reserved blocks. Check `df -h .`
+in the intended build directory on the board before compiling. Larger developer
+images require more destination capacity and take longer to transfer over JTAG.
+Do not apply the extra-space setting globally to RAM-boot/initramfs images.
+
+The `minimal` and `provisioning` profiles retain `daphne-emmc.wks` and their
+compact layout. All profiles retain the 128 MiB FAT `boot` partition, ext4
+`root` label, and partition start alignment. This whole-eMMC packaging setting
+does not change QSPI firmware, U-Boot environment, runtime services, or the
+capacity of existing A/B slots; verify slot size before an inactive-slot update.
+Re-run bootstrap with `--image-profile developer` and rebuild an existing project
+to pick up the corrected template. Previously published images are unchanged.
+
+### Attach the layer to an existing project
+
 If you already have a project and only need to attach the repo-owned layer:
 
 ```bash

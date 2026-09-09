@@ -60,6 +60,11 @@ The `developer` packagegroup is meant to make on-target `daphne-server` /
 the upstream dependency families called out by `daphneZMQ`: ZeroMQ / cppzmq,
 protobuf, abseil, CLI11, Python 3, and the Python client packages.
 
+It also reserves a 2 GiB extra-space budget in the standalone ext4 and WIC root
+filesystems for compiling on the board. The compact profiles keep their existing
+layout. See [developer build workspace](../docs/kr260-petalinux-build-guide.md#developer-build-workspace)
+for configuration and checks before installing a larger image.
+
 The repo now defaults fresh KR260 projects to `minimal`. That keeps the
 current `petalinux-initramfs-image` build under the initramfs size limit. Use
 `provisioning` when no qualified FPGA overlay is available, and use

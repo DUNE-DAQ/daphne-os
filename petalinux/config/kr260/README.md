@@ -62,9 +62,13 @@ Example:
 Use `--image-profile provisioning` for the JTAG/eMMC bootstrap image until a
 qualified overlay bundle has been staged. Use `minimal` for the production
 runtime image only after that overlay has passed the firmware release gates.
-All profiles restore `rootfs.wic.gz` generation with the repo-owned
-`daphne-emmc.wks`; its 128 MiB boot partition keeps whole-device JTAG flashing
-compact while retaining the `boot` and `root` labels expected by U-Boot.
+All profiles restore `rootfs.wic.gz` generation with a 128 MiB boot partition
+and the `boot` and `root` labels expected by U-Boot. The `minimal` and
+`provisioning` profiles use the compact `daphne-emmc.wks`. The developer-only
+`daphne-emmc-developer.wks.in` also reserves the `IMAGE_ROOTFS_EXTRA_SPACE`
+budget (default 2 GiB) inside the WIC root filesystem, not just `rootfs.ext4`.
+See [developer build workspace](../../../docs/kr260-petalinux-build-guide.md#developer-build-workspace)
+for configuration and capacity checks.
 All XSA-based profiles disable the optional QSPI Image Selector. QSPI A/B
 firmware is built and qualified separately through the 2026.1 SDT flow.
 

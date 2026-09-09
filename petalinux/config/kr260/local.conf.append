@@ -10,7 +10,14 @@ DAPHNE_IMAGE_PROFILE ?= "minimal"
 # scoped to the runtime image: applying WIC globally creates a dependency loop
 # through PetaLinux's qemu-image-empty/initramfs helper.
 IMAGE_FSTYPES:append:pn-petalinux-image-minimal = " wic.gz"
-WKS_FILE:pn-petalinux-image-minimal = "daphne-emmc.wks"
+WKS_FILE:pn-petalinux-image-minimal = "${@bb.utils.contains('DAPHNE_IMAGE_PROFILE', 'developer', 'daphne-emmc-developer.wks.in', 'daphne-emmc.wks', d)}"
+
+# Reserve on-board build workspace in the developer ext4 AND whole-eMMC WIC.
+# Wic's rootfs source creates a new filesystem; it does not copy rootfs.ext4
+# or inherit IMAGE_ROOTFS_EXTRA_SPACE. The developer template passes the same
+# KiB budget to Wic explicitly. Keep the default zero for the compact profiles
+# and scope this setting away from the RAM-boot/initramfs helper images.
+IMAGE_ROOTFS_EXTRA_SPACE:pn-petalinux-image-minimal ?= "${@bb.utils.contains('DAPHNE_IMAGE_PROFILE', 'developer', '2097152', '0', d)}"
 
 DAPHNE_RUNTIME_PACKAGES = " \
     daphne-overlay \

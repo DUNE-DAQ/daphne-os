@@ -10,6 +10,12 @@ The PetaLinux `developer` profile includes native GCC/G++, CMake, `protoc`,
 ZeroMQ, Protobuf development libraries, and Python client dependencies.
 The `minimal` image is not a native development environment.
 
+Developer builds now reserve a 2 GiB extra-space budget in both the standalone
+ext4 and whole-eMMC WIC root filesystem. See
+[developer build workspace](kr260-petalinux-build-guide.md#developer-build-workspace)
+for sizing and rebuilding older images. Check `df -h .` in your build directory
+before compiling; existing installations are not automatically resized.
+
 From a clone of `daphne-os` on the board:
 
 ```bash
