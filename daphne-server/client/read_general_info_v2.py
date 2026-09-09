@@ -78,6 +78,10 @@ def main():
             print(f"  temperature:  {g.temperature:.5f} C")
     else:
         print(f"  temperature:  {g.temperature:.5f} C")
+    if g.HasField("temperature_status") and g.temperature_status.HasField("alarm"):
+        alarm = g.temperature_status.alarm
+        print(f"  temperature alarm: {pb_high.TemperatureAlarmState.Name(alarm.state)}")
+        print(f"  warning/high/critical: {alarm.warning_c:g}/{alarm.high_c:g}/{alarm.critical_c:g} C (monitoring only)")
 
 
 if __name__ == "__main__":

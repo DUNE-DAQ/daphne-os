@@ -14,6 +14,42 @@ import sys
 import time
 
 
+def check_temperature_alarm(item, high, required=False):
+    """Validate policy and severity independently of acquisition quality."""
+    from google.protobuf.json_format import MessageToDict
+    if not item.HasField("alarm"):
+        if required:
+            raise RuntimeError("Missing temperature alarm evaluation: " + item.name)
+        return None
+    a = item.alarm
+    if (not all(math.isfinite(x) for x in (a.warning_c, a.high_c, a.critical_c))
+            or not -273.15 <= a.warning_c < a.high_c < a.critical_c <= 1000
+            or not 1 <= a.maximum_age_ms <= 60000 or not a.evaluated_monotonic_ns
+            or not a.policy_source or not a.message):
+        raise RuntimeError("Invalid temperature alarm policy: " + item.name)
+    if (item.quality == high.MEASUREMENT_UNAVAILABLE and not item.valid
+            and math.isnan(item.temperature_c) and not item.observed_monotonic_ns
+            and not item.observed_host_unix_ns):
+        expected = high.TEMPERATURE_ALARM_MISSING
+        age = None
+    elif (item.quality != high.MEASUREMENT_GOOD or not item.valid
+          or not math.isfinite(item.temperature_c) or item.temperature_c < -273.15
+          or not 0 < item.observed_monotonic_ns <= a.evaluated_monotonic_ns):
+        expected = high.TEMPERATURE_ALARM_INVALID
+        age = None
+    else:
+        age = a.evaluated_monotonic_ns - item.observed_monotonic_ns
+        expected = (high.TEMPERATURE_ALARM_STALE if age > a.maximum_age_ms * 1_000_000 else
+                    high.TEMPERATURE_ALARM_CRITICAL if item.temperature_c >= a.critical_c else
+                    high.TEMPERATURE_ALARM_HIGH if item.temperature_c >= a.high_c else
+                    high.TEMPERATURE_ALARM_WARNING if item.temperature_c >= a.warning_c else
+                    high.TEMPERATURE_ALARM_GOOD)
+    if (a.state != expected or a.HasField("observation_age_ns") != (age is not None)
+            or (age is not None and a.observation_age_ns != age)):
+        raise RuntimeError("Temperature alarm disagrees with observation: " + item.name)
+    return MessageToDict(a, preserving_proto_field_name=True)
+
+
 def check_ams_temperatures(readings, high, require_all=False):
     """Validate the named-sensor contract without equating die and ambient temperature."""
     expected = {"Temp_LPD", "Temp_FPD", "Temp_PL"}
@@ -107,6 +143,8 @@ def main():
                         help="Require good voltage acquisition and refreshed cache timestamps")
     parser.add_argument("--require-services", action="store_true",
                         help="Require eight service observations and matching server process identity")
+    parser.add_argument("--require-temperature-alarms", action="store_true",
+                        help="Require active policy and correct alarm evaluation on all named temperature observations")
     parser.add_argument("--check-rejections", action="store_true",
                         help="Send intentionally invalid configuration requests; no writes expected")
     parser.add_argument("--afe-readback", action="store_true",
@@ -228,6 +266,13 @@ def main():
         report["ams_temperatures"] = temperatures
         report["carrier_temperature"] = carrier
         report["general_info_temperature_c"] = info.temperature if math.isfinite(info.temperature) else None
+        if args.require_temperature_alarms and len(status.temperatures) != 4:
+            raise RuntimeError("Missing named temperature observations for alarm qualification")
+        report["temperature_alarms"] = {
+            item.name: check_temperature_alarm(item, high, args.require_temperature_alarms)
+            for item in status.temperatures}
+        report["general_info_temperature_alarm"] = check_temperature_alarm(
+            info.temperature_status, high, args.require_temperature_alarms)
         report["voltages"] = [{"name": item.name, "volts": item.volts if math.isfinite(item.volts) else None,
                                "source": item.source} for item in volts.named_voltages]
         report["services"] = services
