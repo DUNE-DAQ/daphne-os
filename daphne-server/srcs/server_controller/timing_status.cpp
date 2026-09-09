@@ -65,5 +65,11 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("AMSTemperatures", true,
       "Read-only Linux IIO xilinx-ams Temp_LPD/Temp_FPD/Temp_PL; consult each reading's quality. "
       "SoC die sensors, not board ambient; host observation times, not conversion timestamps");
+  add("CarrierTemperature", true,
+      "Schematic U9 MCP9808, PS I2C1 ff030000 address 0x18; identity and shutdown checked before data. "
+      "Named reading and GeneralInfo.temperature; quality is not a thermal alarm/interlock");
+  add("RuntimeServices", true,
+      "Eight allow-listed systemd units, host metadata and configured population/app; no journal/env/command-line export. "
+      "Service active/success does not establish hardware health");
 }
 }

@@ -39,6 +39,8 @@
 #include "server_controller/timing_status.hpp"
 #include "server_controller/readonly_mmio.hpp"
 #include "server_controller/ams_temperature.hpp"
+#include "server_controller/carrier_temperature.hpp"
+#include "server_controller/service_status.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -2424,15 +2426,15 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     out = serialize_or_empty(resp);
   };
 
-  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode](const std::string& in, std::string& out, Daphne&) {
+  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode](const std::string& in, std::string& out, Daphne& d) {
     daphne::ReadSystemStatusRequest req;
     daphne::SystemStatusSnapshot resp;
     add_register_capabilities(resp, mode);
     try {
       if (!req.ParseFromString(in)) throw std::invalid_argument("Bad ReadSystemStatusRequest payload");
       if (req.level() != 0 || req.include_i2c_scan() || req.include_xmutil() ||
-          req.include_sfp_diagnostics() || req.include_ps_values())
-        throw std::invalid_argument("Only level=0 with all optional probes disabled is supported; no bus scan performed");
+          req.include_sfp_diagnostics())
+        throw std::invalid_argument("Only level=0 without I2C scans, xmutil probes or SFP diagnostics is supported");
       ReadOnlyMmio identity_mmio(kGatewareIdentityMagicAddress, 16);
       const auto identity = probe_gateware_identity(identity_mmio);
       validate_gateware_identity(identity, mode);
@@ -2445,9 +2447,15 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       *resp.mutable_endpoint() = read_timing_status(timing_mmio);
       resp.set_ps_local_unix_ns(resp.endpoint().observed_host_unix_ns());
       add_ams_temperatures(resp);
+      {
+        std::lock_guard<std::mutex> lock(d.i2c_1_mutex);
+        *resp.add_temperatures() = read_carrier_temperature();
+      }
+      add_service_status(resp);
+      add_host_status(resp, d.mezzanine_access_enabled);
       resp.set_success(true);
-      resp.set_message("Gateware identity and timing registers read; named AMS temperatures attempted. "
-                        "Check each temperature's quality. Other inventory fields are not collected; "
+      resp.set_message("Gateware identity and timing registers read; named die/carrier temperatures attempted. "
+                        "Service/host status attempted. Check individual observation quality. Other inventory fields are not collected; "
                         "consult capabilities. Success does not mean timing is ready");
     } catch (const std::exception& e) {
       resp.set_success(false);
@@ -2468,7 +2476,12 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       return;
     }
 
-    out = serialize_or_empty(make_general_info(d.board_monitor.snapshot()));
+    auto info = make_general_info(d.board_monitor.snapshot());
+    {
+      std::lock_guard<std::mutex> lock(d.i2c_1_mutex);
+      set_general_info_temperature(info, read_carrier_temperature());
+    }
+    out = serialize_or_empty(info);
   };
 
   handlers[daphne::MT2_READ_BIAS_VOLTAGE_MONITOR_REQ] = [](const std::string& in, std::string& out, Daphne& d) {

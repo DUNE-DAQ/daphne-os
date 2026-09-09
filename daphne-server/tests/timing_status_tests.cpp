@@ -61,13 +61,15 @@ int main() {
   for (auto mode : {GatewareMode::kSelfTrigger, GatewareMode::kFullStream}) {
     daphne::SystemStatusSnapshot status;
     add_register_capabilities(status, mode);
-    require(status.capabilities_size() == 9);
+    require(status.capabilities_size() == 11);
     require(status.capabilities(2).supported() == supports_trigger_counters(mode));
     for (int i = 3; i < 7; ++i)
       require(!status.capabilities(i).supported() && !status.capabilities(i).reason().empty());
     require(status.capabilities(7).name() == "ChannelConfig.gain");
     require(status.capabilities(7).supported() && !status.capabilities(7).reason().empty());
     require(status.capabilities(8).name() == "AMSTemperatures" && status.capabilities(8).supported());
+    require(status.capabilities(9).name() == "CarrierTemperature" && status.capabilities(9).supported());
+    require(status.capabilities(10).name() == "RuntimeServices" && status.capabilities(10).supported());
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
   const int fd = mkstemp(filename);
