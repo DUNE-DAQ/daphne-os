@@ -2362,8 +2362,10 @@ std::vector<std::pair<uint32_t, uint32_t>> configuration_control_observations(Ga
 std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     GatewareMode mode,
     std::shared_ptr<Mmio32> full_stream_mmio,
-    std::optional<GatewareIdentity> admitted_identity) {
+    std::optional<GatewareIdentity> admitted_identity,
+    TemperatureAlarmPolicy temperature_policy) {
   using daphne::MessageTypeV2;
+  validate_temperature_alarm_policy(temperature_policy);
 
   if (mode == GatewareMode::kFullStream && !full_stream_mmio) {
     throw std::invalid_argument("Full-stream mode requires an A002 MMIO window");
@@ -2480,7 +2482,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     out = serialize_or_empty(resp);
   };
 
-  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode, admitted_identity](const std::string& in, std::string& out, Daphne& d) {
+  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode, admitted_identity, temperature_policy](const std::string& in, std::string& out, Daphne& d) {
     daphne::ReadSystemStatusRequest req;
     daphne::SystemStatusSnapshot resp;
     add_register_capabilities(resp, mode);
@@ -2513,6 +2515,9 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       }
       add_service_status(resp);
       add_host_status(resp, d.mezzanine_access_enabled);
+      const auto evaluated_at = monotonic_time_ns();
+      for (auto& temperature : *resp.mutable_temperatures())
+        evaluate_temperature_alarm(temperature, temperature_policy, evaluated_at);
       resp.set_success(true);
       resp.set_message("Gateware identity and timing registers read; named die/carrier temperatures attempted. "
                         "Service/host status attempted. Check individual observation quality. Other inventory fields are not collected; "
@@ -2527,7 +2532,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     out = serialize_or_empty(resp);
   };
 
-  handlers[daphne::MT2_READ_GENERAL_INFO_REQ] = [](const std::string& in, std::string& out, Daphne& d) {
+  handlers[daphne::MT2_READ_GENERAL_INFO_REQ] = [temperature_policy](const std::string& in, std::string& out, Daphne& d) {
     InfoRequest req;
     if (!req.ParseFromString(in)) {
       BoardMonitorSnapshot invalid;
@@ -2542,6 +2547,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       std::lock_guard<std::mutex> lock(d.i2c_1_mutex);
       set_general_info_temperature(info, read_carrier_temperature());
     }
+    evaluate_temperature_alarm(*info.mutable_temperature_status(), temperature_policy, monotonic_time_ns());
     out = serialize_or_empty(info);
   };
 

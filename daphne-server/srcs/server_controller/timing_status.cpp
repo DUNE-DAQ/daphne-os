@@ -74,5 +74,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("ServerBookkeeping", true,
       "Request 326 remains responsive during serialized hardware work; heartbeat, correlated configuration result and canonical successful evidence. "
       "Validity tracks known local invalidations, not all external resets or analog calibration");
+  add("TemperatureAlarms", true,
+      "Named temperature observations carry active startup thresholds and Good/Warning/High/Critical/Missing/Invalid/Stale evaluation. "
+      "Provisional monitoring limits only; no power action, sensor comparator changes or protection permit");
 }
 }

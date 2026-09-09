@@ -111,6 +111,7 @@ target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
 add_library(daphne_telemetry_protocol
   srcs/server_controller/ams_temperature.cpp
   srcs/server_controller/carrier_temperature.cpp
+  srcs/server_controller/temperature_alarm.cpp
   srcs/server_controller/service_status.cpp
   srcs/server_controller/telemetry_protocol.cpp
   srcs/server_controller/timing_status.cpp
@@ -126,6 +127,10 @@ add_library(daphne_configuration
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_configuration PUBLIC daphne_proto daphne_gateware)
 if(BUILD_TESTING)
+  add_executable(temperature_alarm_tests tests/temperature_alarm_tests.cpp)
+  target_link_libraries(temperature_alarm_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME temperature_alarm_unit COMMAND temperature_alarm_tests)
+  set_tests_properties(temperature_alarm_unit PROPERTIES LABELS unit)
   add_executable(configuration_fingerprint_tests tests/configuration_fingerprint_tests.cpp)
   target_link_libraries(configuration_fingerprint_tests PRIVATE daphne_configuration)
   add_test(NAME configuration_fingerprint_unit COMMAND configuration_fingerprint_tests)

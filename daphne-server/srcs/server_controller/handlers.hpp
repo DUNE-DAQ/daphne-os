@@ -7,6 +7,7 @@
 
 #include "daphneV3_high_level_confs.pb.h"
 #include "server_controller/gateware.hpp"
+#include "server_controller/temperature_alarm.hpp"
 
 class Daphne;
 
@@ -17,6 +18,7 @@ using V2Handler = std::function<void(const std::string& req_payload, std::string
 std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     GatewareMode mode,
     std::shared_ptr<Mmio32> full_stream_mmio = nullptr,
-    std::optional<GatewareIdentity> admitted_identity = std::nullopt);
+    std::optional<GatewareIdentity> admitted_identity = std::nullopt,
+    TemperatureAlarmPolicy temperature_policy = {});
 
 }  // namespace daphne_sc

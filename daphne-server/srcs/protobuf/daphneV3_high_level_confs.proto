@@ -255,6 +255,29 @@ message TemperatureStatus {
   // Host observation times, NOT the ADC conversion time or certified timing.
   uint64 observed_host_unix_ns = 7;
   uint64 observed_monotonic_ns = 8;
+  TemperatureAlarm alarm = 9; // Observation-only policy; does not control power or sensor comparators.
+}
+
+enum TemperatureAlarmState {
+  TEMPERATURE_ALARM_UNSPECIFIED = 0; // Older server/no evaluation, never assume Good.
+  TEMPERATURE_ALARM_GOOD = 1;
+  TEMPERATURE_ALARM_WARNING = 2;
+  TEMPERATURE_ALARM_HIGH = 3;
+  TEMPERATURE_ALARM_CRITICAL = 4;
+  TEMPERATURE_ALARM_MISSING = 5;
+  TEMPERATURE_ALARM_INVALID = 6;
+  TEMPERATURE_ALARM_STALE = 7;
+}
+message TemperatureAlarm {
+  TemperatureAlarmState state = 1;
+  double warning_c = 2;
+  double high_c = 3;
+  double critical_c = 4;
+  uint64 maximum_age_ms = 5;
+  uint64 evaluated_monotonic_ns = 6;
+  optional uint64 observation_age_ns = 7;
+  string policy_source = 8;
+  string message = 9;
 }
 
 message EndpointStatus {
