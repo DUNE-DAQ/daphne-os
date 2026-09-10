@@ -1,4 +1,4 @@
-# Parser-error history: server/client source qualified, not deployed
+# Parser-error history: ARM software qualified, not deployed
 
 2026-09-10. Small commits: `41aea4c` (reader/protobuf), `0962e7a`
 (runtime admission/bracketing), `3f636f4` (independent client/wire tests).
@@ -62,7 +62,9 @@ server tree: `afdcc5997d31d32232c23ba9bcd5a6d1dcf62353`.
 - **13 C++-to-Python wire cases pass** with each binding set. These use actual
   collector serialization with scripted MMIO and synthetic outer context.
 - Server and all unit executables **cross-build for AArch64** with GCC 12.2.
-  These new ARM binaries have **not been executed on the board**.
+  All **26 hardware-free ARM suites**, candidate `--help` and the same **13
+  serialized wire cases now pass on DAPHNE-015**. This is native software
+  execution with scripted MMIO, not live reads of the new firmware registers.
 
 ARM server SHA-256:
 `22989ec267179f7d53e1547ab794380a4d0d0b6b96d90cd09bacad37f62754fa`.
@@ -71,6 +73,25 @@ remain. Evidence directory: `firmware-health.W1CUQ3E7/protocol-server.Mh4iBcOB`,
 including `qualification.json`, clean native logs, ARM build log and wire reports.
 Changed Markdown passes its checks. Repository-wide documentation lint still
 reports five pre-existing developer-path findings in unrelated files.
+
+### Native ARM execution
+
+Evidence: `protocol-server.Mh4iBcOB/arm-execution.x6LFuE0t`. The owner-only test
+archive contains the exact 26 CTest unit executables, candidate binary, runner,
+inventory/source records and checksums. It was staged in RAM-backed `/tmp` and
+run as unprivileged `petalinux`, using the hash-checked installed libraries.
+Archive SHA-256:
+`45f2be2aac311faa62b547e387c52efb64fe7904de5b54603be21bca6b919963`.
+`RESULTS.json` records completed tests and equal before/after guards: running
+server/Hermes executable hashes, service instances/PIDs/restart counts, boot,
+private identity and all eight protected configuration-file hashes.
+The runner performs post-checks even on test failure. It never starts the server.
+
+Native scripted wire bytes are retained in `protocol-wire.txt`; their SHA-256
+matches both the board runner and the independent local Python verification:
+`e09dcb969c7b7d6c204a506adf74d9171677bfb8253a67769424e5d891f44903`.
+Only the outer observation context is synthetic in that wire test. Temporary
+test files were retained; no installed application or board configuration changed.
 
 ## Reproduce the focused software checks
 
@@ -101,10 +122,12 @@ ABI 2.0 regression tool; it has not been silently loosened for new firmware.
 
 ## Still required
 
-Execute/qualify the new ARM candidate and complete ABI 2.2 OS staging plus
-runtime/image pairing. The image contract remains pinned to qualified server
+Qualify the running candidate's ABI 2.0 regression and complete its runtime
+archive/handoff and image pairing. [ABI 2.2 OS staging/guards](protocol-error-image-verification.md)
+are now implemented with 121 clean-checkout tests; these use synthetic artifacts,
+not a PetaLinux image build. The image contract remains pinned to qualified server
 `3556811`, minors `0 1`; do not widen it merely to pass a build.
 Then qualify supported-tool firmware builds, routed paths, both modes/sources
 and live zero-bias readout/regression. The current Cooper probe still times out
-at the FNAL bridge; **no synthesis job was launched**. No board or service was
-changed in this software-only step. This does not close the entire workbook.
+at the FNAL bridge; **no synthesis job was launched**. No service, firmware,
+bias or network configuration was changed. This does not close the entire workbook.

@@ -15,7 +15,7 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 | Host resources / workbook I088 and I101–I104 | Host uptime, CPU load, available memory and root filesystem free/available/read-only values; typed quality and observation times, no inferred operational-health verdict | Deployed as 3556811; 25 native/ARM suites, 109 Python tests, native probes and live RPC freshness checks pass. Full zero-bias/alignment/all-channel capture and existing-collector regression passed. Complete runtime native smoke, matching image pin and 101 packaging tests pass. Approximately 23 MiB root space available; no cleanup/resizing. See host-resource-verification.md |
 | SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Implemented/deployed; 18 native/ARM suites and 53 Python tests pass. GTH0/TMG/GTR identified; 14 diagnostic values per acquisition. Three unanswered cages and installed PCB/wiring caveat remain unresolved; factory RX warnings retained |
 | FPGA health | Actual loaded/admitted FPGA identity, configuration state, clocks/reset/timing, transport/link observations and clear degraded/unknown reasons; no service-active shortcut | Sampled programming STAT and 15-check assessment deployed/tested; see server-fpga-health.md. Coherent live timestamp, Hermes delivery and external-reset epoch remain unknown; no overall health/run-permit claim |
-| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp RTL/ABI 2.1, routed-check scripts and build-bound packaging committed in both firmware repositories; matching 3556811 runtime/image contract qualified. Both packagers pass synthetic OS-staging integration. Protocol-error firmware binding, ABI 2.2 producer gates and typed server/client support are source-tested; new ARM execution, image integration and actual build/routed/live qualification remain pending |
+| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp RTL/ABI 2.1, routed-check scripts and build-bound packaging committed in both firmware repositories; matching 3556811 runtime/image contract qualified. Protocol-error firmware binding and ABI 2.2 producer gates are source-tested; typed server/client support passes 26 native ARM suites and 13 wire cases. OS staging/guards pass 121 tests. New runtime handoff and actual image/build/routed/live qualification remain pending |
 | Qualification and handoff | Native/ARM tests, negative/stale/concurrency cases, live zero-BIAS/all-channel regression, both-ABI scope recorded, protocol clients/docs/wiki and ONL bundle | Pending |
 
 Evidence found so far:
@@ -136,10 +136,14 @@ ProtocolErrorCount unavailable; it and the current image contract only admit
 ABI 2.0/2.1. New server/client source `41aea4c` / `0962e7a` / `3f636f4` implements
 typed history, exact ABI 2.2 admission and independent client checks. All 26
 native C++ suites, 119 Python tests with each binding set and 13 serialized-wire
-cases pass; the clean AArch64 cross-build passes. No new ARM execution or live
-register qualification is claimed. See [server evidence](protocol-error-server-verification.md).
-Next are ARM candidate qualification, OS staging/runtime pairing, supported
-synthesis/routing and live tests.
+cases pass; the clean AArch64 cross-build passes. All 26 native ARM software
+suites, candidate help and 13 native wire cases now pass with unchanged service/
+boot/protected-file guards. See [server evidence](protocol-error-server-verification.md).
+OS commits `38f0547` / `d9dc40c` implement complete ABI 2.2 report validation,
+staging/loader and runtime pairing guards; all 121 clean-checkout tests pass.
+The actual image pin remains 3556811/minors `0 1`. See
+[image tooling scope](protocol-error-image-verification.md). Next are running-candidate
+regression, full runtime handoff/pin, supported synthesis/routing and image/live tests.
 Optical 0x76 remains a separate placeholder; the new PS interface is not an
 optical bridge. No command decoder or board change is claimed.
 The ready ABI 2.1 worktrees remain untouched.

@@ -8,7 +8,7 @@ installed profile to match the loaded FPGA. Unknown minors are rejected.
 
 Follow-up [parser-history server source](protocol-error-server-verification.md)
 also admits exact ABI 2.2 while retaining this timestamp contract. That new
-candidate is cross-built, not yet executed/deployed; historical deployment
+candidate passes native ARM software tests but is not deployed; historical deployment
 results below are not ABI 2.2 qualification.
 
 **DAPHNE-015:** the `13bc725` deployment passed the live self-trigger ABI 2.0

@@ -7,6 +7,11 @@ Source revisions: firmware build binding `a5f93a2`, staging fixes through
 `0281c82`; OS staging/refresh `c08eb05`. The separate full-stream producer now
 has build binding `6052164` and packaging/checker `67510d0`.
 
+Follow-up [ABI 2.2 OS support](protocol-error-image-verification.md) is now
+implemented/tested; its 170-bit diagnostic report is distinct from the 130-bit
+ABI 2.1 report below. The new ARM server candidate passes software tests but
+is not deployed; runtime/image pairing and actual firmware builds remain open.
+
 Previously, staging wrote `identity_abi_minor=0` and changed only the runtime
 profile's app name. That would incorrectly label a new ABI 2.1 payload and make
 the live admission check reject it.
@@ -23,8 +28,8 @@ the live admission check reject it.
    checks and unsupported ABI/tool values fail the build.
 3. Packaging verifies that record; it does **not** create it retrospectively
    from an arbitrary XSA/bin pair. The app archive and checksum manifests retain
-   `GATEWARE-IDENTITY.json` and, for ABI 2.1, the complete 130-bit
-   `post_route_timestamp_snapshot.rpt`.
+   `GATEWARE-IDENTITY.json` and the complete `post_route_timestamp_snapshot.rpt`:
+   130 timestamp bits for ABI 2.1, or 170 diagnostic bits for ABI 2.2.
 4. OS staging verifies the selected app/variant/build, binary digest, report
    and manifest coverage. It renders the corresponding `IDENTITY_ABI_MINOR` into the
    runtime profile and preserves the evidence through the image recipe.
@@ -88,8 +93,8 @@ fixtures; that is not firmware qualification. See the
 Cross-repository log: `fullstream-os-staging-integration-final.txt`;
 retained fixture directory: `fullstream-os-staging-qclbz_wi` (DO NOT DEPLOY).
 
-The image runtime contract now pins `DUNE-DAQ/daphne-os@13bc725`, with its
-[complete runtime archive and native ARM evidence](qualified-server-runtime.md).
+The image runtime contract now pins `DUNE-DAQ/daphne-os@3556811`, with its
+[complete runtime archive and native ARM evidence](host-resource-verification.md).
 The old RC1 server must not be paired with ABI 2.1 overlays just because both
 declare ABI major 2. Neither source capabilities nor staging qualify a full image.
 
