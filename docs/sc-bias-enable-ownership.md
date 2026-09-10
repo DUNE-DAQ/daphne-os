@@ -2,8 +2,8 @@
 
 Server **fb82e0a is deployed and live-tested** on DAPHNE-015. Aggregate Configure
 now leaves SC-owned BiasEnable untouched. The FPGA was not reloaded. The complete
-runtime bundle, image pin and new ONL handoff are still pending; the previous
-4e74f10 bundle does not contain this correction.
+runtime bundle, image pin **1039f46** and **41-file ONL handoff** are verified.
+The previous 4e74f10 bundle is retained unchanged and lacks this correction.
 
 ## Contract and correction
 
@@ -119,6 +119,50 @@ python daphne-server/scripts/verify_aggregate_zero_bias.py \
 
 This is a maintenance command, not a read-only check. It applies the full FE
 profile twice, aligns five AFEs and captures all 40 channels. Do not run it
-against the old server. Packaging/image pin and the updated ONL runtime bundle
-remain pending. This qualification does not establish
-physical enable transitions, full-stream or newly routed firmware.
+against the old server. This qualification does not establish physical enable
+transitions, full-stream or newly routed firmware.
+
+## Runtime and ONL handoff
+
+The exact deployed executable and unchanged Hermes/Protobuf/UTF-8/ZeroMQ
+dependencies are packaged together. Native ARM loader/help checks validate the
+packaged libraries and existing OS libsystemd 255.21; Hermes was not executed.
+All **140 packaging/audit tests** and actual runtime staging pass. The immediate
+previous 4e74f10 archive is rejected without replacing staged files. Synthetic
+ABI-minor combinations are packaging checks, not routed-firmware qualification.
+
+On `np04-onl-004`:
+
+```bash
+cd "$HOME/daphne015-server-runtime-fb82e0a"
+sha256sum --check --strict SHA256SUMS
+```
+
+The owner-only directory contains 41 payload files plus the manifest. Runtime
+SHA-256: `932106f611ee2b5fdd274cd6956678e804a99d4ebb9b7dd1d2b1e50cd5866644`.
+Manifest SHA-256: `88dd42bd333778aa4ef546da10e9412ffeb130eef52e5a2731a0ba49865732b5`.
+All new and previous-handoff payload hashes were verified remotely. The first
+comparison helper rejected the old manifest's conventional `./` prefix; the
+corrected basename-only parser passed without changing either handoff.
+
+Server source export base fb82e0a and OS integration base 1039f46 have identical
+server subtrees. Production/build files and both schemas are unchanged. Known
+private MAC/IP literals in examples/docs are placeholders, and one serialized
+seed request is omitted per export. File-by-file Git comparisons and all 13
+changed Python/shell example syntax checks per export pass. Modified exports
+are not exact Git snapshots or a general secret-audit guarantee; Git-less
+rebuilds must report revision unavailable. Uncommitted user work is excluded.
+
+Five matching exported clients passed on ONL using existing Python 3.9.16,
+protobuf 6.33.5 and pyzmq 25.1.2: **18 read-only exchanges**, including a
+before/after bookkeeping bracket. The qualified process, boot and valid v2
+configuration hash agree; board guards before/after packaging and clients are
+identical. No service restart, FPGA reload, configuration or network/time write
+occurred during packaging. Read the bundle README for commands and scope.
+
+Packaging evidence is beside the frozen native/live phases: `runtime-assembly.json`,
+`runtime-native-smoke.json`, `actual-runtime-staging-with-old-rejection.txt`,
+`packaging-tests.txt`, `handoff-seal.json` and `onl-final-handoff-check-v2.json`.
+This is a userspace archive, not a newly built PetaLinux image. Dedicated SC
+request/authorization, physical transitions and remaining register producers
+stay open.

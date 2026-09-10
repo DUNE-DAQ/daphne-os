@@ -10,9 +10,10 @@ SC-enable write. 33 host/33 actual ARM suites, 216 Python tests per binding and
 the full live SC-preservation/zero-BIAS regression pass. Server-only maintenance
 kept firmware/runtime/Hermes running and enable1 unchanged.
 DAPHNE-015 retains unchanged self-trigger firmware
-**3f17f1b / ABI 2.0**. The complete runtime/image pin/35-file ONL handoff still
-describe prior server **4e74f10**; packaging this fix remains pending. This audit is
-not a full-workbook completion claim.
+**3f17f1b / ABI 2.0**. The complete runtime/native loader, image pin **1039f46**,
+140 packaging tests and 41-file ONL handoff/five exported clients are verified.
+The prior 4e74f10 handoff remains unchanged. This audit is not a full-workbook
+completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
@@ -32,7 +33,7 @@ calibration or overall FPGA-health qualification is inferred.
 - **SC003/I288 ownership:** deployed fb82e0a leaves BiasEnable untouched by
   aggregate Configure and fingerprints that no enable command was issued.
   Live preservation is verified at enable1; the other state is synthetic-only.
-  Packaging and the dedicated/authenticated SC request contract remain open; see
+  Packaging is verified; the dedicated/authenticated SC request contract remains open. See
   [correction and verification scope](sc-bias-enable-ownership.md).
 - **I283–I288, AFE global state:** the candidate now supplies admitted,
   bracketed read-only register observations with quality/times; two native
@@ -67,9 +68,10 @@ and deployment evidence are retained, not retroactively upgraded.
 
 ## Next implementation order
 
-First finish the [SC-enable correction's runtime, pin and ONL handoff](sc-bias-enable-ownership.md);
-its live maintenance/regression gates pass without a firmware reload or enable
-change. The producer backlog remains:
+The [SC-enable correction's runtime, pin and ONL handoff](sc-bias-enable-ownership.md)
+are verified. Live maintenance/regression passed without a firmware reload or
+enable change; packaging and exported-client checks added no board writes.
+The producer backlog remains:
 
 1. **AFE reset-health implementation/handoff is qualified on ABI 2.0**:
    deployed 4e74f10, full regression, runtime/native loader, image pin and ONL

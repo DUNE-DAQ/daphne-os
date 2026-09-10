@@ -12,7 +12,8 @@ section below and the [SC ownership wiki page](https://github.com/DUNE-DAQ/daphn
 **Ownership follow-up:** [server fb82e0a](sc-bias-enable-ownership.md) removes
 the implicit enable write from aggregate Configure. It is deployed and live-tested
 without a firmware reload; the historical read-only qualification below did not
-change write policy. Its new runtime/image-pin/ONL handoff remains pending.
+change write policy. Its exact runtime/native loader, image pin 1039f46 and
+41-file ONL handoff/five exported clients are now verified.
 
 The v0.5 workbook assigns ordinary energization authority to **SC**;
 `daphne-server` executes local operations and reports observed state.
