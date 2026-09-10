@@ -284,7 +284,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
     def test_current_source_contract_stages_abi22_capability(self) -> None:
         # Real reviewed source contract, synthetic ELF fixture; not an image build.
         bundle, _ = self.make_bundle()
-        candidate = "bffea24fc16c93b263ffe5c83872832a7b7f7a82"
+        candidate = "eecff616ea6841732e9422c7af6afaa2b06c4ce9"
         self.assertEqual(REQUIRED_COMMIT, candidate)
         self.assertEqual(REQUIRED_MINORS, "0 1 2")
         result = self.run_stage(bundle)
@@ -341,6 +341,16 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
 
         result = self.run_stage(bundle)
 
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match required commit", result.stderr)
+        self.assert_prior_state_preserved()
+
+    def test_previous_management_link_runtime_without_build_identity_requires_old_pin(self) -> None:
+        bundle, _ = self.make_bundle()
+        metadata = bundle.parent / "BUILD-METADATA.txt"
+        metadata.write_text(metadata.read_text().replace(
+            REQUIRED_COMMIT, "bffea24fc16c93b263ffe5c83872832a7b7f7a82"))
+        result = self.run_stage(bundle)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not match required commit", result.stderr)
         self.assert_prior_state_preserved()
