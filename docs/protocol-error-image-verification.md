@@ -66,10 +66,10 @@ bash -n scripts/petalinux/stage_overlay_into_project.sh \
         scripts/petalinux/stage_runtime_into_project.sh
 ```
 
-## Remaining handoff
+## Remaining image qualification
 
 [The new server passes native software and live ABI 2.0 tests](protocol-error-server-verification.md).
-Complete its ONL/wiki handoff, then stage actual qualified firmware outputs,
-build the complete image and verify
+The [ONL handoff](qualified-server-runtime.md) is saved and checksum-verified.
+Next stage actual qualified firmware outputs, build the complete image and verify
 both modes/sources on hardware. The Cooper route remains unavailable; no
 synthesis job or new flash is claimed. Preserve approved MAC/IP and zero bias.

@@ -150,7 +150,9 @@ Known private MAC/IPv4 literal checks pass; this is not a general secret audit.
 
 ## Still required
 
-Complete the runtime handoff. [ABI 2.2 OS staging/guards](protocol-error-image-verification.md)
+The [ONL runtime handoff](qualified-server-runtime.md) is saved and checksum-
+verified, with matching client bindings and privacy-filtered source exports.
+[ABI 2.2 OS staging/guards](protocol-error-image-verification.md)
 now pass 122 tests with the reviewed `3f636f4` pin, minors `0 1 2`.
 The actual complete archive stages and passes the recipe decision for all nine
 synthetic overlay-minor pairs. This is not a PetaLinux image build.

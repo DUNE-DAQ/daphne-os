@@ -75,12 +75,12 @@ attempt was followed by its correct four-suite run.
 
 ## Still required
 
-1. Running-candidate regression and live qualification of the implemented typed
-   server/client history and exact ABI 2.2 admission. Native ARM software tests
-   pass but do not prove new register behavior on hardware.
-2. Compatible, qualified server/runtime/image pairing. ABI 2.2 OS report
-   validation/staging is implemented/tested, not a built image. Do not manually
-   widen a profile to bypass admission.
+1. Live ABI 2.2 history/admission qualification. Server `3f636f4` now passes
+   native ARM software and running-server ABI 2.0 regression; neither proves
+   new register behavior on hardware.
+2. Build and qualify the complete image. The matching server runtime/pin and
+   ONL handoff are ready; ABI 2.2 validation/staging passes 122 tooling tests.
+   Do not manually widen a profile to bypass admission.
 3. Supported-tool synthesis/routing, actual CDC checks, both variants/timing
    sources and live zero-bias regression. The latest Cooper route probe timed
    out at the FNAL bridge; **no job was launched**.

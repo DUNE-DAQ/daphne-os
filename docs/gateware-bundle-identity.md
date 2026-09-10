@@ -9,8 +9,9 @@ has build binding `6052164` and packaging/checker `67510d0`.
 
 Follow-up [ABI 2.2 OS support](protocol-error-image-verification.md) is now
 implemented/tested; its 170-bit diagnostic report is distinct from the 130-bit
-ABI 2.1 report below. The new ARM server candidate passes software tests but
-is not deployed; runtime/image pairing and actual firmware builds remain open.
+ABI 2.1 report below. Server `3f636f4` is deployed, with native software/live
+ABI 2.0 qualification, a complete runtime handoff and matching image pin.
+Actual firmware and image builds remain open.
 
 Previously, staging wrote `identity_abi_minor=0` and changed only the runtime
 profile's app name. That would incorrectly label a new ABI 2.1 payload and make
@@ -93,14 +94,14 @@ fixtures; that is not firmware qualification. See the
 Cross-repository log: `fullstream-os-staging-integration-final.txt`;
 retained fixture directory: `fullstream-os-staging-qclbz_wi` (DO NOT DEPLOY).
 
-The image runtime contract now pins `DUNE-DAQ/daphne-os@3556811`, with its
-[complete runtime archive and native ARM evidence](host-resource-verification.md).
+The image runtime contract now pins `DUNE-DAQ/daphne-os@3f636f4`, with its
+[complete runtime archive and native/live evidence](qualified-server-runtime.md).
 The old RC1 server must not be paired with ABI 2.1 overlays just because both
 declare ABI major 2. Neither source capabilities nor staging qualify a full image.
 
 The server recipe now reads both overlay version bindings and rejects an
 unsupported minor in **either** variant before fetching/building its payload.
-The reviewed current server contract supports minors `0 1`; staging records
+The reviewed current server contract supports minors `0 1 2`; staging records
 that capability set alongside the pinned source and archive hash.
 Old staged runtimes lacking the minor/execution sentinels must be restaged. Updating only
 an overlay also participates in the server task dependencies. The decision
@@ -108,9 +109,10 @@ tests execute the actual recipe guard with a datastore double, including mixed
 2.0/2.1 pairs, unknown minors, stale sentinels and unsealed 2.1 inputs. This does
 not replace a real BitBake parse/build or binary/board qualification. The stager
 validates either an explicit native-AArch64 or QEMU record; it does not execute
-the binary or authenticate metadata. All 101 PetaLinux packaging tests pass,
+the binary or authenticate metadata. The earlier 101 PetaLinux packaging tests passed,
 including 11 actual-recipe decision tests and 17 runtime-staging tests. Log:
 `runtime-candidate.00FTH1Zj/runtime-13bc725-contract-tests.txt`.
+The current ABI 2.2/pin suite has 122 passing tests; see the follow-up linked above.
 
 The synthesis-source query follows
 [AMD's documented compile-order query](https://docs.amd.com/r/2024.1-English/ug896-vivado-ip/Querying-IP-Customization-Files).

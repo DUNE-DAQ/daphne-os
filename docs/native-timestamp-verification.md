@@ -8,12 +8,13 @@ installed profile to match the loaded FPGA. Unknown minors are rejected.
 
 Follow-up [parser-history server source](protocol-error-server-verification.md)
 also admits exact ABI 2.2 while retaining this timestamp contract. That new
-candidate passes native ARM software tests but is not deployed; historical deployment
-results below are not ABI 2.2 qualification.
+server is now deployed and passes native ARM software tests and live self-trigger
+ABI 2.0 regression. Historical deployment results below are not ABI 2.2 qualification.
 
 **DAPHNE-015:** the `13bc725` deployment passed the live self-trigger ABI 2.0
-regression below. It is now superseded by the [host-resource server `3556811`](host-resource-verification.md),
-which also passes live ABI 2.0 regression. Firmware remains `3f17f1b`; native
+regression below. The [host-resource server `3556811`](host-resource-verification.md)
+and current [server `3f636f4`](protocol-error-server-verification.md) also pass live
+ABI 2.0 regression. Firmware remains `3f17f1b`; native
 snapshot readout still requires the unqualified ABI 2.1 firmware builds.
 
 ## What changes

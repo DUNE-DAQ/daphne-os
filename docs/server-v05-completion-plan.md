@@ -146,8 +146,9 @@ staging/loader and runtime pairing guards; all 121 clean-checkout tests pass.
 The reviewed image pin is now 3f636f4/minors `0 1 2`; all 122 packaging tests
 and staging/recipe checks of the complete runtime pass. See
 [image tooling scope](protocol-error-image-verification.md). The complete runtime
-passes native packaged-library smoke. Next are runtime handoff, supported
-synthesis/routing and image/live tests.
+passes native packaged-library smoke; the ONL handoff, matching client bindings
+and privacy-filtered source exports are saved and checksum-verified. Next are
+supported synthesis/routing and image/live tests.
 Optical 0x76 remains a separate placeholder; the new PS interface is not an
 optical bridge. No command decoder or board change is claimed.
 The ready ABI 2.1 worktrees remain untouched.

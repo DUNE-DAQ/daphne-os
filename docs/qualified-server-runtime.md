@@ -4,7 +4,33 @@ Current server: **3f636f4**, deployed on DAPHNE-015 with full live self-trigger
 ABI 2.0 regression; [qualification and current image contract](protocol-error-server-verification.md).
 Its complete runtime SHA-256 is
 `1af9600acbfb8e557bedde23bde93e13270ccf7b5439d8a4b9f6803e335d0497`;
-native packaged-library smoke and 122 packaging tests pass. ONL handoff pending.
+native packaged-library smoke and 122 packaging tests pass.
+
+The owner-only ONL home directory is **`daphne015-server-runtime-3f636f4`**.
+All 19 handoff file checksums pass; its `SHA256SUMS` digest is
+`b49f0967b4ea02afba6e967f24a4ab670a5108d518dec3ef2515d17c02e4f56c`.
+It includes the matching protoc-30.1 Python bindings, native/live evidence and
+privacy-filtered server/OS exports based on `3f636f4` / `3ff916b`.
+File-by-file source audit finds 1,178 / 1,340 unchanged regular files, 19 / 22
+redacted text files and one omitted serialized request per export; all 13
+changed Python/shell examples per export pass syntax checks. Production server/
+build sources are unchanged, but these modified exports are not exact Git snapshots
+or a general secret-audit guarantee. Uncommitted work is excluded.
+
+For the current handoff on ONL:
+
+```bash
+cd "$HOME/daphne015-server-runtime-3f636f4"
+sha256sum --check --strict SHA256SUMS
+```
+
+Read its `README.md` and source/redaction manifests before reuse.
+`ASSEMBLY-METADATA.txt` and the archive's internal scope record the earlier
+software-only assembly phase. Adjacent `BUILD-METADATA.txt` and
+`LIVE-QUALIFICATION.json` add the subsequent live ABI 2.0 evidence without
+changing archive bytes. The final handoff also passes actual runtime staging.
+No private network/identity configuration or new OS/firmware image is supplied.
+Previous handoffs below are retained and require their matching historical pins.
 
 ## Previous handoff: 3556811
 
