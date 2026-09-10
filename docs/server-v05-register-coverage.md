@@ -66,8 +66,9 @@ Deployed `75972de` adds [typed kernel/OS release observations](host-software-ver
 for I091/I092 and partial I093 metadata. Clean 32 host/32 native ARM suites and
 197 Python tests per binding pass, including actual ARM and live RPC metadata
 reads. Full zero-BIAS/all-channel/six-suite regression, complete runtime/native
-loader, image pin and 128 packaging tests pass. Refreshed ONL handoff/wiki remain
-pending; prior `702155b` handoff is unchanged. No rootfs integrity or A/B
+loader, image pin and 128 packaging tests pass. Refreshed 30-file ONL handoff
+and wiki are complete; exported OS/clock/build clients and applied-state guard
+also pass from ONL. Prior `702155b` handoff is unchanged. No rootfs integrity or A/B
 boot-health claim is added.
 
 | Workbook issue / path | Implemented behavior | Remaining qualification |

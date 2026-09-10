@@ -3,8 +3,8 @@
 Collector `710e336` adds `SystemStatusSnapshot.host_software`, field **31**.
 **Deployed server `75972de`** passes clean host/native ARM checks and live
 self-trigger ABI 2.0 regression on DAPHNE-015. Complete runtime/native loader
-and matching image pin `95e418d` pass. Refreshed ONL home/source/client handoff
-and wiki publication remain pending; the previous `702155b` handoff is unchanged.
+and matching image pin `95e418d` pass. The refreshed ONL home/source/client
+handoff and wiki publication are complete; the previous `702155b` handoff is unchanged.
 
 ## What is covered
 
@@ -169,7 +169,55 @@ synthetic overlay-minor decisions pass. The unstaged version-include sentinel
 remains fail-closed until a real project stages the matching runtime. These
 checks are not BitBake, a full-image build, routed firmware or full-stream tests.
 
-Next: refreshed ONL home/source/client/runtime handoff and wiki. Approved
-rootfs identity, missing database assignments, hardware/metrology evidence,
+Approved rootfs identity, missing database assignments, hardware/metrology evidence,
 new firmware, full-stream and full-image qualification remain separate gaps;
 the broader 251-row semantic audit is not closed.
+
+## Verified ONL source/client handoff
+
+On `np04-onl-004`:
+
+```bash
+cd "$HOME/daphne015-server-runtime-75972de"
+sha256sum --check --strict SHA256SUMS
+```
+
+All **30 payload files**, the extracted runtime's internal payload manifest and
+owner-only modes (directory 0700, files 0600) pass on ONL. Manifest SHA-256:
+`9e330b487124094311ee621222900bce6e46294b5dd66221ec7dee918d5bbce3`.
+The runtime is the same native/live-qualified archive, not rebuilt. The prior
+`702155b` handoff's manifest and all payload hashes also still pass.
+
+Server source export base `75972de` and OS integration base `2dc221e` have
+identical server subtrees. All unlisted files compare byte-for-byte against
+their respective Git bases. Known private MAC/IPv4 literals in legacy examples,
+scripts and docs are replaced in 19 server/22 OS text files; one serialized
+seed request is omitted per archive. Thirteen changed Python/shell examples
+per export pass syntax checks. Production/build sources and schemas are unchanged;
+uncommitted work is excluded. These are modified exports, not exact Git snapshots
+or a general secret-audit guarantee. No private assignment artifact is bundled.
+
+ONL's existing Python 3.9.16, protobuf 6.33.5 and pyzmq 25.1.2 pass imports and
+all three exported clients: kernel/OS, clock and compiled build metadata,
+three read-only exchanges each. One additional bookkeeping request checks the
+same qualified process/boot and valid unchanged applied FE hash. The final
+read-only board guard matches the deployed qualification guard, including
+protected files, PIDs/invocations, boot and generator/current selectors.
+No packages, server restart, network/time/identity changes or hardware writes.
+Optional image labels remain unavailable; kernel/time-service reports remain
+unsynchronized with no processed NTP samples. This does not rerun all 197 Python
+tests on ONL or provide a new physical analog qualification.
+
+Evidence: `host-software.MSil6c4w/onl-handoff-check.txt`,
+`post-onl-client-board-guard.json`, and the handoff's `source-export-audit.json`
+and `onl-*-client.json` files. The extracted client is retained under
+`$HOME/.daphne-client-75972de.Hsi9K4Fn` on ONL. The bundle README describes the
+completed handoff; exported historical notes precede this documentation update.
+
+Wiki commit `f97ab5f` is published and its remote Git revision verified:
+[kernel/OS explanation and commands](https://github.com/DUNE-DAQ/daphne-os/wiki/DAPHNE-015-kernel-and-OS-metadata),
+[runtime location and hashes](https://github.com/DUNE-DAQ/daphne-os/wiki/DAPHNE-015-qualified-server-runtime),
+and [build instructions](https://github.com/DUNE-DAQ/daphne-os/wiki/Building-daphne-server-and-clients).
+Seven edited pages pass 40 local-link and 13 shell-example syntax checks;
+examples are not executed by that wiki check. The OS development branch itself
+was not pushed; only privacy-filtered source exports were copied to ONL.

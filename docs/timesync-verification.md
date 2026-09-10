@@ -2,6 +2,7 @@
 
 Current server **75972de** inherits this collector and passes the repeated
 [kernel/OS metadata deployment regression](host-software-verification.md).
+Its refreshed 30-file ONL handoff/wiki and exported clock-client check are complete.
 The detailed `702155b` qualification/handoff below is retained as history.
 
 **Deployed as `702155b`.** Collector `dcd6bc6`, client/checker `702155b`.
