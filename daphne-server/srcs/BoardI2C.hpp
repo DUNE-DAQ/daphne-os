@@ -8,3 +8,8 @@
 std::string board_ps_i2c_adapter(
     const std::filesystem::path& devices = "/sys/bus/i2c/devices",
     const std::filesystem::path& dev = "/dev");
+
+// Schematic sheet 14, U32 SFP mux: PL AXI IIC, not the PS sensor adapter.
+std::string board_pl_i2c_adapter(
+    const std::filesystem::path& devices = "/sys/bus/i2c/devices",
+    const std::filesystem::path& dev = "/dev");

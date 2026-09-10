@@ -13,6 +13,8 @@ extern "C" {
 #include <sstream>
 #include <system_error>
 #include <sys/ioctl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <linux/i2c.h>
@@ -95,6 +97,14 @@ I2CDevice::I2CDevice(const std::string &devicePath, uint8_t deviceAddress, int e
 
 I2CDevice::~I2CDevice() {
     closeDevice();
+}
+
+void I2CDevice::lockAdapter() {
+    struct stat info{};
+    if (fstat(fileDescriptor, &info) != 0 || !S_ISCHR(info.st_mode))
+        throw std::runtime_error("I2C adapter lock requires a character device");
+    if (flock(fileDescriptor, LOCK_EX | LOCK_NB) != 0)
+        throw i2c_error("Locking I2C adapter transaction", devicePath, deviceAddress, errno);
 }
 
 int I2CDevice::openDevice() {
@@ -293,6 +303,7 @@ namespace {
 I2CDevice::I2CDevice(const std::string&, uint8_t) { not_supported(); }
 I2CDevice::I2CDevice(const std::string&, uint8_t, int) { not_supported(); }
 I2CDevice::~I2CDevice() = default;
+void I2CDevice::lockAdapter() { not_supported(); }
 void I2CDevice::writeSingleByte(uint8_t) { not_supported(); }
 void I2CDevice::writeByte(uint8_t, uint8_t) { not_supported(); }
 void I2CDevice::writeBytes(uint8_t, const std::vector<uint8_t>&) { not_supported(); }

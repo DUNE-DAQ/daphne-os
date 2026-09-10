@@ -31,6 +31,10 @@ public:
 
     // Destructor
     ~I2CDevice() override;
+
+    // Cooperative adapter-wide ownership across a multi-device/mux transaction.
+    // Nonblocking; held until this object closes. Never bypasses kernel ownership.
+    void lockAdapter();
     
     void writeSingleByte(uint8_t data) override; // Writes a single byte to the device without specifying a register address
     void writeByte(uint8_t regAddress, uint8_t data) override;
