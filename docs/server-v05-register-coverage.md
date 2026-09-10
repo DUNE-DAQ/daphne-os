@@ -29,7 +29,8 @@ and [timesync service/history reporting](timesync-verification.md). Clean builds
 31 host/31 actual ARM suites, 185 Python tests per binding and standalone probes
 pass. Live zero-BIAS/all-channel and six-suite regression, clock/privacy RPC,
 complete native-tested runtime, image pin and 127 packaging tests pass.
-Refreshed ONL handoff/wiki and approved-source/fresh NTP evidence remain pending.
+Refreshed ONL handoff/wiki pass: all 26 payload hashes and exported client imports/
+clock RPC are checked on ONL. Approved-source/fresh NTP evidence remains pending.
 The board reports no processed NTP samples and unsynchronized.
 
 Deployed **eecff61** adds [compiled server/schema identity](software-build-verification.md).
@@ -63,7 +64,7 @@ preserved history. Relevant prior work:
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
 | I143/I144, server/schema version | Deployed eecff61 embeds Git software version, source/tree/dirty provenance, exact schema hashes and the router's shared envelope-version constant; same metadata in system status and independent bookkeeping | 28 host/28 native ARM suites, 162 Python tests per binding, native and live RPC/busy-Configure metadata, full regression and ONL handoff pass. Hashes are not semantic compatibility or authentication; other service versions remain open |
-| I086/I087/I090, host time; partial I098–I100 time-service evidence | Deployed 702155b exposes same-sample UTC/Unix time, suspend-inclusive derived boot estimate, kernel state and typed timesync service/history; explicit quality/age, exact counters, historical offset and opt-in selected peer | 31 host/31 actual ARM suites, 185 Python tests per binding, live clock/privacy RPC and full regression pass. Complete runtime/native loader, pin and 127 packaging tests pass. Board reports May 2025, unsynchronized and zero processed NTP samples: offset/age unavailable. Refreshed ONL handoff and approved-source/fresh-offset contract remain pending |
+| I086/I087/I090, host time; partial I098–I100 time-service evidence | Deployed 702155b exposes same-sample UTC/Unix time, suspend-inclusive derived boot estimate, kernel state and typed timesync service/history; explicit quality/age, exact counters, historical offset and opt-in selected peer | 31 host/31 actual ARM suites, 185 Python tests per binding, live clock/privacy RPC and full regression pass. Complete runtime/native loader, pin, 127 packaging tests and verified 26-file ONL handoff/wiki pass. Board reports May 2025, unsynchronized and zero processed NTP samples: offset/age unavailable. Approved-source/fresh-offset contract remains pending |
 | I071–I084, management Ethernet | Fourteen typed read-only Linux link metrics, individual quality/time, interface/state brackets; unknown operational state cannot pass health | Deployed bffea24; 27 host/native ARM suites, 144 Python tests, native probes and live RPC/zero-bias/all-channel regression pass. Complete runtime native smoke/staging, 124 packaging tests and ONL handoff pass. No Hermes delivery or counter-epoch claim |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
 | I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Local sweep: x2/x1 slope ratios 1.934–2.062; 36/40 within 164 counts at all five points. Analog calibration unqualified |

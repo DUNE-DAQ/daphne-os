@@ -4,7 +4,8 @@
 DAPHNE-015 retains firmware `3f17f1b`, self-trigger ABI 2.0. Native/live regression,
 complete runtime loader checks and matching image pin `d54f967` pass.
 No clock correction or NTP service/configuration change was performed.
-The refreshed ONL home/source/client handoff and wiki publication remain pending.
+The refreshed ONL home/source/client handoff and wiki publication are complete;
+see the verified handoff record below.
 
 ## What the fields mean
 
@@ -172,7 +173,51 @@ was followed by its explicit three-read system-status comparison. No server
 guard or hardware test was weakened for these command corrections.
 
 Health remains **11 PASS / 1 external-timing FAIL / 3 UNKNOWN**, not overall OK.
-Next: refreshed ONL home/source/client handoff and wiki. Approved time-source
-identity and fresh physical NTP samples remain unverified; no time or network
+Approved time-source identity and fresh physical NTP samples remain unverified; no time or network
 configuration change is implied. New firmware, full-stream, Hermes delivery,
 analog metrology and full-image qualification remain separate gates.
+
+## Verified ONL handoff and wiki
+
+On `np04-onl-004`:
+
+```bash
+cd "$HOME/daphne015-server-runtime-702155b"
+sha256sum --check --strict SHA256SUMS
+```
+
+All **26 payload files** match locally and on ONL; directory mode 0700 and
+file modes 0600 are verified. Manifest SHA-256:
+`870e72b423283f5c74b4d66e3313031a328d6a41ce2afb6d89193f15fd206a78`.
+The runtime archive is unchanged from native/live qualification.
+
+Server source export base is `702155b`; OS integration export base `7c51383`
+includes the image pin and library dependency. Only the prerequisite README
+differs inside their server subtrees. File-by-file comparison verifies all
+unlisted content against its own Git base: 1,214 server / 1,382 OS regular files
+unchanged, 19 / 22 text files with known MAC/IP placeholders, and one serialized
+seed request omitted per export. All 13 changed Python/shell examples per export
+pass syntax checks. The manifests describe every change; this is not an exact
+Git snapshot, signed source, or a general secret-audit guarantee.
+
+Matching generated bindings and the exported clock client pass imports and the
+actual three-request read-only RPC check from ONL, using its existing Python
+3.9.16, protobuf 6.33.5 and pyzmq 25.1.2. No packages were installed. This is
+an additional ONL check, not a rerun there of all 185 workstation Python tests.
+Before/after board guards match services, PIDs, boot, protected files and
+generator/current-selector policy. No private peer details were requested or
+recorded. The service still reports unsynchronized/no processed NTP sample.
+
+Local evidence: `timesync.16nLdZFs/onl-handoff-check.json`. The handoff includes
+`onl-clock-client.json` and `source-export-audit.json`; the ONL client test
+directory is retained at `$HOME/.daphne-client-check.aveffcWr`. Older handoffs remain
+unchanged. Exported docs retain their snapshot date; the adjacent README records
+the completed handoff without making the source archive self-referential.
+
+Wiki commit `6ca5868` is published and its remote Git revision verified:
+[clock explanation](https://github.com/DUNE-DAQ/daphne-os/wiki/DAPHNE-015-host-clock-and-timesync),
+[runtime location](https://github.com/DUNE-DAQ/daphne-os/wiki/DAPHNE-015-qualified-server-runtime)
+and [updated build commands](https://github.com/DUNE-DAQ/daphne-os/wiki/Building-daphne-server-and-clients).
+All six edited pages pass local-link and shell-example syntax checks; no build
+example was executed as a wiki-validation step. The OS development branch itself
+was not pushed; only privacy-filtered sources were copied to ONL.

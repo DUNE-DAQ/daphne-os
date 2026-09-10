@@ -3,7 +3,7 @@
 **Now deployed through `702155b`**, together with the
 [timesync service collector and live regression](timesync-verification.md).
 DAPHNE-015 retains firmware `3f17f1b` / self-trigger ABI 2.0. Complete runtime
-and image pin pass; refreshed ONL handoff remains pending. This page retains the
+and image pin pass; refreshed ONL handoff and wiki are verified. This page retains the
 earlier standalone qualification's exact source (`d143c0d` / `ebf3988`) and evidence.
 
 ## What is reported
@@ -116,6 +116,6 @@ Use the approved SSH transport. The CLI performs one bookkeeping read followed
 by two default system-status reads, checks source/schema and stable process/boot
 identity, and only prints whitelisted clock data. The former `eecff61` lacks
 this field; deployed `702155b` passes the new check and live regression.
-The timesync follow-up records complete runtime/pin qualification. Refreshed ONL
-handoff, approved-source/fresh physical NTP evidence and new-firmware/full-stream/
-image qualification remain open.
+The timesync follow-up records complete runtime/pin/ONL handoff and wiki
+qualification. Approved-source/fresh physical NTP evidence and new-firmware/
+full-stream/image qualification remain open.
