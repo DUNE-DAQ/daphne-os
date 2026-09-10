@@ -16,6 +16,16 @@ int main() {
   ConfigurationProfile profile{{0x44415048, 0x20000, 1, 0x3f17f1b}, GatewareMode::kSelfTrigger, true, true};
   auto fingerprint = [&](const auto& request) { return sha256_hex(canonical_configuration_evidence(request, profile, {{0x9400002c, 0}})); };
   const auto original = fingerprint(config);
+  const auto evidence = canonical_configuration_evidence(config, profile, {{0x9400002c, 0}});
+  require(evidence.find("daphne-executed-configuration-v2\n") == 0);
+  require(evidence.find("biasctrl=0\nbias_enable_command=none\n") != std::string::npos);
+  require(evidence.find("bias_enable_command=1") == std::string::npos);
+  require(evidence.find("bias_enable_command=0") == std::string::npos);
+  auto changed_target = config;
+  changed_target.set_biasctrl(4095);
+  require(fingerprint(changed_target) != original);
+  require(canonical_configuration_evidence(changed_target, profile, {}).find(
+      "biasctrl=4095\nbias_enable_command=none\n") != std::string::npos);
   require(is_complete_configuration(config));
   auto permuted = config;
   permuted.mutable_channels()->SwapElements(0, 39);

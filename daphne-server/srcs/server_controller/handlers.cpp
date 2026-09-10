@@ -619,10 +619,12 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
     {
       const uint32_t ctrl = requested_cfg.biasctrl();
       const uint32_t returnedControlValue = daphne.getDac()->setDacHvBias(ctrl, false, false);
-      const uint32_t returnedBiasEnable = daphne.getDac()->setBiasEnable(true);
+      // DAQ owns the numerical target, not ordinary SC energization. Do not
+      // assert, clear, or read/restore BiasEnable as a Configure side effect.
       daphne.setBiasControlDictValue(ctrl);
-      out << "Bias Control value written successfully. Bias Control value: " << ctrl << " and Enable: "
-          << returnedBiasEnable << " Returned value: " << returnedControlValue << ".\n";
+      out << "Bias Control command sent. BIASCTRL code: " << ctrl
+          << ". Returned command-register value: " << returnedControlValue
+          << ". BiasEnable not written (SC-owned); no physical voltage readback.\n";
     }
 
     for (const AFEConfig& afe_config : requested_cfg.afes()) {

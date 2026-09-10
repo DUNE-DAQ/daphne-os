@@ -76,13 +76,14 @@ std::string canonical_configuration_evidence(
       throw std::invalid_argument("Duplicate configuration observation address");
   std::ostringstream out;
   out.imbue(std::locale::classic());
-  out << "daphne-executed-configuration-v1\n";
+  out << "daphne-executed-configuration-v2\n";
   out << "profile=" << profile.identity.magic << ',' << profile.identity.abi << ','
       << profile.identity.variant << ',' << profile.identity.build_id << '\n';
   out << "mode=" << gateware_mode_name(profile.mode) << '\n';
   out << "reset=" << profile.reset_enabled << "\nauto_align=" << profile.automatic_alignment << '\n';
   out << "complete=" << is_complete_configuration(config) << '\n';
-  out << "biasctrl=" << config.biasctrl() << "\nbias_enable_command=1\n";
+  // Evidence of DAQ commands must not claim an SC-owned enable was applied.
+  out << "biasctrl=" << config.biasctrl() << "\nbias_enable_command=none\n";
   std::vector<daphne::ChannelConfig> channels(config.channels().begin(), config.channels().end());
   std::sort(channels.begin(), channels.end(), [](const auto& a, const auto& b) { return a.id() < b.id(); });
   for (const auto& channel : channels)
