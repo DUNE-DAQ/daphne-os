@@ -284,7 +284,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
     def test_current_source_contract_stages_abi22_capability(self) -> None:
         # Real reviewed source contract, synthetic ELF fixture; not an image build.
         bundle, _ = self.make_bundle()
-        candidate = "702155b8068823118fd7dbecd2f4a982ec031785"
+        candidate = "75972de44150fb164886522ea79592a2cc638a1e"
         self.assertEqual(REQUIRED_COMMIT, candidate)
         self.assertEqual(REQUIRED_MINORS, "0 1 2")
         result = self.run_stage(bundle)

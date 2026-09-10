@@ -153,7 +153,7 @@ class RuntimeOverlayContractTests(unittest.TestCase):
 
     def test_current_release_contract_accepts_all_nine_overlay_combinations(self):
         self.assertEqual(self.values["DAPHNE_SERVER_REQUIRED_GIT_COMMIT"],
-                         "702155b8068823118fd7dbecd2f4a982ec031785")
+                         "75972de44150fb164886522ea79592a2cc638a1e")
         self.assertEqual(self.values["DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS"], "0 1 2")
         for left in ("0", "1", "2"):
             for right in ("0", "1", "2"):
@@ -174,6 +174,11 @@ class RuntimeOverlayContractTests(unittest.TestCase):
 
     def test_previous_management_link_runtime_requires_older_build_identity_pin(self):
         self.values["DAPHNE_SERVER_RUNTIME_GIT_COMMIT"] = "bffea24fc16c93b263ffe5c83872832a7b7f7a82"
+        with self.assertRaisesRegex(Refused, "release contract"):
+            self.check()
+
+    def test_previous_timesync_runtime_requires_older_os_metadata_pin(self):
+        self.values["DAPHNE_SERVER_RUNTIME_GIT_COMMIT"] = "702155b8068823118fd7dbecd2f4a982ec031785"
         with self.assertRaisesRegex(Refused, "release contract"):
             self.check()
 
