@@ -4,7 +4,7 @@
   "workbook_filename": "DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx",
   "workbook_sha256": "7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8",
   "source_export_sha256": "393eac4e1a61513c76230f889670ce4a7841e3968272df33e829866461db2fe1",
-  "reviewed_os_commit": "fb82e0a6f6607e9486a98ed6fc1a26b07b0b0665",
+  "reviewed_os_commit": "89404640678b4364d6fc78d909f8ba499fe186de",
   "server_commit": "fb82e0a6f6607e9486a98ed6fc1a26b07b0b0665",
   "server_subtree": "9fd95d06cf2354c749448101bcb0f5ab7c6f72e7",
   "row_count": 251,
@@ -24,12 +24,12 @@
     "contract-pending": 13
   },
   "global_limits": [
-    "Candidate fb82e0a removes the implicit SC-owned enable write from Configure, updates fingerprint evidence to v2 and adds client preservation checks. Clean 33 host/33 actual ARM suites and 216 Python tests per binding pass. Not deployed; live preservation, runtime/pin/ONL and dedicated/authenticated SC-request handling remain pending.",
+    "Deployed fb82e0a removes Configure's implicit SC-enable write and updates fingerprint evidence to v2. Clean 33 host/33 actual ARM suites, 216 Python tests per binding and full live SC-preservation/zero-BIAS regression pass. Guarded server-only maintenance kept firmware/runtime/Hermes and enable1 unchanged. Runtime/pin/new ONL handoff and dedicated/authenticated SC-request handling remain pending.",
     "Human source/evidence audit, not consortium approval. The checker validates completeness/provenance/references, not semantic correctness.",
-    "Installed server 4e74f10 is native/live-RPC qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0; runtime/native loader, image pin, 35-file ONL handoff and five exported clients pass. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
-    "AFE-reset health: clean 33 host/33 actual ARM suites, 208 Python tests per binding, two independently audited native probes and deployed full RPC/zero-BIAS regression pass. Health has 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. Normal Configure reset pulses are retained; no held-reset fault injection, pin measurement or overall healthy-board claim.",
+    "Installed server fb82e0a is native/live-RPC qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. The complete runtime/image pin/35-file ONL handoff still refer to prior 4e74f10 and do not contain the SC ownership fix. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
+    "Original 4e74f10 AFE-reset qualification: 33 host/33 actual ARM suites, 208 Python tests per binding and native/live probes passed. Current fb82e0a retains the 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. Normal Configure reset pulses are retained; no held-reset fault injection, pin measurement or overall healthy-board claim.",
     "Hardware/missing-assignment conditions remain open even on implemented rows; inspect evidence-group limits and per-row remaining work.",
-    "No mezzanines are fitted. No new firmware, fan/bias/power writes, EEPROM changes, network/time changes or configuration mutations were performed for this audit.",
+    "No mezzanines are fitted. Source-ledger checks are read-only; referenced live maintenance tests do issue zero-BIAS/BIASCTRL Configure and normal AFE reset/power commands. This follow-up sent no SC-enable commands and made no firmware reload, fan/regulator/EEPROM writes or network/time changes.",
     "Crate/slot/detector, timing assignment and Hermes identity requirements also exist outside the Server Platform sheet; this sheet is not the complete user objective.",
     "Source meanings/IDs/row numbers are preserved from the hash-pinned workbook/export; original draft implementation colours are not current implementation evidence."
   ],
@@ -341,8 +341,8 @@
         "daphne-server/tests/fpga_status_tests.cpp",
         "daphne-server/tests/test_afe_global.py"
       ],
-      "evidence_scope": "4e74f10 deployed readback/full regression/runtime/pin/ONL; candidate fb82e0a ownership correction has 33 host/33 actual ARM suites and 216 Python tests per binding, not live Configure qualification",
-      "limit": "SC owns requested BiasEnable state; observation is FPGA register readback, not BIASCTRL DAC cache, physical power/bias voltage or busy history. Candidate fb82e0a removes Configure's implicit enable write; its native tests do not qualify live preservation or implement the dedicated/authenticated SC contract. Installed 4e74f10 retains old write behavior. Active transitions and full-stream/new-firmware qualification remain pending."
+      "evidence_scope": "Deployed fb82e0a: 33 host/33 actual ARM suites, 216 Python tests per binding and full live ABI2.0 Configure/SC-preservation regression. Runtime/image pin/new ONL handoff remain pending; prior 4e74f10 readback/runtime evidence is retained",
+      "limit": "SC owns requested BiasEnable state; observation is FPGA register readback, not BIASCTRL cache, voltage or busy history. Deployed fb82e0a removes Configure's implicit enable write; existing enable1 was preserved through guarded server-only maintenance and full Configure. State0 is synthetic-only. Dedicated/authenticated SC contract, physical transitions/glitch testing and full-stream/new-firmware qualification remain pending."
     },
     "bias_loop": {
       "source_refs": [
@@ -503,5 +503,5 @@
     "daphne-server/srcs/server_controller/timesync_linux.cpp": "e0b84338c50e69be7d7dbcfed326605a16bca5db2f8cc61622d434234ceb323d",
     "daphne-server/srcs/server_controller/timing_status.cpp": "125534f04fe7601ca9d261aae95ead4ad0ff8dffbb53072482de451592a423d8"
   },
-  "deployed_server_commit": "4e74f1071d09e16a15db597204c22debead2592c"
+  "deployed_server_commit": "fb82e0a6f6607e9486a98ed6fc1a26b07b0b0665"
 }

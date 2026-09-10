@@ -5,13 +5,13 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Source snapshot: **fb82e0a**, correcting Configure's implicit SC-enable write;
-33 host/33 actual ARM suites and 216 Python tests per binding pass. This candidate
-is not deployed. Installed server: **4e74f10**, adding AFE-reset health assessment;
-its clean/native tests, standalone probes and full live RPC regression pass.
+Source snapshot and installed server: **fb82e0a**, correcting Configure's implicit
+SC-enable write. 33 host/33 actual ARM suites, 216 Python tests per binding and
+the full live SC-preservation/zero-BIAS regression pass. Server-only maintenance
+kept firmware/runtime/Hermes running and enable1 unchanged.
 DAPHNE-015 retains unchanged self-trigger firmware
-**3f17f1b / ABI 2.0**. Native and live RPC/full regression, the complete runtime
-and image pin/35-file ONL handoff pass. This audit is
+**3f17f1b / ABI 2.0**. The complete runtime/image pin/35-file ONL handoff still
+describe prior server **4e74f10**; packaging this fix remains pending. This audit is
 not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
@@ -29,10 +29,10 @@ calibration or overall FPGA-health qualification is inferred.
 
 ## Important findings
 
-- **SC003/I288 ownership:** candidate fb82e0a leaves BiasEnable untouched by
+- **SC003/I288 ownership:** deployed fb82e0a leaves BiasEnable untouched by
   aggregate Configure and fingerprints that no enable command was issued.
-  The old installed server still forces enable. Live preservation and the
-  dedicated/authenticated SC request contract remain open; see
+  Live preservation is verified at enable1; the other state is synthetic-only.
+  Packaging and the dedicated/authenticated SC request contract remain open; see
   [correction and verification scope](sc-bias-enable-ownership.md).
 - **I283–I288, AFE global state:** the candidate now supplies admitted,
   bracketed read-only register observations with quality/times; two native
@@ -67,8 +67,9 @@ and deployment evidence are retained, not retroactively upgraded.
 
 ## Next implementation order
 
-First finish the [SC-enable correction's live maintenance and handoff gates](sc-bias-enable-ownership.md)
-without reloading firmware or changing SC state. The producer backlog remains:
+First finish the [SC-enable correction's runtime, pin and ONL handoff](sc-bias-enable-ownership.md);
+its live maintenance/regression gates pass without a firmware reload or enable
+change. The producer backlog remains:
 
 1. **AFE reset-health implementation/handoff is qualified on ABI 2.0**:
    deployed 4e74f10, full regression, runtime/native loader, image pin and ONL

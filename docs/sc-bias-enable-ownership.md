@@ -1,7 +1,9 @@
 # SC BiasEnable: remove the implicit Configure write
 
-Candidate **fb82e0a** is built and native-tested, **not deployed**. DAPHNE-015
-still runs **4e74f10**, whose aggregate Configure unconditionally enables bias.
+Server **fb82e0a is deployed and live-tested** on DAPHNE-015. Aggregate Configure
+now leaves SC-owned BiasEnable untouched. The FPGA was not reloaded. The complete
+runtime bundle, image pin and new ONL handoff are still pending; the previous
+4e74f10 bundle does not contain this correction.
 
 ## Contract and correction
 
@@ -53,11 +55,56 @@ Evidence: `server-v05-fixes-20260909/sc-bias-ownership.STn69mL3`, including
 Candidate executable SHA-256:
 `67c6c470dc61f8b54a1c0058b0d80b678169209133aa74619a28fb61dcfe685c`.
 
-## Pending live gate
+## Live qualification
 
-First qualify a server-only restart path against the actual systemd dependency
-graph; preserve SC enable and the approved CERN network identity. Then run the
-full zero-BIAS/BIASCTRL regression against the pinned candidate:
+The board's systemd 255.21 was tested with three temporary dummy services
+reproducing the Requires/PartOf relationships. Ordinary restart propagated to
+the dummy runtime/firmware; scoped stop/start did not. All dummy services were
+stopped and unloaded. The first probe's cleanup returned an error for an already
+unloaded unit; the corrected cleanup and complete rerun passed.
+
+The actual deployment used an explicit administrator-only
+`--job-mode=ignore-requirements` stop/start of `daphne.service`. This retains
+ordering but does not pull requirement jobs into that transaction; it is not an
+application restart API or a general shortcut. See the
+[systemd 255 job-mode documentation](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemctl.xml).
+All dependencies were required to be active first. Normal stop hooks, including
+quiesce, and server firmware-admission checks stayed enabled. No unit files,
+dependencies, network configuration or enable registers were changed.
+
+Eight guarded snapshots (before, stopped, replaced and five after-start)
+confirmed the same runtime, firmware, clock, endpoint and Hermes invocations,
+boot, FPGA identity and enable=1. The old server executable was retained in RAM;
+rollback was not used. Only the server invocation changed.
+
+- Initial and final aggregate regressions each pass **158 exchanges**, both AFE
+  orders, fresh AFE readback, alignment and all 40 spybuffer channels. Enable=1
+  was retained after Configure and capture. Normal AFE reset pulses remain;
+  no held-reset fault or physical glitch/pin test was performed.
+- Bookkeeping: **48 observations, 32 during Configure**, maximum **288.4 ms**.
+  Rejections preserve evidence; the existing channel-0 offset rewrite invalidates
+  it; full Configure restores the same v2 hash.
+- ADC, SFP, regulator, identity, platform and FPGA-health regressions pass.
+  ADC supplied 80 CRC-checked samples, not calibrated current measurements.
+  All five metadata/privacy client checks pass. No new-invocation error-level
+  journal messages were found.
+- Compatible read-only AFE/health clients from the prior ONL source export also
+  pass against fb82e0a (3 + 4 exchanges); those client/schema files are unchanged.
+  This does not qualify the old runtime bundle as containing the new fix.
+
+Final BIAS/BIASCTRL=0, offset2200/x1, trim0, VGAIN1700, enable1, selectors0/0.
+Health remains **12 PASS / 1 external-timing FAIL / 3 UNKNOWN**, not a healthy-board
+or run-permit assertion. New applied hash:
+`a7c843ddbb3014bc15e5bcb26d528899078b98a6948f034c6c5e487733404bea`.
+
+Live evidence: `sc-bias-ownership.STn69mL3/live-abi20.XylKSa3Q`.
+Sealed `qualification.json` SHA-256:
+`22e544c93df846c2dc71e4a4310db77ac818ce0d1f771dde01d1c1e3a94f5c08`.
+The native-phase qualification above remains historical and unchanged.
+
+## Repeat the maintenance verification
+
+With the exact deployed source/client and an approved SSH forward:
 
 ```bash
 python daphne-server/scripts/verify_aggregate_zero_bias.py \
@@ -72,6 +119,6 @@ python daphne-server/scripts/verify_aggregate_zero_bias.py \
 
 This is a maintenance command, not a read-only check. It applies the full FE
 profile twice, aligns five AFEs and captures all 40 channels. Do not run it
-against the old installed server. Live preservation, packaging/image pin and
-the updated ONL runtime bundle remain pending. Native tests do not qualify
+against the old server. Packaging/image pin and the updated ONL runtime bundle
+remain pending. This qualification does not establish
 physical enable transitions, full-stream or newly routed firmware.
