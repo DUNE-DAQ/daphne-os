@@ -62,7 +62,7 @@ int main() {
   for (auto mode : {GatewareMode::kSelfTrigger, GatewareMode::kFullStream}) {
     daphne::SystemStatusSnapshot status;
     add_register_capabilities(status, mode);
-    require(status.capabilities_size() == 19);
+    require(status.capabilities_size() == 20);
     require(status.capabilities(2).supported() == supports_trigger_counters(mode));
     for (int i = 3; i < 7; ++i)
       require(!status.capabilities(i).supported() && !status.capabilities(i).reason().empty());
@@ -80,6 +80,8 @@ int main() {
     require(status.capabilities(17).name() == "OnboardRegulatorTelemetry" && status.capabilities(17).supported());
     require(status.capabilities(18).name() == "HostResources" && status.capabilities(18).supported());
     require(status.capabilities(18).reason().find("I088/I101-I104") != std::string::npos);
+    require(status.capabilities(19).name() == "HostClock" && status.capabilities(19).supported());
+    require(status.capabilities(19).reason().find("I086/I087/I090") != std::string::npos);
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
   for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, kGatewareAbiV22, 0x00020003U}) {

@@ -105,5 +105,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("HostResources", true,
       "I088/I101-I104: fixed proc uptime/load/MemAvailable and root statvfs; typed values with per-source quality/times. "
       "Free and unprivileged-available bytes are distinct; no memory/disk alarm, verified UTC or operational-health inference");
+  add("HostClock", true,
+      "I086/I087/I090: local realtime/UTC and suspend-inclusive derived boot estimate, plus read-only kernel discipline state. "
+      "Separate monotonic brackets and quality; no clock setting, NTP peer/offset, verified UTC or FPGA-time inference");
 }
 }

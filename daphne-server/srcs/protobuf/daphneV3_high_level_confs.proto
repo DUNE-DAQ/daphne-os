@@ -750,6 +750,44 @@ message HostResourceObservation {
   // ROOT_READ_ONLY observes ST_RDONLY, not whether this state is unexpected.
 }
 
+message HostClockObservation {
+  optional int64 unix_time_ns = 1; // Local CLOCK_REALTIME, not externally verified UTC.
+  optional string current_utc = 2; // Same sample, ISO-8601 UTC with nine fractional digits.
+  optional uint64 boottime_ns = 3; // CLOCK_BOOTTIME includes suspended time.
+  optional int64 boot_time_estimate_unix_ns = 4;
+  optional string boot_time_estimate_utc = 5;
+  optional uint64 realtime_sample_span_ns = 6; // Acquisition span, NOT clock accuracy.
+  MeasurementQuality quality = 7;
+  uint64 acquisition_started_monotonic_ns = 8;
+  uint64 observed_monotonic_ns = 9;
+  string source = 10;
+  string detail = 11;
+  // Boot estimate = midpoint of bracketing realtime samples minus BOOTTIME.
+  // It can change when the wall clock is corrected; not a stored boot event.
+  // GOOD means this local observation passed validation, even if unsynchronized.
+  // Small/compensating wall-clock steps may evade the bracket check.
+}
+message KernelClockObservation {
+  optional uint32 time_state_raw = 1; // Linux TIME_OK..TIME_ERROR (0..5).
+  optional uint32 status_raw = 2; // Linux STA_* bits, preserved for interpretation.
+  optional bool reports_synchronized = 3; // TIME_ERROR is false, not a failed read.
+  optional int64 adjustment_offset_ns = 4; // NOT a timesyncd/NTP peer offset.
+  optional uint64 maximum_error_ns = 5; // Kernel estimates, not measured bounds.
+  optional uint64 estimated_error_ns = 6;
+  MeasurementQuality quality = 7;
+  uint64 acquisition_started_monotonic_ns = 8;
+  uint64 observed_monotonic_ns = 9;
+  string source = 10;
+  string detail = 11;
+  // Fresh syscall observation of potentially old discipline state. No peer
+  // identity, last accepted NTP sample, synchronization age or UTC guarantee.
+}
+message HostTimeStatus {
+  HostClockObservation clock = 1;
+  KernelClockObservation kernel = 2;
+  // Separate sequential samples; neither establishes FPGA timing health.
+}
+
 // Immutable compiled-in server metadata. Parent reply supplies process identity
 // and observation time; this message is NOT a live installed-file inventory.
 message ServerBuildInfo {
@@ -804,6 +842,7 @@ message SystemStatusSnapshot {
   repeated RegulatorMonitor regulators = 27;
   repeated HostResourceObservation host_resources = 28;
   ServerBuildInfo server_build = 29;
+  HostTimeStatus host_time = 30;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }

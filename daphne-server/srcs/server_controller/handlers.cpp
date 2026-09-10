@@ -42,6 +42,7 @@
 #include "server_controller/carrier_temperature.hpp"
 #include "server_controller/service_status.hpp"
 #include "server_controller/host_resources.hpp"
+#include "server_controller/host_clock.hpp"
 #include "server_controller/configuration_fingerprint.hpp"
 #include "server_controller/current_monitor.hpp"
 #include "server_controller/sfp_monitor.hpp"
@@ -2294,7 +2295,6 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       *resp.mutable_board_identity() = make_board_identity_status(
           board_identity.get(), network, req.include_identity_details(), monotonic_time_ns());
       const bool fpga_ok = collect_fpga_status(resp, mode, admitted_identity, d.runtime.get());
-      resp.set_ps_local_unix_ns(host_unix_time_ns());
       add_ams_temperatures(resp);
       {
         std::lock_guard<std::mutex> lock(d.i2c_1_mutex);
@@ -2303,6 +2303,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       add_service_status(resp);
       add_host_status(resp, d.mezzanine_access_enabled);
       add_host_resources(resp);
+      add_host_clock(resp);
       if (req.include_sfp_diagnostics() && fpga_ok) {
         std::lock_guard<std::mutex> lock(d.i2c_2_mutex);
         add_sfp_status(resp, temperature_policy);
