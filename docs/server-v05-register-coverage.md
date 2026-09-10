@@ -61,6 +61,10 @@ preserved history. Relevant prior work:
 
 ## Corrections
 
+Candidate `710e336` adds [typed kernel/OS release observations](host-software-verification.md)
+for I091/I092 and partial I093 metadata. It is not deployed; current runtime and
+handoff remain `702155b`. No rootfs integrity or A/B boot-health claim is added.
+
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
 | I143/I144, server/schema version | Deployed eecff61 embeds Git software version, source/tree/dirty provenance, exact schema hashes and the router's shared envelope-version constant; same metadata in system status and independent bookkeeping | 28 host/28 native ARM suites, 162 Python tests per binding, native and live RPC/busy-Configure metadata, full regression and ONL handoff pass. Hashes are not semantic compatibility or authentication; other service versions remain open |
