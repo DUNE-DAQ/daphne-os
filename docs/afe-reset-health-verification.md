@@ -1,9 +1,10 @@
 # AFE reset as an FPGA-health prerequisite
 
-Server change **a01d95e**, client checks **4e74f10**. Candidate **4e74f10** is
-clean-built and native-qualified, **not deployed**. DAPHNE-015 still runs
-**78504f1** with unchanged self-trigger **3f17f1b / ABI 2.0** firmware and its
-15-check RPC assessment. The existing ONL runtime/image pin remains 78504f1.
+Server change **a01d95e**, client checks **4e74f10**. Server **4e74f10 is deployed
+and live-qualified** on DAPHNE-015 with unchanged self-trigger
+**3f17f1b / ABI 2.0** firmware and a 16-check RPC assessment. Complete runtime,
+native loader, image pin **ecff25e** and 140 packaging/audit tests pass.
+The refreshed ONL home/source/client handoff and wiki update remain pending.
 
 ## What changed
 
@@ -44,9 +45,9 @@ Server subtree: `932cdc9dd0d0b4c26a6b6d766807bad2a4d2979c`.
   Both saw global/bias words **0x2 / 0x1**, and `afe_reset_released=PASS`.
   Both independently generated bindings reproduce the result.
 
-The probe deliberately does not collect the full status inputs: network,
-temperature and applied-configuration checks remain UNKNOWN. This is not live
-qualification of the candidate's RPC checklist. No physical reset was stimulated.
+The native-phase probe deliberately did not collect the full status inputs: network,
+temperature and applied-configuration checks remained UNKNOWN. These probes
+alone did not qualify the RPC checklist. No physical reset was stimulated.
 Protected executable/configuration hashes, boot, service PIDs/invocations and
 generator/current-selector guards match before and after. No service restart.
 Only test/candidate binaries were placed in owner-only root RAM storage.
@@ -71,10 +72,49 @@ sudo env LD_LIBRARY_PATH=/usr/lib/daphne-server \
 
 Set the build/probe paths explicitly; use the matching dependencies and an
 identified operating board. The probe is not an automatic hardware-free test.
-Use the existing 78504f1 client with the installed 78504f1 server: the new strict
-health client expects 16 checks and is intentionally not interchangeable.
+Use the matching 4e74f10 health client with the installed server. It expects
+16 checks; the old 78504f1 health client expects 15 and is not interchangeable.
 
-Next: candidate deployment and full zero-BIAS Configure/alignment/40-channel
-and RPC regression, complete runtime/pin/ONL handoff, then physical transitions
+## Deployed regression and complete runtime
+
+One-shot `daphne-deploy-4e74f10.service` completed successfully. The old process
+exited before the executable was replaced. Normal runtime startup reloaded the
+same installed FPGA, invalidating the previous process's applied-state record
+as expected. No board reboot, library, partition, identity, network or time change.
+
+Initial and final full zero-BIAS passes each completed **153 exchanges**:
+both AFE orders, five-AFE alignment and all 40 usable spybuffer channels.
+Bookkeeping checked **48 observations**, 32 during Configure; maximum round trip
+**282.021 ms**. Rejections preserved applied state, a rewrite of the existing
+channel-0 offset invalidated it, and full Configure restored the reference hash.
+
+All six inherited regression suites pass: v0.5 (17 exchanges), ADC (93, including
+80 CRC-checked samples), SFP (5), regulator (7), FPGA health (4), and identity/link
+reporting (5). The AFE, kernel/OS, clock and build clients pass three RPCs each;
+timesync default/opt-in/default privacy passes five. Independent health checks
+confirm `afe_reset_released=PASS` at its exact source observation time.
+Final health: **12 PASS / 1 external-timing FAIL / 3 UNKNOWN**, not overall OK.
+
+Final FE hash:
+`c858989d7e847a98146c39ad50ec1f053c67acc78ea3c268d6a880341ad8d503`.
+BIAS/BIASCTRL=0, offset=2200/x1, trim=0, VGAIN=1700, generator=1 and current
+selectors=0/0. Existing bias-enable readback remains 1. These command/register
+observations do not prove physical voltage or analog calibration. Final protected
+file, boot, process and policy guards pass; no automatic restarts or error-level
+journal entries were observed for this invocation. Private messages were not exported.
+
+Live proof `live-abi20.PfrVGkis/qualification.json` SHA-256:
+`ab11336bbc5ec59b582b4c7e8f5fcfa6113d6af23f44e2d91b7cb58b2fafac83`.
+Complete runtime SHA-256:
+`715579b9d37c96cfeb42aca53b6926dc66b45bdabf4648932ef3318dc4b3f6b4`.
+Its 22 regular files and four aliases include the exact server, unchanged
+qualified Hermes/protobuf/utf8/ZeroMQ dependencies and qualification evidence.
+Native payload checks and loader/help pass with the private libraries resolved
+inside the extracted bundle; OS libsystemd is not bundled or replaced.
+Actual staging and all nine synthetic overlay-minor combinations pass.
+The source version include remains fail-closed until an actual project stages
+the matching runtime. This is not BitBake, a complete image build or new firmware.
+
+Next: refreshed ONL/wiki handoff, then physical transitions
 and full-stream/new-firmware qualification. Do not toggle SC-owned state merely
 to make a diagnostic pass. See the [remaining objective](server-v05-completion-plan.md).

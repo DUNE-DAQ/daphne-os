@@ -23,11 +23,12 @@ reset epoch remain UNKNOWN in either ABI. SFP diagnostics or successful
 oneshot services cannot satisfy those requirements. Neither ABI can currently
 earn an overall OBSERVED_OK result.
 
-## Native-qualified AFE reset follow-up
+## Deployed AFE reset follow-up
 
-Native-qualified candidate **4e74f10** adds the sampled `afe_reset_released`
+Deployed server **4e74f10** adds the sampled `afe_reset_released`
 prerequisite; see [AFE reset health verification](afe-reset-health-verification.md).
-It is not deployed: the installed 78504f1 RPC still has 15 checks. The additional
+The full live regression confirms 16 checks: 12 PASS, one external-timing FAIL
+and three UNKNOWN. The additional
 check does not introduce an SC power/bias decision or treat transient SPI busy
 as a hardware fault.
 

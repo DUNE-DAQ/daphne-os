@@ -5,11 +5,12 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Source snapshot: candidate **4e74f10**, adding AFE-reset health assessment.
-Clean/native tests and two standalone probes pass; it is **not deployed**.
-DAPHNE-015 now runs server **78504f1** with unchanged self-trigger firmware
+Source snapshot and deployed server: **4e74f10**, adding AFE-reset health assessment.
+Clean/native tests, standalone probes and full live RPC regression pass.
+DAPHNE-015 retains unchanged self-trigger firmware
 **3f17f1b / ABI 2.0**. Native and live RPC/full regression, the complete runtime
-and image pin/ONL/wiki handoff pass. This audit is not a full-workbook completion claim.
+and image pin pass; refreshed ONL/wiki handoff remains pending. This audit is
+not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
@@ -32,10 +33,11 @@ calibration or overall FPGA-health qualification is inferred.
   separates SC-owned BiasEnable from the cached BIASCTRL DAC setpoint.
   Live RPC/full regression and runtime checks now pass; physical transitions
   and full-stream/new-firmware qualification remain separate.
-- **I284, reset-health follow-up:** candidate 4e74f10 derives a sixteenth
+- **I284, reset-health follow-up:** deployed 4e74f10 derives a sixteenth
   prerequisite from qualified readback, without SC bias/power policy changes.
   33 host/33 actual ARM suites, 208 Python tests per binding and two native
-  probes pass. Candidate RPC/deployment/handoff is still pending; see
+  probes and full live RPC regression pass. Runtime/native loader and image pin
+  pass; refreshed ONL/wiki handoff is still pending. See
   [verification and scope](afe-reset-health-verification.md).
 - **I207–I214, mezzanine samples:** independent cached atomics have no coherent
   quality/time; monitor exceptions can leave old values visible. No mezzanines
@@ -58,9 +60,9 @@ and deployment evidence are retained, not retroactively upgraded.
 
 ## Next implementation order
 
-1. Qualify deployment/RPC and package the **AFE reset-health candidate**;
-   its clean/native tests and probes pass. The 78504f1 readback ONL/wiki handoff
-   is complete and unchanged. Keep physical transitions and SC policy separate.
+1. Finish the **AFE reset-health ONL/wiki handoff**; deployed 4e74f10, full
+   regression, runtime/native loader and image pin pass. The prior 78504f1
+   handoff is unchanged. Keep physical transitions and SC policy separate.
 2. Correct **mezzanine cache quality/time and calibration provenance** with
    deterministic tests. Keep no-mezzanine behavior explicitly unavailable;
    hardware readback/metrology needs populated hardware.

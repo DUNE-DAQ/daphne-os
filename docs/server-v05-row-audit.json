@@ -4,7 +4,7 @@
   "workbook_filename": "DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx",
   "workbook_sha256": "7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8",
   "source_export_sha256": "393eac4e1a61513c76230f889670ce4a7841e3968272df33e829866461db2fe1",
-  "reviewed_os_commit": "4e74f1071d09e16a15db597204c22debead2592c",
+  "reviewed_os_commit": "ecff25eb3fdcc7076255874f3c003be3f95867d5",
   "server_commit": "4e74f1071d09e16a15db597204c22debead2592c",
   "server_subtree": "932cdc9dd0d0b4c26a6b6d766807bad2a4d2979c",
   "row_count": 251,
@@ -25,8 +25,8 @@
   },
   "global_limits": [
     "Human source/evidence audit, not consortium approval. The checker validates completeness/provenance/references, not semantic correctness.",
-    "Installed server 78504f1 is native/live-RPC qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0; runtime/native loader, image pin, ONL handoff and wiki pass. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
-    "Source candidate 4e74f10 adds AFE-reset health: clean 33 host/33 actual ARM suites, 208 Python tests per binding and two independently audited native probes pass. Not deployed; candidate RPC/full regression and complete runtime/pin/handoff remain pending. Inherited deployed producer evidence is identified separately.",
+    "Installed server 4e74f10 is native/live-RPC qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0; runtime/native loader and image pin pass. Refreshed ONL/wiki handoff pending. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
+    "AFE-reset health: clean 33 host/33 actual ARM suites, 208 Python tests per binding, two independently audited native probes and deployed full RPC/zero-BIAS regression pass. Health has 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. No overall healthy-board or physical reset-stimulation claim.",
     "Hardware/missing-assignment conditions remain open even on implemented rows; inspect evidence-group limits and per-row remaining work.",
     "No mezzanines are fitted. No new firmware, fan/bias/power writes, EEPROM changes, network/time changes or configuration mutations were performed for this audit.",
     "Crate/slot/detector, timing assignment and Hermes identity requirements also exist outside the Server Platform sheet; this sheet is not the complete user objective.",
@@ -168,8 +168,8 @@
         "daphne-server/tests/test_fpga_health.py",
         "docs/afe-reset-health-verification.md"
       ],
-      "evidence_scope": "78504f1 live-ABI2.0 15-check assessment; 4e74f10 additional reset check clean/native-tested only",
-      "limit": "Candidate not deployed. Sampled state/admitted identity only; not artifact authenticity, continuous health, physical reset pin, logic-fault history or a reset epoch. SC power/bias authority unchanged; instantaneous busy is not a stall verdict."
+      "evidence_scope": "4e74f10 clean/native and live-ABI2.0 16-check assessment/full regression",
+      "limit": "Sampled state/admitted identity only; not artifact authenticity, continuous health, physical reset pin, logic-fault history or a reset epoch. SC power/bias authority unchanged; instantaneous busy is not a stall verdict."
     },
     "capabilities": {
       "source_refs": [
@@ -334,7 +334,7 @@
         "daphne-server/tests/fpga_status_tests.cpp",
         "daphne-server/tests/test_afe_global.py"
       ],
-      "evidence_scope": "78504f1 clean/native and deployed ABI2.0 RPC/full regression/runtime/pin/ONL; 4e74f10 readback and additional reset-health native probes only, 33 suites and 208 Python tests per binding",
+      "evidence_scope": "4e74f10 clean/native and deployed ABI2.0 RPC/full regression/runtime/pin; 33 suites and 208 Python tests per binding; refreshed ONL handoff pending",
       "limit": "SC owns requested BiasEnable state; observation is FPGA register readback, not BIASCTRL DAC cache, physical power/bias voltage or busy history. Active transitions and full-stream/new-firmware qualification remain pending. No write-policy change."
     },
     "bias_loop": {
