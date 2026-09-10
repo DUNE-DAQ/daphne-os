@@ -50,14 +50,6 @@ Daphne::Daphne(bool enable_mezzanines, std::shared_ptr<daphne_sc::RuntimeState> 
 		this->isI2C_2_device_configuring.store(false);
 		this->user_vbias_voltage_request.store(false);
 		this->is_vbias_voltage_monitor_reading.store(false);
-		for(size_t i = 0; i < 5; i++){
-			this->HDMezz_5V_voltage[i].store(0.0);
-			this->HDMezz_5V_current[i].store(0.0);
-			this->HDMezz_3V3_voltage[i].store(0.0);
-			this->HDMezz_3V3_current[i].store(0.0);
-			this->HDMezz_5V_power[i].store(0.0);
-			this->HDMezz_3V3_power[i].store(0.0);
-		}
 	}
 
 Daphne::~Daphne(){}

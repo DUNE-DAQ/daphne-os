@@ -8,4 +8,8 @@ namespace daphne_sc {
 bool fill_hdmezz_configuration(
     const I2CMezzDrivers::HDMezzDriver::ConfigurationSnapshot& snapshot,
     daphne::cmd_readHDMezzBlockConfig_response& response);
+// Cache-only mapping. Never substitute protobuf defaults for missing observations.
+bool fill_hdmezz_status(
+    const I2CMezzDrivers::HDMezzDriver::MonitoringSnapshot& snapshot,
+    daphne::cmd_readHDMezzStatus_response& response);
 }

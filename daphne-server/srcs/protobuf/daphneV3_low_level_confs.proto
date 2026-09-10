@@ -479,20 +479,53 @@ message cmd_readHDMezzStatus {
   uint32 afeBlock   = 2;
 }
 
+enum HDMezzMonitorQuality {
+  HDMEZZ_MONITOR_UNSPECIFIED = 0;
+  HDMEZZ_MONITOR_GOOD = 1;
+  HDMEZZ_MONITOR_UNAVAILABLE = 2;
+  HDMEZZ_MONITOR_ERROR = 3;
+  HDMEZZ_MONITOR_INVALID = 4;
+  HDMEZZ_MONITOR_STALE = 5;
+}
+
+// Presence means a hardware status read was recorded, not that it is current.
+// Reading INA232 Mask/Enable can clear AFF. Never read it just to serve this RPC.
+message HDMezzAlertHistory {
+  bool software_latched = 1;
+  uint32 mask_enable_raw = 2;
+  uint64 observed_monotonic_ns = 3; // Last hardware read; zero means time unavailable.
+}
+
 message cmd_readHDMezzStatus_response {
   bool   success             = 1;
   string message             = 2;
   uint32 afeBlock            = 3;
-  bool   power5V             = 4;
-  bool   power3V3            = 5;
-  float  measured_voltage5V  = 6;
-  float  measured_voltage3V3 = 7;
-  float  measured_current5V  = 8;
-  float  measured_current3V3 = 9;
-  float  measured_power5V    = 10;
-  float  measured_power3V3   = 11;
-  bool   alert_5V            = 12;
-  bool   alert_3V3           = 13;
+  // Original wire numbers/types retained. Missing is not measured zero/false.
+  // Fields 4..11 present only with GOOD quality/success. Power is a TCA request.
+  optional bool   power5V             = 4;
+  optional bool   power3V3            = 5;
+  optional float  measured_voltage5V  = 6;  // V
+  optional float  measured_voltage3V3 = 7;  // V; legacy 3V3 name means CE
+  optional float  measured_current5V  = 8;  // mA
+  optional float  measured_current3V3 = 9;  // mA
+  optional float  measured_power5V    = 10; // mW
+  optional float  measured_power3V3   = 11; // mW
+  optional bool   alert_5V            = 12; // Historical software latch; see fields 26/27.
+  optional bool   alert_3V3           = 13;
+  HDMezzMonitorQuality monitor_quality = 14;
+  bool driver_state_available = 15;
+  bool block_enabled = 16; // Explicit software access selection, not physical presence.
+  bool driver_configured = 17; // Last programming result, not current physical protection.
+  uint64 acquisition_started_monotonic_ns = 18;
+  uint64 observed_monotonic_ns = 19; // Completed sample; retained only for GOOD/STALE.
+  uint64 state_observed_monotonic_ns = 20; // Cache lookup time, not hardware sample time.
+  uint64 last_good_monotonic_ns = 21; // Historical; not replaced on failed polls.
+  uint64 sample_attempt = 22; // Per-process/block acquisition attempt, not an ADC counter.
+  bool active_configuration_verified = 23; // GOOD cycle's checked words match requested settings.
+  bool protective_action_attempted = 24; // Last cycle attempted removal, NOT physical success.
+  bool power_requests_off_confirmed = 25; // GOOD cycle's TCA output latch only.
+  HDMezzAlertHistory alert_history_5V = 26;
+  HDMezzAlertHistory alert_history_3V3 = 27;
 };
 
 message cmd_clearHDMezzAlertFlag {

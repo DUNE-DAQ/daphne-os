@@ -23,37 +23,21 @@ void i2c_2_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
       auto* hd = daphne.getHDMezzDriver();
       if (hd) {
         for(size_t i = 0; i < 5; i++){
-          if(!hd->isAfeBlockEnabled(i) || !hd->isAfeBlockConfigured(i)){
-            continue;
-          }
           try {
-            const auto power = hd->readPowerRequests(i);
-            daphne.HDMezz_5V_is_powered[i].store(power.power5V);
-            daphne.HDMezz_3V3_is_powered[i].store(power.power3V3);
-            daphne.HDMezz_5V_voltage[i].store(hd->readRailVoltage(i, "5V"));
-            daphne.HDMezz_5V_current[i].store(hd->readRailCurrent(i, "5V"));
-            daphne.HDMezz_3V3_voltage[i].store(hd->readRailVoltage(i, "3V3"));
-            daphne.HDMezz_3V3_current[i].store(hd->readRailCurrent(i, "3V3"));
-            daphne.HDMezz_5V_power[i].store(hd->readRailPower(i, "5V"));
-            daphne.HDMezz_3V3_power[i].store(hd->readRailPower(i, "3V3"));
-            // Check and latch the alert condition. The driver removes both
-            // rail requests immediately when a latched alert is observed.
-            if(!daphne.HDMezz_5V_alert[i].load()) {
-              daphne.HDMezz_5V_alert[i].store(hd->checkAlertStatus(i, "5V"));
-            }
-            if(!daphne.HDMezz_3V3_alert[i].load()) {
-              daphne.HDMezz_3V3_alert[i].store(hd->checkAlertStatus(i, "3V3"));
-            }
-            if(daphne.HDMezz_5V_alert[i].load() || daphne.HDMezz_3V3_alert[i].load()){
-              if (daphne.runtime) daphne.runtime->invalidate("Mezzanine protective alert removed power requests");
-              hd->setPowerRequests(i, false, false);
-              daphne.HDMezz_5V_is_powered[i].store(false);
-              daphne.HDMezz_3V3_is_powered[i].store(false);
+            // The driver serializes/publishes a whole cycle, including errors.
+            // Disabled/unconfigured blocks perform no I/O; protective actions stay in the driver.
+            const auto sample = hd->pollMonitoring(i);
+            if (sample.alerts[0].latched || sample.alerts[1].latched) {
+              if (daphne.runtime) daphne.runtime->invalidate("Mezzanine alert observed; configuration no longer qualified");
               std::cerr << "Alert on AFE block " << i << ": "
-                        << (daphne.HDMezz_5V_alert[i].load() ? "5V alert " : "")
-                        << (daphne.HDMezz_3V3_alert[i].load() ? "CE alert" : "")
+                        << (sample.alerts[0].latched ? "5V alert " : "")
+                        << (sample.alerts[1].latched ? "CE alert " : "")
+                        << (sample.protectiveActionAttempted ? "power-removal requested" : "retained history; no action in this cycle")
                         << std::endl;
             }
+            if (sample.quality == I2CMezzDrivers::HDMezzDriver::MonitorQuality::Error ||
+                sample.quality == I2CMezzDrivers::HDMezzDriver::MonitorQuality::Invalid)
+              std::cerr << "I2C_2 monitor AFE " << i << ": " << sample.detail << std::endl;
           } catch (const std::exception& e) {
             std::cerr << "I2C_2 monitor AFE " << i << " error: "
                       << e.what() << std::endl;

@@ -1962,18 +1962,6 @@ bool setHDMezzBlockEnable(const cmd_setHDMezzBlockEnable& request,
     if(!daphne.getHDMezzDriver()) throw std::runtime_error("HD mezzanine driver not initialized");
     I2C2BusGuard bus_guard(daphne);
     daphne.getHDMezzDriver()->enableAfeBlock(afeBlock, enable);
-    if (!enable) {
-      daphne.HDMezz_5V_is_powered[afeBlock].store(false);
-      daphne.HDMezz_3V3_is_powered[afeBlock].store(false);
-      daphne.HDMezz_5V_voltage[afeBlock].store(0.0);
-      daphne.HDMezz_3V3_voltage[afeBlock].store(0.0);
-      daphne.HDMezz_5V_current[afeBlock].store(0.0);
-      daphne.HDMezz_3V3_current[afeBlock].store(0.0);
-      daphne.HDMezz_5V_power[afeBlock].store(0.0);
-      daphne.HDMezz_3V3_power[afeBlock].store(0.0);
-      daphne.HDMezz_5V_alert[afeBlock].store(false);
-      daphne.HDMezz_3V3_alert[afeBlock].store(false);
-    }
     response.set_afeblock(afeBlock);
     response.set_enable(enable);
     response_str = "HD mezzanine block " + std::to_string(afeBlock) + " enable state set to " +
@@ -2077,21 +2065,18 @@ bool readHDMezzStatus(const cmd_readHDMezzStatus& request,
   try {
     const uint32_t afeBlock = request.afeblock();
     if (afeBlock > 4) throw std::invalid_argument("HD mezzanine block out of range (0..4)");
-    if(!daphne.getHDMezzDriver()) throw std::runtime_error("HD mezzanine driver not initialized");
-    response.set_afeblock(afeBlock);
-    response.set_power5v(daphne.HDMezz_5V_is_powered[afeBlock].load());
-    response.set_power3v3(daphne.HDMezz_3V3_is_powered[afeBlock].load());
-    response.set_measured_voltage5v(daphne.HDMezz_5V_voltage[afeBlock].load());
-    response.set_measured_voltage3v3(daphne.HDMezz_3V3_voltage[afeBlock].load());
-    response.set_measured_current5v(daphne.HDMezz_5V_current[afeBlock].load());
-    response.set_measured_current3v3(daphne.HDMezz_3V3_current[afeBlock].load());
-    response.set_measured_power5v(daphne.HDMezz_5V_power[afeBlock].load());
-    response.set_measured_power3v3(daphne.HDMezz_3V3_power[afeBlock].load());
-    response.set_alert_5v(daphne.HDMezz_5V_alert[afeBlock].load());
-    response.set_alert_3v3(daphne.HDMezz_3V3_alert[afeBlock].load());
-    response_str = "HD mezzanine block " + std::to_string(afeBlock) + " status read successfully.";
-    return true;
+    I2CMezzDrivers::HDMezzDriver::MonitoringSnapshot snapshot;
+    snapshot.afeBlock = static_cast<uint8_t>(afeBlock);
+    snapshot.detail = "Mezzanine access disabled or driver unavailable; no bus access";
+    if (auto* driver = daphne.getHDMezzDriver()) snapshot = driver->monitoringSnapshot(afeBlock);
+    // No bus guard or polling: this RPC cannot consume clearing alert registers.
+    const bool ok = fill_hdmezz_status(snapshot, response);
+    response_str = response.message();
+    return ok;
   } catch (const std::exception& e) {
+    response.Clear();
+    response.set_afeblock(request.afeblock());
+    response.set_monitor_quality(daphne::HDMEZZ_MONITOR_INVALID);
     response_str = std::string("Error reading HD mezzanine block status: ") + e.what();
     return false;
   }
@@ -2106,8 +2091,7 @@ bool clearHDMezzAlertFlag(const cmd_clearHDMezzAlertFlag& request,
     if (afeBlock > 4) throw std::invalid_argument("HD mezzanine block out of range (0..4)");
     if(!daphne.getHDMezzDriver()) throw std::runtime_error("HD mezzanine driver not initialized");
     I2C2BusGuard bus_guard(daphne);
-    daphne.HDMezz_5V_alert[afeBlock].store(false);
-    daphne.HDMezz_3V3_alert[afeBlock].store(false);
+    daphne.getHDMezzDriver()->clearCachedAlerts(afeBlock);
     response.set_afeblock(afeBlock);
     response_str = "HD mezzanine block " + std::to_string(afeBlock) + " alert flags cleared.";
     return true;
