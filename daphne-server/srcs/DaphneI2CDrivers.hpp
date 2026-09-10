@@ -25,9 +25,14 @@ namespace I2CMezzDrivers{
 
         using DeviceFactory = std::function<std::unique_ptr<I2CRegisterDevice>(const std::string&, uint8_t)>;
         using DelayFunction = std::function<void(std::chrono::milliseconds)>;
+        using ClockFunction = std::function<uint64_t()>;
 
         HDMezzDriver();
-        HDMezzDriver(std::string devicePath, DeviceFactory deviceFactory, DelayFunction delayFunction);
+        HDMezzDriver(std::string devicePath, DeviceFactory deviceFactory, DelayFunction delayFunction,
+                     ClockFunction clockFunction = [] {
+                         return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             std::chrono::steady_clock::now().time_since_epoch()).count();
+                     });
         ~HDMezzDriver() = default;
 
         HDMezzDriver(const HDMezzDriver&) = delete;
@@ -48,6 +53,23 @@ namespace I2CMezzDrivers{
         uint16_t getShuntCal(uint8_t afeBlock, const std::string &rail) const;
 
         struct BlockConfiguration { double rShunt5V, rShunt3V3, maxCurrentScale5V, maxCurrentScale3V3, maxCurrentShutdown5V, maxCurrentShutdown3V3; };
+        enum class ReadbackQuality { Unavailable, Good, Error, Invalid };
+        static constexpr uint64_t kMaxConfigurationReadNs = 100'000'000ULL;
+        struct ConfigurationSnapshot {
+            uint8_t afeBlock = 0;
+            bool enabled = false; // Driver's explicit population/access selection, not physical presence.
+            bool configured = false; // Last programming result in this process, not fresh protection readback.
+            bool requestedSettingsAvailable = false;
+            BlockConfiguration requested{};
+            std::array<double, 2> currentLsb{}, maxPower{}; // 5V, CE (legacy 3V3).
+            std::array<uint16_t, 2> requestedShuntCal{}, observedShuntCal{};
+            ReadbackQuality quality = ReadbackQuality::Unavailable;
+            uint64_t acquisitionStartedNs = 0, observedNs = 0;
+            std::string detail = "Mezzanine block is not enabled; no bus access";
+        };
+        // Mux selection + non-clearing reads only. Never enables/configures a block.
+        // One software lock; sequential register observations, not a hardware latch.
+        ConfigurationSnapshot readBlockConfiguration(uint8_t afeBlock);
         void configureHdMezzAfeBlock(uint8_t afeBlock);
         void configureHdMezzAfeBlock(uint8_t afeBlock, const BlockConfiguration& configuration);
         void setPowerRequests(uint8_t afeBlock, bool power5V, bool power3V3);
@@ -73,6 +95,7 @@ namespace I2CMezzDrivers{
         std::string device_path_;
         DeviceFactory device_factory_;
         DelayFunction delay_;
+        ClockFunction clock_;
         std::unique_ptr<I2CRegisterDevice> mux_;
         std::unique_ptr<I2CRegisterDevice> ina_5V_;
         std::unique_ptr<I2CRegisterDevice> ina_3V3_;

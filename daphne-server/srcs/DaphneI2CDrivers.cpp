@@ -38,10 +38,12 @@ I2CMezzDrivers::HDMezzDriver::HDMezzDriver()
 I2CMezzDrivers::HDMezzDriver::HDMezzDriver(
     std::string devicePath,
     DeviceFactory deviceFactory,
-    DelayFunction delayFunction)
+    DelayFunction delayFunction,
+    ClockFunction clockFunction)
     : device_path_(std::move(devicePath)),
       device_factory_(std::move(deviceFactory)),
-      delay_(std::move(delayFunction)) {
+      delay_(std::move(delayFunction)),
+      clock_(std::move(clockFunction)) {
     if (device_path_.empty()) {
         throw std::invalid_argument("HDMezzDriver I2C device path cannot be empty");
     }
@@ -50,6 +52,9 @@ I2CMezzDrivers::HDMezzDriver::HDMezzDriver(
     }
     if (!delay_) {
         throw std::invalid_argument("HDMezzDriver delay function cannot be empty");
+    }
+    if (!clock_) {
+        throw std::invalid_argument("HDMezzDriver clock function cannot be empty");
     }
 
     const auto createDevice = [this](uint8_t address, const char* name) {
@@ -351,6 +356,76 @@ uint16_t I2CMezzDrivers::HDMezzDriver::getShuntCal(uint8_t afeBlock, const std::
         return shunt_cal_5V[afeBlock];
     }
     return shunt_cal_3V3[afeBlock];
+}
+
+I2CMezzDrivers::HDMezzDriver::ConfigurationSnapshot
+I2CMezzDrivers::HDMezzDriver::readBlockConfiguration(uint8_t afeBlock) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    validateAfeBlock(afeBlock);
+    ConfigurationSnapshot result;
+    result.afeBlock = afeBlock;
+    result.enabled = enabled_afeBlocks[afeBlock];
+    result.configured = configured_afeBlocks[afeBlock];
+    result.requestedSettingsAvailable = true;
+    result.requested = {r_shunt_5V[afeBlock], r_shunt_3V3[afeBlock],
+        max_current_5V_scale[afeBlock], max_current_3V3_scale[afeBlock],
+        max_current_5V_shutdown[afeBlock], max_current_3V3_shutdown[afeBlock]};
+    result.currentLsb = {current_lsb_5V[afeBlock], current_lsb_3V3[afeBlock]};
+    result.maxPower = {max_power_5V[afeBlock], max_power_3V3[afeBlock]};
+    result.requestedShuntCal = {shunt_cal_5V[afeBlock], shunt_cal_3V3[afeBlock]};
+    if (!result.enabled) return result;
+
+    try {
+        result.acquisitionStartedNs = clock_();
+        if (!result.acquisitionStartedNs) {
+            result.quality = ReadbackQuality::Invalid;
+            result.detail = "Missing monotonic acquisition time; no bus access";
+            return result;
+        }
+        const std::array<uint8_t, 2> addresses = {
+            I2C_drivers_defines::HDMezzAddressMap.at("INA232_5V_ADDR"),
+            I2C_drivers_defines::HDMezzAddressMap.at("INA232_3V3_ADDR")};
+        const auto idRegister = I2C_drivers_defines::HDMezzAddressMap.at("INA232_MANUFACTURER_ID_REG");
+        const auto calRegister = I2C_drivers_defines::HDMezzAddressMap.at("INA232_CALIBRATION_REG");
+        const auto identitiesMatch = [&] {
+            const auto first = readINA232RegisterUnlocked(afeBlock, addresses[0], idRegister);
+            const auto second = readINA232RegisterUnlocked(afeBlock, addresses[1], idRegister);
+            return first == kIna232ManufacturerId && second == kIna232ManufacturerId;
+        };
+        // TI ID is an address/wiring sanity check, not a unique device/model ID.
+        if (!identitiesMatch()) {
+            result.quality = ReadbackQuality::Invalid;
+            result.detail = "Unexpected INA232 manufacturer identity before calibration read";
+            return result;
+        }
+        std::array<uint16_t, 2> first{}, second{};
+        for (size_t i = 0; i < addresses.size(); ++i)
+            first[i] = readINA232RegisterUnlocked(afeBlock, addresses[i], calRegister);
+        for (size_t i = 0; i < addresses.size(); ++i)
+            second[i] = readINA232RegisterUnlocked(afeBlock, addresses[i], calRegister);
+        if (!identitiesMatch() || first != second || (first[0] & 0x8000u) || (first[1] & 0x8000u)) {
+            result.quality = ReadbackQuality::Invalid;
+            result.detail = "Changed identity/calibration or nonzero reserved calibration bit";
+            return result;
+        }
+        const auto completed = clock_();
+        if (completed < result.acquisitionStartedNs ||
+            completed - result.acquisitionStartedNs > kMaxConfigurationReadNs) {
+            result.quality = ReadbackQuality::Invalid;
+            result.detail = "Invalid or excessive calibration acquisition interval (100 ms limit)";
+            return result;
+        }
+        result.observedShuntCal = first;
+        result.observedNs = completed;
+        result.quality = ReadbackQuality::Good;
+        result.detail = "Cached requested/derived settings; fresh stable calibration-register pair. "
+                        "No fresh protection-configuration or physical calibration claim";
+    } catch (const std::exception&) {
+        // No partial pair or previous successful sample is substituted on error.
+        result.quality = ReadbackQuality::Error;
+        result.detail = "Mezzanine calibration acquisition failed; no complete readback";
+    }
+    return result;
 }
 
 void I2CMezzDrivers::HDMezzDriver::configureHdMezzAfeBlock(uint8_t afeBlock){

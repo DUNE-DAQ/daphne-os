@@ -43,6 +43,11 @@ struct FakeBusState {
     bool varyDynamicStatusBits{true};
     bool corruptMaskWritableBit{false};
     bool yieldAfterSelect{false};
+    unsigned readCalls{0};
+    int failReadCall{-1}, shortReadCall{-1};
+    std::function<uint16_t(unsigned, uint16_t)> transformRead;
+    std::vector<uint64_t> clockValues;
+    size_t clockIndex{0};
 
     FakeBusState() {
         for (std::size_t afe = 0; afe < 5; ++afe) {
@@ -127,6 +132,9 @@ public:
         if (!isIna() || numBytes != 2) {
             throw std::runtime_error("word read is only valid for a fake INA232");
         }
+        const unsigned call = ++state_->readCalls;
+        if (static_cast<int>(call) == state_->failReadCall)
+            throw std::runtime_error("Injected I2C read failure");
         uint16_t value = inaRegistersLocked(afe)[registerAddress];
         if (registerAddress == 0x06 && state_->varyDynamicStatusBits) {
             value = static_cast<uint16_t>(
@@ -135,12 +143,14 @@ public:
         if (registerAddress == 0x06 && state_->corruptMaskWritableBit) {
             value ^= 0x0800u;
         }
+        if (state_->transformRead) value = state_->transformRead(call, value);
         std::vector<uint8_t> received = {
             static_cast<uint8_t>((value >> 8) & 0xFF),
             static_cast<uint8_t>(value & 0xFF)
         };
         state_->events.push_back(
             Event{Event::Kind::Read, afe, address_, registerAddress, received});
+        if (static_cast<int>(call) == state_->shortReadCall) received.pop_back();
         data.swap(received);
     }
 
@@ -187,7 +197,12 @@ Rig makeRig() {
         return std::make_unique<FakeDevice>(state, address);
     };
     auto driver = std::make_unique<I2CMezzDrivers::HDMezzDriver>(
-        "fake-i2c", std::move(factory), [](std::chrono::milliseconds) {});
+        "fake-i2c", std::move(factory), [](std::chrono::milliseconds) {}, [state] {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            if (!state->clockValues.empty()) return state->clockValues.at(state->clockIndex++);
+            return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
+        });
     return Rig{std::move(state), std::move(driver)};
 }
 
@@ -606,6 +621,160 @@ void testConcurrentMuxTransactionsStayCoherent() {
     verifyEachTransferFollowsSelection(events(rig.state));
 }
 
+void verifyCalibrationReadOnly(const std::vector<Event>& log) {
+    verifyEachTransferFollowsSelection(log);
+    for (const auto& event : log) {
+        check(event.kind != Event::Kind::Write, "configuration read wrote a downstream device");
+        if (event.kind == Event::Kind::Read) {
+            check(event.address == kIna5VAddress || event.address == kIna3V3Address,
+                  "configuration read touched TCA or other device");
+            check(event.registerAddress == 0x3E || event.registerAddress == 0x05,
+                  "configuration read accessed a clearing or unrelated register");
+        }
+    }
+}
+
+void testFreshCalibrationReadbackAndMismatch() {
+    using Quality = I2CMezzDrivers::HDMezzDriver::ReadbackQuality;
+    auto rig = makeRig();
+    enableAndConfigure(rig, 0);
+    rig.driver->setPowerRequests(0, true, true);
+    clearEvents(rig.state);
+    const auto original = rig.driver->readBlockConfiguration(0);
+    check(original.quality == Quality::Good && original.enabled && original.configured,
+          "configured calibration read failed");
+    check(original.observedShuntCal == original.requestedShuntCal, "programmed pair not read back");
+    check(original.acquisitionStartedNs > 0 && original.observedNs >= original.acquisitionStartedNs,
+          "missing acquisition timestamps");
+    check(events(rig.state).size() == 16, "expected eight mux-selected read transactions");
+    verifyCalibrationReadOnly(events(rig.state));
+    {
+        std::lock_guard<std::mutex> lock(rig.state->mutex);
+        rig.state->ina5V[0][0x05] = 0x1234;
+        rig.state->ina3V3[0][0x05] = 0; // A reset value is legitimate raw readback, not requested calibration.
+    }
+    clearEvents(rig.state);
+    const auto changed = rig.driver->readBlockConfiguration(0);
+    check(changed.quality == Quality::Good && changed.observedShuntCal[0] == 0x1234 &&
+          changed.observedShuntCal[1] == 0, "readback substituted cached calibration");
+    check(changed.requestedShuntCal == original.requestedShuntCal,
+          "readback mutated requested calibration");
+    check(changed.configured, "diagnostic read changed the existing monitor enable policy");
+    verifyCalibrationReadOnly(events(rig.state));
+    check((rig.state->tca[0][0x01] & 3u) == 3u, "diagnostic read changed power requests");
+}
+
+void testCalibrationDisabledUnconfiguredAndInvalidBlock() {
+    using Quality = I2CMezzDrivers::HDMezzDriver::ReadbackQuality;
+    auto rig = makeRig();
+    const auto disabled = rig.driver->readBlockConfiguration(0);
+    check(disabled.quality == Quality::Unavailable && !disabled.enabled && !disabled.configured &&
+          disabled.observedNs == 0, "disabled block pretended readback");
+    check(disabled.requestedShuntCal[0] != 0, "requested defaults lost");
+    expectThrows([&] { rig.driver->readBlockConfiguration(5); }, "invalid block accepted");
+    check(events(rig.state).empty(), "disabled or invalid block touched bus");
+    rig.driver->enableAfeBlock(1, true); // Explicit fixture setup, not part of the read path.
+    clearEvents(rig.state);
+    const auto unconfigured = rig.driver->readBlockConfiguration(1);
+    check(unconfigured.quality == Quality::Good && unconfigured.enabled && !unconfigured.configured &&
+          unconfigured.observedShuntCal == std::array<uint16_t, 2>{0, 0},
+          "unconfigured block did not report actual reset calibration");
+    verifyCalibrationReadOnly(events(rig.state));
+}
+
+void testCalibrationReadFailureNeverReturnsOldPair() {
+    using Quality = I2CMezzDrivers::HDMezzDriver::ReadbackQuality;
+    for (int failure = 1; failure <= 8; ++failure) {
+        for (bool shortRead : {false, true}) {
+            auto rig = makeRig();
+            enableAndConfigure(rig, 0);
+            check(rig.driver->readBlockConfiguration(0).quality == Quality::Good, "fixture read failed");
+            rig.state->readCalls = 0;
+            if (shortRead) rig.state->shortReadCall = failure;
+            else rig.state->failReadCall = failure;
+            clearEvents(rig.state);
+            const auto failed = rig.driver->readBlockConfiguration(0);
+            check(failed.quality == Quality::Error && failed.observedNs == 0 &&
+                  failed.observedShuntCal == std::array<uint16_t, 2>{0, 0},
+                  "failed acquisition returned a partial or old successful pair");
+            verifyCalibrationReadOnly(events(rig.state));
+        }
+    }
+}
+
+void testCalibrationIdentityStabilityAndReservedBit() {
+    using Quality = I2CMezzDrivers::HDMezzDriver::ReadbackQuality;
+    for (unsigned changedCall : {1u, 2u, 5u, 6u, 7u, 8u}) {
+        auto rig = makeRig();
+        enableAndConfigure(rig, 0);
+        rig.state->readCalls = 0;
+        rig.state->transformRead = [changedCall](unsigned call, uint16_t value) {
+            return static_cast<uint16_t>(call == changedCall ? value ^ 1u : value);
+        };
+        clearEvents(rig.state);
+        const auto rejected = rig.driver->readBlockConfiguration(0);
+        check(rejected.quality == Quality::Invalid && rejected.observedNs == 0 &&
+              rejected.observedShuntCal == std::array<uint16_t, 2>{0, 0},
+              "identity change or unstable calibration was admitted");
+        verifyCalibrationReadOnly(events(rig.state));
+    }
+    for (bool secondRail : {false, true}) {
+        auto rig = makeRig();
+        enableAndConfigure(rig, 0);
+        (secondRail ? rig.state->ina3V3 : rig.state->ina5V)[0][0x05] |= 0x8000u;
+        check(rig.driver->readBlockConfiguration(0).quality == Quality::Invalid,
+              "reserved calibration bit was masked into plausible data");
+    }
+}
+
+void testCalibrationAcquisitionTiming() {
+    using Driver = I2CMezzDrivers::HDMezzDriver;
+    for (const auto& times : std::vector<std::vector<uint64_t>>{
+            {0}, {100, 99}, {100, 100 + Driver::kMaxConfigurationReadNs + 1}}) {
+        auto rig = makeRig();
+        enableAndConfigure(rig, 0);
+        rig.state->clockValues = times;
+        clearEvents(rig.state);
+        const auto result = rig.driver->readBlockConfiguration(0);
+        check(result.quality == Driver::ReadbackQuality::Invalid && result.observedNs == 0,
+              "invalid clock or excessive acquisition duration accepted");
+        if (!times[0]) check(events(rig.state).empty(), "missing start time still accessed bus");
+        verifyCalibrationReadOnly(events(rig.state));
+    }
+    auto rig = makeRig();
+    enableAndConfigure(rig, 0);
+    rig.state->clockValues = {100, 100 + Driver::kMaxConfigurationReadNs};
+    check(rig.driver->readBlockConfiguration(0).quality == Driver::ReadbackQuality::Good,
+          "inclusive acquisition boundary rejected");
+}
+
+void testConcurrentCalibrationSnapshotsStayWhole() {
+    using Quality = I2CMezzDrivers::HDMezzDriver::ReadbackQuality;
+    auto rig = makeRig();
+    enableAndConfigure(rig, 0);
+    rig.driver->setRShunt(1, 0.040, "5V");
+    enableAndConfigure(rig, 1);
+    rig.state->yieldAfterSelect = true;
+    clearEvents(rig.state);
+    std::atomic<bool> coherent{true};
+    const auto reader = [&](uint8_t afe) {
+        for (unsigned n = 0; n < 80; ++n) {
+            const auto result = rig.driver->readBlockConfiguration(afe);
+            if (result.quality != Quality::Good || result.afeBlock != afe ||
+                result.observedShuntCal != result.requestedShuntCal) coherent = false;
+        }
+    };
+    std::thread first(reader, 0), second(reader, 1);
+    first.join(); second.join();
+    check(coherent, "calibration snapshot crossed blocks or generations");
+    const auto log = events(rig.state);
+    check(log.size() == 160 * 16, "incomplete concurrent transaction log");
+    verifyCalibrationReadOnly(log);
+    for (size_t start = 0; start < log.size(); start += 16)
+        for (size_t i = start; i < start + 16; ++i)
+            check(log[i].afe == log[start].afe, "another block interleaved inside a snapshot");
+}
+
 }  // namespace
 
 int main() {
@@ -624,6 +793,12 @@ int main() {
     run("invalid configuration validation", testInvalidConfigurationIsNonMutatingAndDoesNoIo);
     run("disabled block rejection", testDisabledReadsDoNoIo);
     run("concurrent mux transaction coherence", testConcurrentMuxTransactionsStayCoherent);
+    run("fresh calibration pair and requested/readback mismatch", testFreshCalibrationReadbackAndMismatch);
+    run("disabled and unconfigured calibration provenance", testCalibrationDisabledUnconfiguredAndInvalidBlock);
+    run("all calibration read failures and short transfers", testCalibrationReadFailureNeverReturnsOldPair);
+    run("calibration identity/stability/reserved-bit rejection", testCalibrationIdentityStabilityAndReservedBit);
+    run("calibration acquisition timing boundaries", testCalibrationAcquisitionTiming);
+    run("concurrent calibration snapshots are whole", testConcurrentCalibrationSnapshotsStayWhole);
 
     if (failures != 0) {
         std::cerr << failures << " HD mezzanine test(s) failed\n";
