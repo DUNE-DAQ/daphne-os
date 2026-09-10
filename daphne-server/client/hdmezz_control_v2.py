@@ -28,6 +28,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from srcs.protobuf import daphneV3_high_level_confs_pb2 as pb_high
 from srcs.protobuf import daphneV3_low_level_confs_pb2 as pb_low
 from scripts.hdmezz_configuration import check_configuration_readback
+from scripts.hdmezz_status import check_monitoring_status
 
 
 DEFAULT_R_SHUNT_5V = 36e-3
@@ -156,26 +157,23 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def print_config_response(resp) -> None:
+def print_config_response(resp) -> bool:
     print(f"success={resp.success} afe={resp.afeBlock} message='{resp.message}'")
-    print("Configuration fields are requested/derived software settings, not measured hardware state.")
-    print(f"r_shunt_5V={resp.r_shunt_5V} ohm")
-    print(f"r_shunt_CE={resp.r_shunt_3V3} ohm")
-    print(f"max_current_5V_scale={resp.max_current_5V_scale} A")
-    print(f"max_current_CE_scale={resp.max_current_3V3_scale} A")
-    print(f"max_current_5V_shutdown={resp.max_current_5V_shutdown} A")
-    print(f"max_current_CE_shutdown={resp.max_current_3V3_shutdown} A")
     if hasattr(resp, "max_power_5V"):
-        print(f"max_power_5V={resp.max_power_5V} W")
-        print(f"max_power_CE={resp.max_power_3V3} W")
-        print(f"current_lsb_5V={resp.current_lsb_5V} A/LSB")
-        print(f"current_lsb_CE={resp.current_lsb_3V3} A/LSB")
         try:
             report = check_configuration_readback(resp, pb_low)
         except ValueError as error:
             print(f"Calibration readback rejected: {error}")
-            return
+            return False
         print(f"calibration_readback_quality={report['quality']}")
+        settings = report.get("requested_derived_settings")
+        if settings is None:
+            print("Requested/derived settings unavailable; no defaults substituted.")
+        else:
+            print("Requested/derived software settings (not measured hardware state):")
+            for name, value in settings.items():
+                unit = "ohm" if name.startswith("r_shunt") else "W" if name.startswith("max_power") else "A/LSB" if name.startswith("current_lsb") else "A"
+                print(f"{name.replace('3V3', 'CE')}={value} {unit}")
         if report.get("requested_calibration_5v_ce") is not None:
             print(f"requested_shunt_cal_5V_CE={report['requested_calibration_5v_ce']}")
         if report["available"]:
@@ -184,20 +182,46 @@ def print_config_response(resp) -> None:
             print(f"calibration_observed_monotonic_ns={report['observed_monotonic_ns']}")
         else:
             print("Actual calibration readback unavailable; no zero or cached code substituted.")
+        return report["available"]
+    if not resp.success:
+        print("Configuration command failed; reply defaults are not applied settings.")
+        return False
+    print("Acknowledged requested settings (not measured hardware state):")
+    for name in ("r_shunt_5V", "r_shunt_3V3", "max_current_5V_scale", "max_current_3V3_scale",
+                 "max_current_5V_shutdown", "max_current_3V3_shutdown"):
+        unit = "ohm" if name.startswith("r_shunt") else "A"
+        print(f"{name.replace('3V3', 'CE')}={getattr(resp, name)} {unit}")
+    return True
 
 
-def print_status_response(resp) -> None:
+def print_status_response(resp, expected_afe=None, roundtrip_ns=0) -> bool:
     print(f"success={resp.success} afe={resp.afeBlock} message='{resp.message}'")
-    print(f"power_5V={int(resp.power5V)}")
-    print(f"power_CE={int(resp.power3V3)}")
-    print(f"alert_5V={int(resp.alert_5V)}")
-    print(f"alert_CE={int(resp.alert_3V3)}")
-    print(f"measured_voltage_5V={resp.measured_voltage5V:.6f} V")
-    print(f"measured_voltage_CE={resp.measured_voltage3V3:.6f} V")
-    print(f"measured_current_5V={resp.measured_current5V:.6f} mA")
-    print(f"measured_current_CE={resp.measured_current3V3:.6f} mA")
-    print(f"measured_power_5V={resp.measured_power5V:.6f} mW")
-    print(f"measured_power_CE={resp.measured_power3V3:.6f} mW")
+    try:
+        report = check_monitoring_status(resp, pb_low, expected_afe, roundtrip_ns)
+    except ValueError as error:
+        print(f"Monitoring response rejected: {error}")
+        return False
+    print(f"monitor_quality={report['quality']}")
+    print("TCA power requests are not physical power; alert flags are historical software latches.")
+    for rail, alert in zip(("5V", "CE"), report["alerts"]):
+        if alert is None:
+            print(f"alert_history_{rail}=unavailable")
+        else:
+            print(f"alert_history_{rail}: latched={int(alert['latched'])} "
+                  f"mask=0x{alert['mask_enable_raw']:04x} last_hardware_read_ns={alert['observed_monotonic_ns'] or 'unavailable'}")
+    if report["driver_state"] is not None:
+        print(f"driver_state={report['driver_state']} (software bookkeeping)")
+    if not report["available"]:
+        print("Measurements unavailable; no zero or old reading substituted.")
+        return False
+    print(f"sample_attempt={report['sample_attempt']} observed_monotonic_ns={report['observed_monotonic_ns']} age_ns={report['age_ns']}")
+    for name, value in report["values"].items():
+        if name in ("power5V", "power3V3"):
+            print(f"requested_{name.replace('3V3', 'CE')}={int(value)}")
+        else:
+            unit = "V" if "voltage" in name else "mA" if "current" in name else "mW"
+            print(f"{name.replace('3V3', 'CE')}={value:.6f} {unit}")
+    return True
 
 
 class HDMezzClient:
@@ -206,6 +230,7 @@ class HDMezzClient:
         self.port = port
         self.route = route
         self.timeout_ms = timeout_ms
+        self.last_status_roundtrip_ns = 0
         self.ctx = zmq.Context.instance()
         self.sock = self.ctx.socket(zmq.DEALER)
         self.sock.setsockopt(zmq.IDENTITY, identity.encode())
@@ -284,15 +309,14 @@ class HDMezzClient:
 
     def read_status(self, afe: int):
         req = pb_low.cmd_readHDMezzStatus(id=0, afeBlock=afe)
-        return v2_rpc(
-            self.sock,
-            pb_high.MT2_READ_HDMEZZ_STATUS_REQ,
-            req,
-            pb_high.MT2_READ_HDMEZZ_STATUS_RESP,
-            pb_low.cmd_readHDMezzStatus_response,
-            route=self.route,
-            timeout_ms=self.timeout_ms,
-        )
+        started = time.monotonic_ns()
+        try:
+            return v2_rpc(
+                self.sock, pb_high.MT2_READ_HDMEZZ_STATUS_REQ, req,
+                pb_high.MT2_READ_HDMEZZ_STATUS_RESP, pb_low.cmd_readHDMezzStatus_response,
+                route=self.route, timeout_ms=self.timeout_ms)
+        finally:
+            self.last_status_roundtrip_ns = time.monotonic_ns() - started
 
     def clear_alert_flag(self, afe: int):
         req = pb_low.cmd_clearHDMezzAlertFlag(id=0, afeBlock=afe)
@@ -413,10 +437,16 @@ def run_visual(args) -> int:
             self.setMinimumHeight(82)
             self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
             self.setStyleSheet("QFrame { border: 1px solid #31556d; border-radius: 9px; background: #08131d; }")
-            self.set_on(False)
+            self.set_on(None)
 
         def set_on(self, is_on: bool) -> None:
+            if is_on is None:
+                self._is_on = None
+                self.bulb.setText("?")
+                self.bulb.setStyleSheet("QLabel { background: #26323b; border: 1px solid #50606d; border-radius: 19px; }")
+                return
             self._is_on = bool(is_on)
+            self.bulb.setText("")
             color = self.on_color if self._is_on else self.off_color
             glow = color if self._is_on else "#0d1117"
             self.bulb.setStyleSheet(
@@ -590,7 +620,7 @@ def run_visual(args) -> int:
             self.lcd.setMinimumHeight(38)
             self.lcd.setSegmentStyle(QtWidgets.QLCDNumber.SegmentStyle.Flat)
             self.lcd.setSmallDecimalPoint(True)
-            self.lcd.display("0.000")
+            self.lcd.display("----")
             self.lcd.setStyleSheet(
                 "QLCDNumber { background: #02070a; color: #7dff8d; border: 1px solid #173526; border-radius: 6px; }"
             )
@@ -602,7 +632,7 @@ def run_visual(args) -> int:
             layout.addWidget(unit_label)
 
         def set_value(self, value: float) -> None:
-            self.lcd.display(f"{value:0.3f}")
+            self.lcd.display("----" if value is None else f"{value:0.3f}")
 
     class SectionBay(QtWidgets.QFrame):
         def __init__(self, title: str):
@@ -671,6 +701,14 @@ def run_visual(args) -> int:
             self.scale_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
             self.scale_label.setStyleSheet("color: #8ff0ff; font-size: 7.5pt;")
             layout.addWidget(self.scale_label)
+
+        def clear_values(self) -> None:
+            for name, series in self.history.items():
+                series.clear()
+                chip, label = self.legend_chips[name]
+                chip.setText(f"{label}: -- {self.unit}")
+            self.scale_label.setText("Measurements unavailable; trend interrupted")
+            self.canvas.update()
 
         def append_values(self, values: dict) -> None:
             for name, _label, color in self.series_specs:
@@ -771,6 +809,11 @@ def run_visual(args) -> int:
             self.afe = afe
             self.client = client
             self.log = log_fn
+            self.last_sample_key = None
+            self.sample_expires_at = None
+            self.expiry_timer = QtCore.QTimer(self)
+            self.expiry_timer.timeout.connect(self._expire_display)
+            self.expiry_timer.start(250) # Local expiry makes no network/control calls.
             self.config_values = {
                 "r_shunt_5v": DEFAULT_R_SHUNT_5V,
                 "r_shunt_ce": DEFAULT_R_SHUNT_CE,
@@ -796,15 +839,18 @@ def run_visual(args) -> int:
 
             lamp_grid = QtWidgets.QGridLayout()
             lamp_grid.setSpacing(8)
-            self.power_5v_lamp = StatusLamp("5V POWER", on_color="#39f07f", off_color="#153324")
-            self.power_3v3_lamp = StatusLamp("CE POWER", on_color="#39f07f", off_color="#153324")
-            self.alert_5v_lamp = StatusLamp("5V ALERT", on_color="#ff4d4d", off_color="#34161b")
-            self.alert_3v3_lamp = StatusLamp("CE ALERT", on_color="#ff4d4d", off_color="#34161b")
+            self.power_5v_lamp = StatusLamp("5V REQUEST", on_color="#39f07f", off_color="#153324")
+            self.power_3v3_lamp = StatusLamp("CE REQUEST", on_color="#39f07f", off_color="#153324")
+            self.alert_5v_lamp = StatusLamp("5V ALERT HISTORY", on_color="#ff4d4d", off_color="#34161b")
+            self.alert_3v3_lamp = StatusLamp("CE ALERT HISTORY", on_color="#ff4d4d", off_color="#34161b")
             lamp_grid.addWidget(self.power_5v_lamp, 0, 0)
             lamp_grid.addWidget(self.power_3v3_lamp, 0, 1)
             lamp_grid.addWidget(self.alert_5v_lamp, 1, 0)
             lamp_grid.addWidget(self.alert_3v3_lamp, 1, 1)
             command_bay.body.addLayout(lamp_grid)
+            self.sample_quality_label = QtWidgets.QLabel("Measurements unavailable")
+            self.sample_quality_label.setWordWrap(True)
+            command_bay.body.addWidget(self.sample_quality_label)
 
             self.enable_button = QtWidgets.QPushButton("Commit Enable")
             self.enable_button.clicked.connect(self.apply_enable)
@@ -877,6 +923,8 @@ def run_visual(args) -> int:
             return label
 
         def _run(self, label: str, fn):
+            if label in ("SET_BLOCK_ENABLE", "CONFIGURE_BLOCK", "SET_POWER_STATES", "CLEAR_ALERT_FLAG"):
+                self._clear_measurements("Command attempted; awaiting a new monitoring sample")
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.BusyCursor)
             try:
                 resp = fn()
@@ -890,13 +938,13 @@ def run_visual(args) -> int:
 
         def apply_enable(self):
             resp = self._run("SET_BLOCK_ENABLE", lambda: self.client.set_block_enable(self.afe, self.enable_check.isChecked()))
-            if resp is not None:
+            if resp is not None and resp.success:
                 self.enable_check.setChecked(bool(resp.enable))
 
         def _update_config_summary(self) -> None:
             self.config_summary.setText(
-                "Cutoff: 5V {:.0f} mA | CE {:.0f} mA\n"
-                "Scale: 5V {:.0f} mA | CE {:.0f} mA".format(
+                "Requested cutoff: 5V {:.0f} mA | CE {:.0f} mA\n"
+                "Requested scale: 5V {:.0f} mA | CE {:.0f} mA".format(
                     self.config_values["max_current_5v_shutdown"] * 1000.0,
                     self.config_values["max_current_ce_shutdown"] * 1000.0,
                     self.config_values["max_current_5v_scale"] * 1000.0,
@@ -906,7 +954,15 @@ def run_visual(args) -> int:
 
         def read_config(self):
             resp = self._run("READ_BLOCK_CONFIG", lambda: self.client.read_block_config(self.afe))
-            if resp is None or not resp.success:
+            if resp is None:
+                return None
+            try:
+                report = check_configuration_readback(resp, pb_low)
+            except ValueError as error:
+                self.log(f"[AFE {self.afe}] CONFIGURATION rejected: {error}")
+                return None
+            if report.get("requested_derived_settings") is None:
+                self.log(f"[AFE {self.afe}] Requested settings unavailable; local defaults/edits retained")
                 return None
             self.config_values.update({
                 "r_shunt_5v": float(resp.r_shunt_5V),
@@ -959,46 +1015,68 @@ def run_visual(args) -> int:
                     power_3v3=self.power_3v3.isChecked(),
                 ),
             )
-            if resp is not None:
+            if resp is not None and resp.success:
                 self.power_5v.setChecked(bool(resp.power5V))
                 self.power_3v3.setChecked(bool(resp.power3V3))
 
         def read_status(self, *, log_result: bool = True):
             resp = self._run("READ_STATUS", lambda: self.client.read_status(self.afe)) if log_result else self._read_status_silent()
-            if resp is None:
-                return
+            report = None
+            if resp is not None:
+                try:
+                    report = check_monitoring_status(resp, pb_low, self.afe, self.client.last_status_roundtrip_ns)
+                except ValueError as error:
+                    self.log(f"[AFE {self.afe}] STATUS rejected: {error}")
+            self._show_status_report(report)
+            if log_result and report is not None:
+                self.log(f"[AFE {self.afe}] STATUS: {report['quality']}; {report['scope']}")
+
+        def _clear_measurements(self, reason):
+            self.sample_quality_label.setText(reason)
+            self.sample_expires_at = None
+            self.last_sample_key = None
+            for lamp in (self.power_5v_lamp, self.power_3v3_lamp):
+                lamp.set_on(None)
+            for display in (self.v5_display, self.v3_display, self.i5_display, self.i3_display,
+                            self.p5_display, self.p3_display):
+                display.set_value(None)
+            for graph in (self.voltage_graph, self.current_graph, self.power_graph):
+                graph.clear_values()
+
+        def _expire_display(self):
+            if self.sample_expires_at is not None and time.monotonic() > self.sample_expires_at:
+                self._clear_measurements("LOCAL_STALE: displayed sample exceeded five seconds")
+
+        def _show_status_report(self, report):
             # Polling is telemetry-only: it must never overwrite pending user
-            # selections in the command controls.  Successful command replies
-            # above are the sole source that synchronizes the checkboxes.
-            self.power_5v_lamp.set_on(bool(resp.power5V))
-            self.power_3v3_lamp.set_on(bool(resp.power3V3))
-            self.alert_5v_lamp.set_on(bool(resp.alert_5V))
-            self.alert_3v3_lamp.set_on(bool(resp.alert_3V3))
-            self.v5_display.set_value(resp.measured_voltage5V)
-            self.v3_display.set_value(resp.measured_voltage3V3)
-            self.i5_display.set_value(resp.measured_current5V)
-            self.i3_display.set_value(resp.measured_current3V3)
-            self.p5_display.set_value(resp.measured_power5V)
-            self.p3_display.set_value(resp.measured_power3V3)
-            self.voltage_graph.append_values({"v5": resp.measured_voltage5V, "v3": resp.measured_voltage3V3})
-            self.current_graph.append_values({"i5": resp.measured_current5V, "i3": resp.measured_current3V3})
-            self.power_graph.append_values({"p5": resp.measured_power5V, "p3": resp.measured_power3V3})
-            if log_result:
-                self.log(
-                    f"[AFE {self.afe}] STATUS: "
-                    f"V5={resp.measured_voltage5V:.4f} V "
-                    f"V3={resp.measured_voltage3V3:.4f} V "
-                    f"I5={resp.measured_current5V:.4f} mA "
-                    f"I3={resp.measured_current3V3:.4f} mA "
-                    f"P5={resp.measured_power5V:.4f} mW "
-                    f"P3={resp.measured_power3V3:.4f} mW "
-                    f"PW5={int(resp.power5V)} PW3={int(resp.power3V3)} "
-                    f"AL5={int(resp.alert_5V)} AL3={int(resp.alert_3V3)}"
-                )
+            # selections or issue writes. Lamps refer to requests and historical alerts.
+            for lamp, alert in zip((self.alert_5v_lamp, self.alert_3v3_lamp),
+                                   report["alerts"] if report else (None, None)):
+                lamp.set_on(None if alert is None else alert["latched"])
+                lamp.setToolTip("Alert history unavailable" if alert is None else
+                    f"Historical latch; last hardware read ns={alert['observed_monotonic_ns'] or 'unavailable'}")
+            if report is None or not report["available"]:
+                self._clear_measurements(report["quality"] if report else "Response unavailable/rejected")
+                return
+            values = report["values"]
+            self.sample_quality_label.setText(f"GOOD at mono {report['observed_monotonic_ns']} ns; age {report['age_ns'] / 1e9:.3f} s")
+            self.sample_expires_at = time.monotonic() + (5_000_000_000 - report["age_ns"]) / 1e9
+            self.power_5v_lamp.set_on(values["power5V"])
+            self.power_3v3_lamp.set_on(values["power3V3"])
+            for display, field in ((self.v5_display, "measured_voltage5V"), (self.v3_display, "measured_voltage3V3"),
+                                   (self.i5_display, "measured_current5V"), (self.i3_display, "measured_current3V3"),
+                                   (self.p5_display, "measured_power5V"), (self.p3_display, "measured_power3V3")):
+                display.set_value(values[field])
+            key = (report["sample_attempt"], report["observed_monotonic_ns"])
+            if key != self.last_sample_key:
+                self.voltage_graph.append_values({"v5": values["measured_voltage5V"], "v3": values["measured_voltage3V3"]})
+                self.current_graph.append_values({"i5": values["measured_current5V"], "i3": values["measured_current3V3"]})
+                self.power_graph.append_values({"p5": values["measured_power5V"], "p3": values["measured_power3V3"]})
+                self.last_sample_key = key
 
         def clear_alerts(self):
             resp = self._run("CLEAR_ALERT_FLAG", lambda: self.client.clear_alert_flag(self.afe))
-            if resp is not None:
+            if resp is not None and resp.success:
                 self.read_status()
 
         def _read_status_silent(self):
@@ -1159,8 +1237,7 @@ def main() -> int:
 
         if args.command == "read-block-config":
             resp = client.read_block_config(args.afe)
-            print_config_response(resp)
-            return 0 if resp.success else 2
+            return 0 if print_config_response(resp) else 2
 
         if args.command == "set-power-states":
             resp = client.set_power_states(args.afe, power_5v=bool(int(args.power_5v)), power_3v3=bool(int(args.power_ce)))
@@ -1172,8 +1249,7 @@ def main() -> int:
 
         if args.command == "read-status":
             resp = client.read_status(args.afe)
-            print_status_response(resp)
-            return 0 if resp.success else 2
+            return 0 if print_status_response(resp, args.afe, client.last_status_roundtrip_ns) else 2
 
         if args.command == "clear-alert-flag":
             resp = client.clear_alert_flag(args.afe)
