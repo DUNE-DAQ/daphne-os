@@ -16,6 +16,12 @@ def require(ok, reason):
         raise RuntimeError(reason)
 
 
+def same_gateware_image(first, second):
+    # Observation times/quality are additive metadata, not image identity.
+    return all(getattr(first, field) == getattr(second, field)
+               for field in ("magic", "abi", "variant", "build_id"))
+
+
 def check_status(status, artifact, artifact_sha, high, details):
     require(status.assignment_configured and status.assignment_artifact_sha256 == artifact_sha,
             "Missing/wrong configured identity artifact")
@@ -97,7 +103,8 @@ def main():
         previous = default.board_identity.observed_monotonic_ns
         for _ in range(2):
             reply = call(high.MT2_READ_SYSTEM_STATUS_REQ, high.ReadSystemStatusRequest(include_identity_details=True), high.SystemStatusSnapshot)
-            require(reply.success and not reply.sfps and reply.gateware_identity == ident, "Unexpected snapshot, firmware drift or SFP access")
+            require(reply.success and not reply.sfps and same_gateware_image(reply.gateware_identity, ident),
+                    "Unexpected snapshot, firmware drift or SFP access")
             check_status(reply.board_identity, artifact, artifact_sha, high, True)
             require(reply.board_identity.observed_monotonic_ns > previous, "Repeated identity observation time")
             previous = reply.board_identity.observed_monotonic_ns
