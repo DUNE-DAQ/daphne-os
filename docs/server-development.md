@@ -67,6 +67,9 @@ Use [the runtime runbook](dual-gateware-deployment.md) to stop and verify the
 complete service chain. Do not overwrite the running binary or start a second
 server against live hardware as part of a build.
 
-The image staging recipe still requires the pinned, qualified RC1 runtime
-contract. Do not label an edited server as the unchanged `77b39b7` release to
-bypass that check. Requalifying a custom runtime is a separate release action.
+The image staging recipe requires the source pin in
+`daphne-server-contract.inc`, currently `DUNE-DAQ/daphne-os@13bc725`.
+Its exact ARM binary passes native software tests and live self-trigger ABI 2.0
+regression; full-stream, ABI 2.1 firmware and a new image remain unqualified.
+See [runtime qualification and staging](qualified-server-runtime.md).
+Never label edited source as an unchanged release to bypass the pin.

@@ -88,25 +88,24 @@ fixtures; that is not firmware qualification. See the
 Cross-repository log: `fullstream-os-staging-integration-final.txt`;
 retained fixture directory: `fullstream-os-staging-qclbz_wi` (DO NOT DEPLOY).
 
-The image runtime contract still pins server `77b39b7`; updating/qualifying the
-matching server runtime and its image compatibility contract remains necessary.
-Do not combine new ABI 2.1 overlays with the old server merely because both
-declare ABI major 2. The overlay-only integration does not prove compatibility
-of the complete OS image.
+The image runtime contract now pins `DUNE-DAQ/daphne-os@13bc725`, with its
+[complete runtime archive and native ARM evidence](qualified-server-runtime.md).
+The old RC1 server must not be paired with ABI 2.1 overlays just because both
+declare ABI major 2. Neither source capabilities nor staging qualify a full image.
 
 The server recipe now reads both overlay version bindings and rejects an
 unsupported minor in **either** variant before fetching/building its payload.
-The reviewed RC1 server contract explicitly supports minor `0` only; staging
-records that exact capability set alongside the pinned source and archive hash.
-Old staged runtimes lacking the minor sentinel must be restaged. Updating only
+The reviewed current server contract supports minors `0 1`; staging records
+that capability set alongside the pinned source and archive hash.
+Old staged runtimes lacking the minor/execution sentinels must be restaged. Updating only
 an overlay also participates in the server task dependencies. The decision
 tests execute the actual recipe guard with a datastore double, including mixed
 2.0/2.1 pairs, unknown minors, stale sentinels and unsealed 2.1 inputs. This does
 not replace a real BitBake parse/build or binary/board qualification. The stager
-validates a recorded QEMU result; it does not run QEMU or authenticate metadata.
-All 97 PetaLinux packaging tests pass, including 10 tests executing the actual
-recipe guard with a datastore double and 14 runtime-staging tests. Log:
-`firmware-health.W1CUQ3E7/runtime-overlay-contract-tests.txt`.
+validates either an explicit native-AArch64 or QEMU record; it does not execute
+the binary or authenticate metadata. All 101 PetaLinux packaging tests pass,
+including 11 actual-recipe decision tests and 17 runtime-staging tests. Log:
+`runtime-candidate.00FTH1Zj/runtime-13bc725-contract-tests.txt`.
 
 The synthesis-source query follows
 [AMD's documented compile-order query](https://docs.amd.com/r/2024.1-English/ug896-vivado-ip/Querying-IP-Customization-Files).

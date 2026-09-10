@@ -86,30 +86,30 @@ the source port `8798471` and routed-check gates `d52e420`, with eight simulatio
 ratios/phases, four smoke suites and 20 source/Tcl-mock tests passing. Its
 build-bound identity/packaging producer port is now implemented in `6052164` /
 `67510d0`, with 37 source/Tcl/packaging tests, three shell tests and cross-repository
-synthetic OS-overlay staging passing. The image runtime contract still pins
-server `77b39b7`; a matching qualified runtime/compatibility contract must be
-prepared before an ABI 2.1 image can be qualified. Both repositories' actual
+synthetic OS-overlay staging passing. The image runtime contract now pins
+server `13bc725` with a complete native-tested runtime archive; a full image
+must still be built and qualified. Both repositories' actual
 netlist/routing and live qualification remain open. Legacy full-stream ABI 2.0
 remains supported without a native timestamp claim.
 
 The server image recipe now explicitly cross-checks its staged supported minor
-set against **both** overlays. The still-pinned RC1 server supports only 2.0,
-so packaging tools accepting a 2.1 overlay can no longer silently imply that
-the image's server supports it. Qualifying and pinning the new ARM runtime is
-still required; the recipe-guard tests are not image qualification.
+set against **both** overlays. The pinned server supports 2.0 and 2.1; its
+capabilities do not prove firmware or image qualification. Old RC1-runtime
+pairings with ABI 2.1 remain rejected by the legacy contract's regression tests.
 
 Clean candidate `13bc725` now cross-builds with the install runtime-library
 path; all 24 hardware-free ARM suites and candidate `--help` pass on DAPHNE-015,
 with all 102 Python tests passing against its generated bindings. Installed
 library/link-input differences were verified as debug/metadata stripping, and
-the final guard checks the actual installed hashes. The running board service,
-private identity and protected configuration remain unchanged. See
+the final guard checks the actual installed hashes. During that software-only
+phase, the running service and protected configuration remained unchanged. See
 [candidate qualification](native-timestamp-verification.md#complete-clean-candidate-arm-check).
 The candidate is now deployed and passes live self-trigger ABI 2.0 bookkeeping,
 full zero-bias configuration/alignment/all-channel spy capture, ADC, telemetry,
 identity, SFP/regulator and FPGA-health regression. The original valid FE hash,
 private identity and approved network settings are preserved; no automatic
 server restarts occurred. See [live qualification](native-timestamp-verification.md#live-self-trigger-abi-20-qualification).
-Next: prepare the complete runtime archive with honest execution provenance,
-then update the image source/minor contract. Current firmware still cannot
-supply ABI 2.1 snapshot evidence, and full-stream live qualification is pending.
+The [complete runtime archive and updated source/minor contract](qualified-server-runtime.md)
+are now prepared, with explicit native execution provenance and no private
+configuration. Current firmware still cannot supply ABI 2.1 snapshot evidence;
+full-stream live qualification and the full PetaLinux image build remain pending.

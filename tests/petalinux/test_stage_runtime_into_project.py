@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from pathlib import Path
 import shlex
 import shutil
@@ -17,7 +18,10 @@ STAGE_SCRIPT = ROOT / "scripts/petalinux/stage_runtime_into_project.sh"
 RECIPE_SOURCE = (
     ROOT / "petalinux/meta-daphne/recipes-apps/daphne-server"
 )
-REQUIRED_COMMIT = "77b39b7eb75204e1f2025f251a3a76ecf69d1d74"
+CONTRACT = dict(re.findall(r'^(DAPHNE_\w+) = "([^"\n]*)"$',
+                          (RECIPE_SOURCE / "daphne-server-contract.inc").read_text(), re.M))
+REQUIRED_COMMIT = CONTRACT["DAPHNE_SERVER_REQUIRED_GIT_COMMIT"]
+REQUIRED_MINORS = CONTRACT["DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS"]
 BUNDLE_NAME = "daphne-server-runtime-minimal.tgz"
 SERVER_MEMBER = "home/petalinux/daphne-server/build-petalinux/daphneServer"
 
@@ -180,7 +184,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
             version,
         )
         self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR = "2"', version)
-        self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "0"', version)
+        self.assertIn(f'DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "{REQUIRED_MINORS}"', version)
         self.assertIn(f'DAPHNE_SERVER_RUNTIME_SHA256 = "{bundle_sha}"', version)
 
     def test_explicit_native_execution_is_preserved_without_qemu_claim(self) -> None:
@@ -270,7 +274,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
         bundle, _ = self.make_bundle()
         contract = self.recipe / "daphne-server-contract.inc"
         contract.write_text(contract.read_text().replace(
-            'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "0"',
+            f'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "{REQUIRED_MINORS}"',
             'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "0 1 2"'))
         result = self.run_stage(bundle)
         self.assertNotEqual(result.returncode, 0)

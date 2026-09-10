@@ -38,7 +38,7 @@ class RuntimeOverlayContractTests(unittest.TestCase):
             "DAPHNE_SERVER_RUNTIME_GIT_COMMIT": self.values["DAPHNE_SERVER_REQUIRED_GIT_COMMIT"],
             "DAPHNE_SERVER_RUNTIME_EXECUTION_KIND": "qemu-aarch64",
             "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR": "2",
-            "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0",
+            "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": self.values["DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS"],
             "DAPHNE_SERVER_RUNTIME_SHA256": "a" * 64,
             "DAPHNE_DUAL_OVERLAY_STAGED": "1",
             "DAPHNE_SELF_TRIGGER_ABI_MINOR": "0",
@@ -47,6 +47,14 @@ class RuntimeOverlayContractTests(unittest.TestCase):
 
     def check(self):
         self.validate(types.SimpleNamespace(getVar=self.values.get))
+
+    def use_legacy_contract(self):
+        self.values.update({
+            "DAPHNE_SERVER_REQUIRED_GIT_COMMIT": "77b39b7eb75204e1f2025f251a3a76ecf69d1d74",
+            "DAPHNE_SERVER_RUNTIME_GIT_COMMIT": "77b39b7eb75204e1f2025f251a3a76ecf69d1d74",
+            "DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS": "0",
+            "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0",
+        })
 
     def test_recipe_requires_overlay_version_and_registers_guard(self):
         self.assertIn("require recipes-firmware/daphne-overlay/daphne-overlay-version.inc\n", self.recipe)
@@ -58,12 +66,14 @@ class RuntimeOverlayContractTests(unittest.TestCase):
             self.assertIn(prefix + "_IDENTITY_SEALED", dependencies.split())
 
     def test_original_runtime_with_two_legacy_overlays(self):
+        self.use_legacy_contract()
         self.check()
         del self.values["DAPHNE_SELF_TRIGGER_ABI_MINOR"]
         del self.values["DAPHNE_FULL_STREAM_ABI_MINOR"]
         self.check()
 
     def test_either_new_overlay_requires_new_server_even_if_other_is_legacy(self):
+        self.use_legacy_contract()
         for prefix in ("DAPHNE_SELF_TRIGGER", "DAPHNE_FULL_STREAM"):
             with self.subTest(prefix=prefix):
                 self.values[prefix + "_ABI_MINOR"] = "1"
@@ -72,12 +82,8 @@ class RuntimeOverlayContractTests(unittest.TestCase):
                     self.check()
                 self.values[prefix + "_ABI_MINOR"] = "0"
 
-    def test_explicit_new_source_contract_accepts_both_minor_combinations(self):
-        # Synthetic reviewed pin, not qualification of the real RC1 binary.
-        self.values["DAPHNE_SERVER_REQUIRED_GIT_COMMIT"] = "b" * 40
-        self.values["DAPHNE_SERVER_RUNTIME_GIT_COMMIT"] = "b" * 40
-        self.values["DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS"] = "0 1"
-        self.values["DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS"] = "0 1"
+    def test_reviewed_source_contract_accepts_both_minor_combinations(self):
+        # Real reviewed source pin; this remains a guard test, not hardware qualification.
         for left, right in (("0", "0"), ("0", "1"), ("1", "0"), ("1", "1")):
             with self.subTest(self_trigger=left, full_stream=right):
                 for prefix, minor in (("DAPHNE_SELF_TRIGGER", left), ("DAPHNE_FULL_STREAM", right)):
@@ -86,7 +92,7 @@ class RuntimeOverlayContractTests(unittest.TestCase):
                 self.check()
 
     def test_minor_capabilities_require_explicit_restage(self):
-        for stale in (None, "unstaged", "unqualified", "0 1", "1"):
+        for stale in (None, "unstaged", "unqualified", "0", "1"):
             with self.subTest(stale=stale):
                 self.values["DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS"] = stale
                 with self.assertRaisesRegex(Refused, "minor capabilities"):

@@ -32,8 +32,8 @@ Qualification contract:
 - the reviewed source contract lists explicit supported ABI minors; staging
   records that set without inferring support from the major number
 - the recipe rejects either staged overlay when its minor is unsupported by
-  the pinned server (including the inactive variant). RC1 supports only 2.0;
-  qualify a new source pin/runtime before pairing it with ABI 2.1 gateware
+  the pinned server (including the inactive variant). The current source pin
+  supports 2.0 and 2.1; these capabilities do not qualify either firmware image
 - older runtime sentinels without the minor set or execution method must be restaged
 - validation of a recorded passing result is not a new executable test,
   authenticated provenance, or physical board qualification
