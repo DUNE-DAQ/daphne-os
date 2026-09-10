@@ -3,6 +3,8 @@
 
 Inputs: a DNS-checked review, the same three source files, and copies of the
 board's already approved .link/.network files. No DNS, SSH or hardware writes.
+An optional, explicitly selected hardware-database export supplies timing/MAC
+assignments only when its authorized network identity matches those inputs.
 """
 from __future__ import annotations
 
@@ -169,6 +171,18 @@ def write_artifact(path, artifact):
     return hashlib.sha256(payload).hexdigest()
 
 
+def add_hardware_database(artifact, review, path, asset_id, expected_sha256, high):
+    # Optional integration needs the full daphne-os checkout, not just a server
+    # source export. Reuse its strict board-config-v1 validator without rendering.
+    deploy = Path(__file__).resolve().parents[2] / 'scripts/deploy'
+    if not (deploy / 'server_identity_database.py').is_file():
+        raise IdentityError('Hardware-database import requires the matching full daphne-os checkout')
+    sys.path.insert(0, str(deploy))
+    from server_identity_database import merge_assignment
+    return merge_assignment(artifact, review, path, asset_id, expected_sha256, high,
+                            sys.modules[__name__])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--review-file", required=True, type=Path)
@@ -178,12 +192,20 @@ def main(argv=None):
     parser.add_argument("--management-interface", required=True)
     parser.add_argument("--proto-dir", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--hardware-db-config", type=Path, help="Optional monitoring-only board-config-v1 export")
+    parser.add_argument("--hardware-db-asset-id", help="Explicit asset selector for that export")
+    parser.add_argument("--hardware-db-sha256", help="Expected lowercase SHA-256 of the selected export bytes")
     args = parser.parse_args(argv)
     try:
+        options = (args.hardware_db_config, args.hardware_db_asset_id, args.hardware_db_sha256)
+        if any(value is not None for value in options) and not all(value is not None for value in options):
+            raise IdentityError('All three hardware-database options must be supplied together')
         sys.path.insert(0, str(args.proto_dir.resolve()))
         import daphneV3_high_level_confs_pb2 as h
         review = read_review(args.review_file, args.source_root)
         artifact = prepare(review, args.approved_link_file, args.approved_network_file, args.management_interface, h)
+        if args.hardware_db_config is not None:
+            artifact = add_hardware_database(artifact, review, *options, h)
         digest = write_artifact(args.output, artifact)
     except IdentityError as error:
         print(f"Identity preparation refused: {error}", file=sys.stderr)
@@ -191,7 +213,8 @@ def main(argv=None):
     except (OSError, ValueError, TypeError, KeyError, ImportError, AttributeError):
         print("Identity preparation failed; check files and matching protobuf runtime (private details suppressed)", file=sys.stderr)
         return 1
-    print(json.dumps({"artifact_sha256": digest, "source_revision_sha256": review["source_revision_sha256"],
+    print(json.dumps({"artifact_sha256": digest, "source_revision_sha256": artifact.assignments.source_revision_sha256,
+                      "hardware_db_imported": args.hardware_db_config is not None,
                       "network_values": "redacted", "mode": "monitoring_only", "requires_board_identity_probe": True}))
     return 0
 
