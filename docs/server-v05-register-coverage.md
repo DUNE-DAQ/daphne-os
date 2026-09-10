@@ -45,6 +45,12 @@ The Server Platform tab contains 251 entries, including proposed interfaces
 and verification-pending inventory. This patch does not claim all 251 are
 implemented or hardware-qualified.
 
+The [complete 251-row assessment](server-v05-row-audit.md) now records **84
+implemented, 95 partial, 59 missing and 13 contract-pending** observations,
+with source references and individual remaining work. Its semantic distinctions
+take precedence over a broad interpretation of the selected-issue summaries
+below; an implemented producer is not universal hardware qualification.
+
 All 25 advertised branches of `ecristal/daphneZMQ` were checked against the
 preserved history. Relevant prior work:
 
