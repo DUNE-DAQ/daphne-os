@@ -83,8 +83,9 @@ report, **not full FPGA health**. Output contains no private network values.
 
 ## Before deployment
 
-1. Audit bundle ABI provenance and profile staging. The existing staging
-   script still emits minor 0; do not relabel old profiles or bypass admission.
+1. Qualify the new [bundle identity and staging path](gateware-bundle-identity.md)
+   with actual build outputs. Local positive/negative tests pass; do not
+   relabel old profiles or bypass admission.
 2. Run qualified Cooper synthesis/routing, review mandatory CDC/path reports,
    and qualify both firmware variants. No synthesis job is running yet.
 3. Run ARM executables and guarded live ABI 2.0/2.1 regression. Preserve CERN

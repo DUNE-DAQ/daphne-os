@@ -10,6 +10,12 @@ installs the root-level firmware-name symlink requested by each DTBO. No
 mutable `daphne` alias is created; runtime profiles must select the exact app
 directory name.
 
+New build-declared identity records are retained as GATEWARE-IDENTITY.json;
+ABI 2.1 additionally retains post_route_timestamp_snapshot.rpt. Staging checks
+their hashes and writes IDENTITY_ABI_MINOR in each runtime profile.
+Old-format bundles remain ABI 2.0. These declarations are not live readback or
+signed authentication; the runtime's exact identity/admission check still applies.
+
 The recipe deliberately fails its fetch task while
 `DAPHNE_DUAL_OVERLAY_STAGED = "0"`. The provisioning image excludes this
 package and can still parse the layer. Populate both variants atomically with:

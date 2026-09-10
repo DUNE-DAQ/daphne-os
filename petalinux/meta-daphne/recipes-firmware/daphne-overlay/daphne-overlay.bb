@@ -30,6 +30,11 @@ python validate_dual_overlay () {
             bb.fatal(
                 f"{firmware_var}={firmware_name!r} does not match {app_var}={app!r}"
             )
+        prefix = app_var.removesuffix("_APP")
+        minor = d.getVar(prefix + "_ABI_MINOR") or "0"
+        sealed = d.getVar(prefix + "_IDENTITY_SEALED") or "0"
+        if minor not in ("0", "1") or sealed not in ("0", "1") or (minor == "1" and sealed != "1"):
+            bb.fatal("Invalid/unsealed gateware ABI declaration")
 }
 
 do_fetch[prefuncs] += "validate_dual_overlay"
@@ -89,6 +94,12 @@ do_install() {
         install -m 0644 "${source_dir}/shell.json" "${app_dir}/shell.json"
         install -m 0644 "${source_dir}/${app}.bin" "${app_dir}/${app}.bin"
         install -m 0644 "${source_dir}/${app}.dtbo" "${app_dir}/${app}.dtbo"
+        for optional_path in GATEWARE-IDENTITY.json post_route_timestamp_snapshot.rpt; do
+            if [ -f "${source_dir}/${optional_path}" ]; then
+                verify_manifest_path_once "${source_dir}/SHA256SUMS" "${optional_path}"
+                install -m 0644 "${source_dir}/${optional_path}" "${app_dir}/${optional_path}"
+            fi
+        done
         ln -snf "xilinx/${app}/${app}.bin" "${firmware_dir}/${firmware_name}"
     }
 
@@ -110,4 +121,11 @@ FILES:${PN} += " \
     ${nonarch_base_libdir}/firmware/xilinx/${DAPHNE_SELF_TRIGGER_APP}/* \
     ${nonarch_base_libdir}/firmware/xilinx/${DAPHNE_FULL_STREAM_APP} \
     ${nonarch_base_libdir}/firmware/xilinx/${DAPHNE_FULL_STREAM_APP}/* \
+"
+
+SRC_URI += " \
+  ${@'file://staged/self-trigger/GATEWARE-IDENTITY.json' if d.getVar('DAPHNE_SELF_TRIGGER_IDENTITY_SEALED') == '1' else ''} \
+  ${@'file://staged/full-stream/GATEWARE-IDENTITY.json' if d.getVar('DAPHNE_FULL_STREAM_IDENTITY_SEALED') == '1' else ''} \
+  ${@'file://staged/self-trigger/post_route_timestamp_snapshot.rpt' if d.getVar('DAPHNE_SELF_TRIGGER_ABI_MINOR') == '1' else ''} \
+  ${@'file://staged/full-stream/post_route_timestamp_snapshot.rpt' if d.getVar('DAPHNE_FULL_STREAM_ABI_MINOR') == '1' else ''} \
 "

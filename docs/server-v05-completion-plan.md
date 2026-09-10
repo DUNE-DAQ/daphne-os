@@ -74,7 +74,11 @@ while requiring exact installed-profile agreement. The collector `a8adaec`,
 health integration `ef2ffe9` and independent client checks pass 24 native C++
 suites and 102 Python tests; ARM cross-build also passes. See
 [source verification and remaining gates](native-timestamp-verification.md).
-Bundle profile staging still hardcodes minor 0 and needs provenance-backed
-support before packaging ABI 2.1. Do not relabel old artifacts or bypass
-identity checks. Firmware `docs/native-timestamp-snapshot.md` defines the
-complete transaction and physical qualification gates.
+Bundle identity capture/sealing and ABI-aware staging are now implemented and
+locally tested; see [bundle provenance and remaining build gates](gateware-bundle-identity.md).
+Actual Vivado bindings, routed artifacts and an image build remain unqualified.
+Do not relabel old artifacts or bypass identity checks. Firmware
+`docs/native-timestamp-snapshot.md` defines the complete transaction and
+physical qualification gates. The timestamp RTL port to the separate
+full-stream firmware repository is still pending; its legacy ABI 2.0 remains
+supported, without a native timestamp claim.

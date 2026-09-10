@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -45,16 +46,10 @@ class DualOverlayPackagingTests(unittest.TestCase):
         profile_dir.mkdir(parents=True)
         self.self_profile = profile_dir / "daphne-gateware-self-trigger.conf"
         self.full_profile = profile_dir / "daphne-gateware-full-stream.conf"
-        self.self_profile.write_text(
-            "PROFILE=self-trigger\n"
-            "APP=daphne_selftrigger_ol_release_sha7\n"
-            "GATEWARE_MODE=self-trigger\n"
-        )
-        self.full_profile.write_text(
-            "PROFILE=full-stream\n"
-            "APP=daphne_fullstream_ol_release_sha7\n"
-            "GATEWARE_MODE=full-stream\n"
-        )
+        # Use the actual admission templates, so a guessed key name cannot
+        # pass unit tests while breaking real staging/bootstrap.
+        for profile in (self.self_profile, self.full_profile):
+            shutil.copyfile(ROOT / "petalinux/meta-daphne/recipes-core/daphne-services/files" / profile.name, profile)
         self.original_self_profile = self.self_profile.read_text()
         self.original_full_profile = self.full_profile.read_text()
 
@@ -94,6 +89,7 @@ class DualOverlayPackagingTests(unittest.TestCase):
         layout: str,
         firmware_name: str | None = None,
         app_manifest: bool = True,
+        identity_minor: int | None = None,
     ) -> str:
         if mode == "self-trigger":
             overlay_prefix = "daphne_selftrigger_ol"
@@ -111,16 +107,23 @@ class DualOverlayPackagingTests(unittest.TestCase):
             '{ "shell_type" : "XRT_FLAT", "num_slots": "1" }\n'
         )
         archive = output / f"{app}.zip"
+        if identity_minor is not None:
+            report = app_dir / "post_route_timestamp_snapshot.rpt"
+            if identity_minor == 1:
+                report.write_text("Native timestamp payload timing: per-bit routed checks\n" + "".join(
+                    f"ep/ep_axi_inst/{mailbox}/destination_data_reg[{bit}] requirement_ns=10.0 slack_ns=1.0\n"
+                    for mailbox in ("local_snapshot", "external_snapshot") for bit in range(65)))
+            record = dict(schema_version=1, magic=0x44415048, abi=0x20000 + identity_minor,
+                          variant=1 if mode == "self-trigger" else 2, build_id=int(sha, 16), build_sha=sha,
+                          source_sha256="a" * 64, vivado_version="2026.1",
+                          binary_sha256=self.digest(app_dir / f"{app}.bin"), xsa_sha256="b" * 64,
+                          snapshot_report_sha256=self.digest(report) if identity_minor == 1 else None)
+            (app_dir / "GATEWARE-IDENTITY.json").write_text(json.dumps(record))
         with zipfile.ZipFile(archive, "w") as bundle:
             for path in sorted(app_dir.iterdir()):
                 bundle.write(path, f"{app}/{path.name}")
 
-        covered = [
-            archive,
-            app_dir / f"{app}.bin",
-            app_dir / f"{app}.dtbo",
-            app_dir / "shell.json",
-        ]
+        covered = [archive, *sorted(app_dir.iterdir())]
         lines = [
             f"{self.digest(path)}  {path.relative_to(output)}\n" for path in covered
         ]
@@ -456,6 +459,68 @@ class DualOverlayPackagingTests(unittest.TestCase):
         self.assertNotIn("python __anonymous", recipe)
         self.assertIn("verify_manifest_path_once", recipe)
         self.assertIn("must contain exactly one checksum", recipe)
+        self.assertIn("GATEWARE-IDENTITY.json", recipe)
+        self.assertIn("post_route_timestamp_snapshot.rpt", recipe)
+
+    def test_mixed_abi_bundles_update_only_the_matching_profile(self) -> None:
+        output = self.base / "mixed"
+        output.mkdir()
+        self.make_bundle(output, "self-trigger", "abcdef1", layout="amba", identity_minor=1)
+        self.make_bundle(output, "full-stream", "1234abc", layout="fragment")
+        result = self.run_shared_stage(output)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("IDENTITY_ABI_MINOR=1\n", self.self_profile.read_text())
+        self.assertIn("IDENTITY_ABI_MINOR=0\n", self.full_profile.read_text())
+        self.assertIn('DAPHNE_SELF_TRIGGER_ABI_MINOR = "1"', self.version_inc.read_text())
+        self.assertIn('DAPHNE_FULL_STREAM_IDENTITY_SEALED = "0"', self.version_inc.read_text())
+        for name in ("GATEWARE-IDENTITY.json", "post_route_timestamp_snapshot.rpt"):
+            path = self.staged / "self-trigger" / name
+            self.assertTrue(path.is_file())
+            self.assertIn(f"{self.digest(path)}  {name}", (path.parent / "SHA256SUMS").read_text())
+
+    def rewrite_bundle_evidence(self, output: Path, app: str) -> None:
+        app_dir = output / app
+        archive = output / f"{app}.zip"
+        with zipfile.ZipFile(archive, "w") as bundle:
+            for path in sorted(app_dir.iterdir()):
+                bundle.write(path, f"{app}/{path.name}")
+        (output / f"{app}.SHA256SUMS").write_text("".join(
+            f"{self.digest(path)}  {path.relative_to(output)}\n"
+            for path in [archive, *sorted(app_dir.iterdir())]))
+
+    def test_bad_identity_never_replaces_prior_state(self) -> None:
+        for index, mutation in enumerate(("abi", "variant", "build_id", "binary_sha256", "missing_report", "missing_identity")):
+            with self.subTest(mutation=mutation):
+                output = self.base / f"bad-identity-{index}"
+                output.mkdir()
+                app = self.make_bundle(output, "self-trigger", "abcdef1", layout="amba", identity_minor=1)
+                self.make_bundle(output, "full-stream", "1234abc", layout="fragment")
+                metadata = output / app / "GATEWARE-IDENTITY.json"
+                record = json.loads(metadata.read_text())
+                if mutation == "missing_report":
+                    (output / app / "post_route_timestamp_snapshot.rpt").unlink()
+                elif mutation == "missing_identity":
+                    metadata.unlink()
+                else:
+                    record[mutation] = {"abi": 0x20002, "variant": 2, "build_id": 123, "binary_sha256": "0" * 64}[mutation]
+                    metadata.write_text(json.dumps(record))
+                self.rewrite_bundle_evidence(output, app)
+                result = self.run_shared_stage(output)
+                self.assertNotEqual(result.returncode, 0)
+                self.assert_prior_state_preserved()
+
+    def test_identity_and_report_need_checksum_coverage(self) -> None:
+        for index, name in enumerate(("GATEWARE-IDENTITY.json", "post_route_timestamp_snapshot.rpt")):
+            output = self.base / f"missing-coverage-{index}"
+            output.mkdir()
+            app = self.make_bundle(output, "self-trigger", "abcdef1", layout="amba", identity_minor=1)
+            self.make_bundle(output, "full-stream", "1234abc", layout="fragment")
+            manifest = output / f"{app}.SHA256SUMS"
+            manifest.write_text("".join(line for line in manifest.read_text().splitlines(keepends=True)
+                                        if not line.endswith("/" + name + "\n")))
+            result = self.run_shared_stage(output)
+            self.assertNotEqual(result.returncode, 0)
+            self.assert_prior_state_preserved()
 
 if __name__ == "__main__":
     unittest.main()

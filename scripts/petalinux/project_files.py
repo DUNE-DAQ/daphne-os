@@ -85,7 +85,7 @@ def publish_directory(staged: Path, destination: Path, *, allow_symlink: bool = 
 
 
 def refresh_layer(source: Path, destination: Path) -> None:
-    """Refresh layer code, retaining this project's payloads and app bindings."""
+    """Refresh layer code, retaining this project's payloads and app/ABI bindings."""
     source = source.resolve(strict=True)
     if not source.is_dir():
         raise ValueError(f"layer source is not a directory: {source}")
@@ -114,13 +114,15 @@ def refresh_layer(source: Path, destination: Path) -> None:
                 relative = f"{PROFILE_DIR}/daphne-gateware-{mode}.conf"
                 old = previous / relative
                 if old.is_file():
-                    apps = re.findall(r"^APP=([A-Za-z0-9_.-]+)$", old.read_text(), re.MULTILINE)
-                    if len(apps) != 1:
-                        raise ValueError(f"expected one APP binding in {old}")
                     target = staged / relative
-                    updated, count = re.subn(r"^APP=.*$", "APP=" + apps[0], target.read_text(), flags=re.MULTILINE)
-                    if count != 1:
-                        raise ValueError(f"expected one APP binding in {target}")
+                    old_text, updated = old.read_text(), target.read_text()
+                    for key, pattern in (("APP", r"[A-Za-z0-9_.-]+"), ("IDENTITY_ABI_MAJOR", "2"), ("IDENTITY_ABI_MINOR", "[01]")):
+                        bindings = re.findall(rf"^{key}=(.*)$", old_text, re.MULTILINE)
+                        if len(bindings) != 1 or re.fullmatch(pattern, bindings[0]) is None:
+                            raise ValueError(f"expected one {key} binding in {old}")
+                        updated, count = re.subn(rf"^{key}=.*$", key + "=" + bindings[0], updated, flags=re.MULTILINE)
+                        if count != 1:
+                            raise ValueError(f"expected one {key} binding in {target}")
                     target.write_text(updated)
         # Use a sibling for the rollback-capable publication operation.
         sibling = Path(tempfile.mkdtemp(prefix=".meta-daphne-ready-", dir=destination.parent))

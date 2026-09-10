@@ -109,7 +109,7 @@ class ProjectFilesTests(unittest.TestCase):
         for mode in ("self-trigger", "full-stream"):
             target = source / FILES.PROFILE_DIR / f"daphne-gateware-{mode}.conf"
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f"PROFILE={mode}\nAPP=placeholder\nSETTING=new\n")
+            target.write_text(f"PROFILE={mode}\nAPP=placeholder\nIDENTITY_ABI_MAJOR=2\nIDENTITY_ABI_MINOR=0\nSETTING=new\n")
         return source
 
     def test_refresh_preserves_staged_payloads_metadata_and_app_bindings(self) -> None:
@@ -120,13 +120,14 @@ class ProjectFilesTests(unittest.TestCase):
             target = destination / relative
             (target / "payload" if target.is_dir() else target).write_text("project-owned")
         profile = destination / FILES.PROFILE_DIR / "daphne-gateware-self-trigger.conf"
-        profile.write_text("PROFILE=self-trigger\nAPP=daphne_selftrigger_ol_123abcd\nSETTING=old\n")
+        profile.write_text("PROFILE=self-trigger\nAPP=daphne_selftrigger_ol_123abcd\nIDENTITY_ABI_MAJOR=2\nIDENTITY_ABI_MINOR=1\nSETTING=old\n")
         FILES.refresh_layer(source, destination)
         for relative in FILES.STAGED_PATHS:
             target = destination / relative
             self.assertEqual((target / "payload" if target.is_dir() else target).read_text(), "project-owned")
         self.assertIn("APP=daphne_selftrigger_ol_123abcd", profile.read_text())
         self.assertIn("SETTING=new", profile.read_text())
+        self.assertIn("IDENTITY_ABI_MAJOR=2\nIDENTITY_ABI_MINOR=1\n", profile.read_text())
         self.assertIn("APP=placeholder", (source / FILES.PROFILE_DIR / profile.name).read_text())
 
     def test_legacy_symlink_is_detached_without_modifying_source(self) -> None:
@@ -157,3 +158,16 @@ class ProjectFilesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "one APP binding"):
             FILES.refresh_layer(source, destination)
         self.assertEqual(profile.read_text(), "APP=one\nAPP=two\n")
+
+    def test_bad_abi_binding_leaves_old_layer_untouched(self) -> None:
+        source = self.layer_source()
+        destination = self.base / "layer"
+        FILES.refresh_layer(source, destination)
+        profile = destination / FILES.PROFILE_DIR / "daphne-gateware-self-trigger.conf"
+        for binding in ("IDENTITY_ABI_MAJOR=3\nIDENTITY_ABI_MINOR=0\n", "IDENTITY_ABI_MAJOR=2\nIDENTITY_ABI_MINOR=2\n",
+                        "IDENTITY_ABI_MAJOR=2\nIDENTITY_ABI_MINOR=0\nIDENTITY_ABI_MINOR=1\n", "IDENTITY_ABI_MAJOR=2\n"):
+            original = "APP=daphne_selftrigger_ol_123abcd\n" + binding
+            profile.write_text(original)
+            with self.assertRaises(ValueError):
+                FILES.refresh_layer(source, destination)
+            self.assertEqual(profile.read_text(), original)
