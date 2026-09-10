@@ -1,5 +1,6 @@
 #include "server_controller/board_identity.hpp"
 #include "server_controller/board_monitor.hpp"
+#include "server_controller/management_link.hpp"
 
 #include <filesystem>
 #include <iomanip>
@@ -89,15 +90,19 @@ daphne::ManagementNetworkObservation read_management_network(const daphne::Manag
   try {
     // Defend this public collector even if called without the artifact loader.
     if (binding.interface_name().empty() || binding.interface_name().size() >= 16 ||
+        binding.interface_name() == "." || binding.interface_name() == ".." ||
         binding.interface_name().find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.:-") != std::string::npos)
       throw std::runtime_error("Invalid selected management interface");
 #ifdef __linux__
     bool stable = false;
     for (unsigned attempt = 0; attempt < 3; ++attempt) {
       const auto first = sample(binding.interface_name());
+      const auto link = first.present() ? read_management_link_linux(binding.interface_name(), first.interface_index()) :
+                                         daphne::ManagementLinkStatus{};
       const auto second = sample(binding.interface_name());
       if (first.SerializeAsString() != second.SerializeAsString()) continue;
       result = second;
+      if (first.present()) *result.mutable_link() = link;
       stable = true;
       break;
     }

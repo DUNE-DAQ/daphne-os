@@ -146,6 +146,7 @@ add_library(daphne_configuration
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_configuration PUBLIC daphne_proto daphne_gateware)
 add_library(daphne_identity
+  srcs/server_controller/management_link.cpp
   srcs/server_controller/board_identity.cpp
   srcs/server_controller/board_identity_linux.cpp
 )
@@ -181,6 +182,10 @@ if(BUILD_TESTING)
   target_link_libraries(board_identity_tests PRIVATE daphne_identity)
   add_test(NAME board_identity_unit COMMAND board_identity_tests)
   set_tests_properties(board_identity_unit PROPERTIES LABELS unit)
+  add_executable(management_link_tests tests/management_link_tests.cpp)
+  target_link_libraries(management_link_tests PRIVATE daphne_identity)
+  add_test(NAME management_link_unit COMMAND management_link_tests)
+  set_tests_properties(management_link_unit PROPERTIES LABELS unit)
   add_executable(current_mux_tests tests/current_mux_tests.cpp)
   target_link_libraries(current_mux_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME current_mux_unit COMMAND current_mux_tests)
