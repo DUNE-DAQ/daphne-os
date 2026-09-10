@@ -15,7 +15,7 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 | Host resources / workbook I088 and I101–I104 | Host uptime, CPU load, available memory and root filesystem free/available/read-only values; typed quality and observation times, no inferred operational-health verdict | Deployed as 3556811; 25 native/ARM suites, 109 Python tests, native probes and live RPC freshness checks pass. Full zero-bias/alignment/all-channel capture and existing-collector regression passed. Complete runtime native smoke, matching image pin and 101 packaging tests pass. Approximately 23 MiB root space available; no cleanup/resizing. See host-resource-verification.md |
 | SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Implemented/deployed; 18 native/ARM suites and 53 Python tests pass. GTH0/TMG/GTR identified; 14 diagnostic values per acquisition. Three unanswered cages and installed PCB/wiring caveat remain unresolved; factory RX warnings retained |
 | FPGA health | Actual loaded/admitted FPGA identity, configuration state, clocks/reset/timing, transport/link observations and clear degraded/unknown reasons; no service-active shortcut | Sampled programming STAT and 15-check assessment deployed/tested; see server-fpga-health.md. Coherent live timestamp, Hermes delivery and external-reset epoch remain unknown; no overall health/run-permit claim |
-| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp RTL/ABI 2.1, routed-check scripts and build-bound packaging committed in both firmware repositories; matching 3556811 runtime/image contract qualified. Both packagers pass synthetic OS-staging integration. Passive protocol-error tap/counter groundwork now committed separately; PS binding, real build/image/routed/live qualification and decoder/error exports remain pending |
+| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp RTL/ABI 2.1, routed-check scripts and build-bound packaging committed in both firmware repositories; matching 3556811 runtime/image contract qualified. Both packagers pass synthetic OS-staging integration. Protocol-error source/PS binding, ABI 2.2 and 170-bit producer CDC/packaging gates now implemented/tested in separate firmware branches; server/client/image integration and actual build/routed/live qualification remain pending |
 | Qualification and handoff | Native/ARM tests, negative/stale/concurrency cases, live zero-BIAS/all-channel regression, both-ABI scope recorded, protocol clients/docs/wiki and ONL bundle | Pending |
 
 Evidence found so far:
@@ -117,23 +117,24 @@ archive passes a native-board loader check using its packaged libraries.
 Current firmware still cannot supply ABI 2.1 snapshot evidence;
 full-stream live qualification and the full PetaLinux image build remain pending.
 
-## Passive protocol-error source groundwork
+## Protocol-error firmware path — source-tested, not deployed
 
 The workbook's I277/I281 entries belong to **Timing Interface**, not the 251-row
 Server Platform tab. The current server correctly advertises them unavailable.
 The latest Cooper probe still times out at the FNAL bridge; no job was launched.
 
-Separate firmware branch `fix/timing-protocol-diagnostics` contains self-trigger
-`f7319ee` and full-stream `c96455e`. An event tap mirrors the actual receive-parser
-error transition and a separate 32-bit saturating counter retains reason bits
-with explicit overflow. Four simulation runs per variant and actual core
-elaboration pass; legacy packet outputs are compared against fixed pre-feature
-source. GHDL uses relaxed rules for existing Vivado port annotations.
+Separate firmware branch `fix/timing-protocol-diagnostics` now contains
+self-trigger `cc18e78` / `c5a8477` and full-stream `25c5798` / `3e39194`.
+The parser event reaches a common-reset 32-bit saturating counter and a coherent
+40-bit mailbox with bounded PS register reads. Source platform ABI is 2.2.
+Both producer/packaging paths require all 170 routed diagnostic payload bits.
+Actual parser and AXI simulations, source wiring, Tcl-model and synthetic
+packaging tests pass. See [scope and evidence](protocol-error-firmware-verification.md).
 
-This is **not an implemented PS-visible register**: event ports still terminate
-at explicit `open` in the core; the counter is not yet instantiated there.
-Next is a common-reset native counter, 40-bit coherent diagnostic mailbox,
-strict/versioned AXI export, physical CDC gates and typed server/client support.
-Each firmware repository's `docs/protocol-error-diagnostics.md` defines the
-remaining work and tested scope. No command decoder, new admitted ABI, deployed
-firmware or board change is claimed. The ready ABI 2.1 worktrees remain untouched.
+This is **not deployed or hardware-qualified**. The server still reports
+ProtocolErrorCount unavailable; it and the current image contract only admit
+ABI 2.0/2.1. Next are typed server/client reporting and exact ABI 2.2 admission,
+OS staging/runtime pairing, then supported synthesis/routing and live tests.
+Optical 0x76 remains a separate placeholder; the new PS interface is not an
+optical bridge. No command decoder or board change is claimed.
+The ready ABI 2.1 worktrees remain untouched.
