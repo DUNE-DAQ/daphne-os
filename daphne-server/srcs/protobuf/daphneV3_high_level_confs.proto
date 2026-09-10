@@ -185,6 +185,7 @@ message ReadSystemStatusRequest {
   bool   include_sfp_diagnostics = 4; // may touch SFP mux/I2C pages
   bool   include_ps_values       = 5; // include generic PS-exposed values
   bool   include_identity_details = 6; // Explicit opt-in to private assignment/network values.
+  bool   include_regulator_telemetry = 7; // Four onboard PJT004 regulators; targeted PEC reads only.
 }
 
 message StatusValue {
@@ -547,6 +548,42 @@ message ChipConfigStatus {
   string message    = 5;
 }
 
+// One host-timed, PEC-checked SMBus read. Raw presence is independent of quality:
+// a late/invalid acquisition can retain raw evidence without a usable value.
+message PMBusReadout {
+  string name = 1;
+  uint32 command = 2;
+  uint32 width_bits = 3;
+  optional uint32 raw = 4;
+  MeasurementQuality quality = 5;
+  uint64 observed_monotonic_ns = 6;
+  string message = 7;
+}
+
+message RegulatorMonitor {
+  string name = 1; // Schematic rail, not a PS rail or a mezzanine current channel.
+  string schematic_reference = 2;
+  uint32 address = 3; // Fixed 7-bit address on the identified PL I2C controller.
+  string source = 4;
+  MeasurementQuality identity_quality = 5;
+  repeated PMBusReadout registers = 6; // Named BEFORE/AFTER reads are distinct observations.
+  optional double output_voltage_v = 7; // Remote-sense amplifier measurement, not guaranteed load voltage.
+  optional double output_current_a = 8; // Module source current; sinking current is reported as zero by the module.
+  TemperatureStatus temperature = 9; // READ_TEMPERATURE_2, not board ambient or SoC die temperature.
+  repeated string asserted_status_flags = 10; // Sampled, potentially latched/historical. Never cleared here.
+  uint64 acquisition_started_monotonic_ns = 11;
+  uint64 observed_monotonic_ns = 12;
+  uint64 observed_host_unix_ns = 13; // Unverified host wall clock, not conversion time.
+  string message = 14;
+  bool pec_required = 15; // No non-PEC fallback is permitted.
+  bool identity_bracket_verified = 16; // Matching module type/revision/capability/mode; NOT a serial identity.
+  optional bool status_changed = 17; // Compares STATUS_WORD and STATUS_CML before/after only.
+  MeasurementQuality voltage_quality = 18;
+  MeasurementQuality current_quality = 19;
+  // Missing VIN/manufacturer status is not zero. No aggregate "healthy" flag:
+  // successful telemetry does not establish regulator protection or rail health.
+}
+
 message SystemStatusSnapshot {
   bool   success               = 1;
   string message               = 2;
@@ -574,6 +611,7 @@ message SystemStatusSnapshot {
   BoardIdentityStatus board_identity = 24;
   FpgaProgrammingStatus fpga_programming = 25;
   FpgaHealthAssessment fpga_health = 26;
+  repeated RegulatorMonitor regulators = 27;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }

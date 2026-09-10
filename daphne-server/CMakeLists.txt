@@ -118,6 +118,8 @@ target_include_directories(daphne_proto PUBLIC
 target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
 
 add_library(daphne_telemetry_protocol
+  srcs/server_controller/regulator_monitor.cpp
+  srcs/server_controller/regulator_linux.cpp
   srcs/server_controller/sfp_monitor.cpp
   srcs/server_controller/sfp_linux.cpp
   srcs/server_controller/ams_temperature.cpp
@@ -154,6 +156,13 @@ if(BUILD_TESTING)
   target_link_libraries(fpga_status_tests PRIVATE daphne_fpga_status)
   add_test(NAME fpga_status_unit COMMAND fpga_status_tests)
   set_tests_properties(fpga_status_unit PROPERTIES LABELS unit)
+  add_executable(regulator_monitor_tests tests/regulator_monitor_tests.cpp)
+  target_link_libraries(regulator_monitor_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME regulator_monitor_unit COMMAND regulator_monitor_tests)
+  set_tests_properties(regulator_monitor_unit PROPERTIES LABELS unit)
+  add_executable(regulator_probe tests/regulator_probe.cpp)
+  target_link_libraries(regulator_probe PRIVATE daphne_telemetry_protocol)
+  # Explicit read-only hardware diagnostic, never an automatic CTest.
   add_executable(identity_probe tests/identity_probe.cpp)
   target_link_libraries(identity_probe PRIVATE daphne_identity)
   # Opt-in local network read only; not an automatic hardware test.
