@@ -76,6 +76,9 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("RuntimeServices", true,
       "Eight allow-listed systemd units, host metadata and configured population/app; no journal/env/command-line export. "
       "Service active/success does not establish hardware health");
+  add("HostResources", true,
+      "I088/I101-I104: fixed proc uptime/load/MemAvailable and root statvfs; typed values with per-source quality/times. "
+      "Free and unprivileged-available bytes are distinct; no memory/disk alarm, verified UTC or operational-health inference");
   add("ServerBookkeeping", true,
       "Request 326 remains responsive during serialized hardware work; heartbeat, correlated configuration result and canonical successful evidence. "
       "Validity tracks known local invalidations, not all external resets or analog calibration");

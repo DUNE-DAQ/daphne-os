@@ -128,6 +128,7 @@ add_library(daphne_telemetry_protocol
   srcs/server_controller/temperature_alarm.cpp
   srcs/server_controller/current_monitor_protocol.cpp
   srcs/server_controller/service_status.cpp
+  srcs/server_controller/host_resources.cpp
   srcs/server_controller/telemetry_protocol.cpp
   srcs/server_controller/timing_status.cpp
   srcs/server_controller/fpga_health.cpp
@@ -206,6 +207,12 @@ if(BUILD_TESTING)
   target_link_libraries(service_status_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME service_status_unit COMMAND service_status_tests)
   set_tests_properties(service_status_unit PROPERTIES LABELS unit)
+  add_executable(host_resources_tests tests/host_resources_tests.cpp)
+  target_link_libraries(host_resources_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME host_resources_unit COMMAND host_resources_tests)
+  set_tests_properties(host_resources_unit PROPERTIES LABELS unit)
+  add_executable(host_resources_probe tests/host_resources_probe.cpp)
+  target_link_libraries(host_resources_probe PRIVATE daphne_telemetry_protocol)
   add_executable(carrier_temperature_tests tests/carrier_temperature_tests.cpp)
   target_link_libraries(carrier_temperature_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME carrier_temperature_unit COMMAND carrier_temperature_tests)

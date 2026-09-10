@@ -624,6 +624,36 @@ message RegulatorMonitor {
   // successful telemetry does not establish regulator protection or rail health.
 }
 
+enum HostResourceMetric {
+  HOST_RESOURCE_UNSPECIFIED = 0;
+  HOST_UPTIME_SECONDS = 1;
+  HOST_LOAD_AVERAGE_1MIN = 2;
+  HOST_MEMORY_AVAILABLE_BYTES = 3;
+  HOST_ROOT_FREE_BYTES = 4;
+  HOST_ROOT_AVAILABLE_BYTES = 5;
+  HOST_ROOT_READ_ONLY = 6;
+}
+message HostResourceObservation {
+  HostResourceMetric metric = 1;
+  oneof value {
+    double scalar_value = 2;
+    uint64 bytes_value = 3;
+    bool flag_value = 4;
+  }
+  string unit = 5;
+  MeasurementQuality quality = 6;
+  string source = 7;
+  string detail = 8;
+  uint64 acquisition_started_monotonic_ns = 9;
+  uint64 observed_monotonic_ns = 10;
+  uint64 observed_host_unix_ns = 11; // PS completion time, not verified UTC.
+  // GOOD means a valid observation, not an operational-health verdict. No
+  // value is present on failure. Different sources are sampled sequentially.
+  // Load average is not CPU percent; MemAvailable is a kernel estimate.
+  // ROOT_FREE includes reserved blocks; ROOT_AVAILABLE excludes them.
+  // ROOT_READ_ONLY observes ST_RDONLY, not whether this state is unexpected.
+}
+
 message SystemStatusSnapshot {
   bool   success               = 1;
   string message               = 2;
@@ -652,6 +682,7 @@ message SystemStatusSnapshot {
   FpgaProgrammingStatus fpga_programming = 25;
   FpgaHealthAssessment fpga_health = 26;
   repeated RegulatorMonitor regulators = 27;
+  repeated HostResourceObservation host_resources = 28;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }
