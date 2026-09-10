@@ -80,5 +80,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("CurrentMonitorRaw", true,
       "Request 244 with explicit physical_channel 0..39: carrier mux + identified kernel SPI ADS1261, CRC/status/DRDY and restoration checks. "
       "Measurement performs ADC/mux writes only. Raw code and nominal differential volts; calibrated current requires an approved calibration");
+  add("SFPDiagnostics", true,
+      "Opt-in ReadSystemStatus.include_sfp_diagnostics: six schematic routes on PL I2C 9c000000, mux 0x72, A0/A2 EEPROM only. "
+      "Checksums, calibration/status and mux restoration; no TX/module-control/reset writes. Failed I2C is not evidence of absence or a wiring diagnosis");
 }
 }

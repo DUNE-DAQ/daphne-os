@@ -43,6 +43,7 @@
 #include "server_controller/service_status.hpp"
 #include "server_controller/configuration_fingerprint.hpp"
 #include "server_controller/current_monitor.hpp"
+#include "server_controller/sfp_monitor.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -2279,9 +2280,8 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     add_register_capabilities(resp, mode);
     try {
       if (!req.ParseFromString(in)) throw std::invalid_argument("Bad ReadSystemStatusRequest payload");
-      if (req.level() != 0 || req.include_i2c_scan() || req.include_xmutil() ||
-          req.include_sfp_diagnostics())
-        throw std::invalid_argument("Only level=0 without I2C scans, xmutil probes or SFP diagnostics is supported");
+      if (req.level() != 0 || req.include_i2c_scan() || req.include_xmutil())
+        throw std::invalid_argument("Only level=0 without I2C scans or xmutil probes is supported");
       ReadOnlyMmio identity_mmio(kGatewareIdentityMagicAddress, 16);
       const auto identity = probe_gateware_identity(identity_mmio);
       try {
@@ -2306,12 +2306,16 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       }
       add_service_status(resp);
       add_host_status(resp, d.mezzanine_access_enabled);
+      if (req.include_sfp_diagnostics()) {
+        std::lock_guard<std::mutex> lock(d.i2c_2_mutex);
+        add_sfp_status(resp, temperature_policy);
+      }
       const auto evaluated_at = monotonic_time_ns();
       for (auto& temperature : *resp.mutable_temperatures())
         evaluate_temperature_alarm(temperature, temperature_policy, evaluated_at);
       resp.set_success(true);
       resp.set_message("Gateware identity and timing registers read; named die/carrier temperatures attempted. "
-                        "Service/host status attempted. Check individual observation quality. Other inventory fields are not collected; "
+                        "Service/host status attempted; optional SFP collection uses targeted mux/EEPROM reads. Check individual observation quality. Other inventory fields are not collected; "
                         "consult capabilities. Success does not mean timing is ready");
     } catch (const std::exception& e) {
       resp.set_success(false);
