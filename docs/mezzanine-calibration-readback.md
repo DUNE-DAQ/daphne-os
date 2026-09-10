@@ -100,6 +100,10 @@ installed old server, this new readback is not available.
 
 ## Next gate
 
+The subsequent [driver cache step, 6514092](mezzanine-monitoring-cache.md), adds
+coherent acquisition/invalidation and retained alert evidence. It is not yet
+wired to status RPCs or deployed; the native evidence above covers **de420e0 only**.
+
 Replace the independent measurement atomics with one quality/timed cache;
 invalidate failed, stale, disabled and unconfigured samples while retaining
 alert evidence and the existing protective behavior. Fresh calibration mismatch

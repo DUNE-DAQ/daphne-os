@@ -5,9 +5,12 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Source snapshot: **de420e0**, native-tested calibration readback, not deployed.
-It passes 34 host/34 actual ARM suites and 222 Python tests per binding. See
-[candidate scope and remaining cache work](mezzanine-calibration-readback.md).
+Source snapshot: **6514092**, adding a coherent mezzanine driver cache, not
+yet wired to the status RPC/client or deployed. See the [driver step and
+qualification boundary](mezzanine-monitoring-cache.md). Its predecessor
+de420e0 passes 34 host/34 actual ARM suites and 222 Python tests per binding;
+that [calibration proof](mezzanine-calibration-readback.md) does not qualify the
+new driver code on actual ARM hardware.
 
 Installed server: **fb82e0a**, correcting Configure's implicit
 SC-enable write. 33 host/33 actual ARM suites, 216 Python tests per binding and
@@ -54,6 +57,7 @@ calibration or overall FPGA-health qualification is inferred.
 - **I207–I214, mezzanine samples:** independent cached atomics have no coherent
   quality/time; monitor exceptions can leave old values visible. No mezzanines
   are fitted on this bench, so physical qualification remains unavailable.
+  Driver cache 6514092 is tested separately; monitor/RPC/client wiring is pending.
 - **I225/I226, mezzanine calibration:** candidate de420e0 replaces the RPC's
   cached-code substitution with identity-bracketed stable register-0x05 readback,
   quality/times and separate requested codes. Native failure/mismatch/concurrency
@@ -86,10 +90,11 @@ The producer backlog remains:
    deployed 4e74f10, full regression, runtime/native loader, image pin and ONL
    clients pass. Physical transitions and full-stream remain separate gaps;
    proceed with the missing producers below without changing SC policy.
-2. Correct **mezzanine cache quality/time** while preserving alert evidence and
-   existing protective behavior. Calibration provenance is native-tested in
-   de420e0, not yet deployed. Finish the shared cache and client checks before
-   the next deployment; physical readback/metrology needs populated hardware.
+2. Wire **mezzanine cache quality/time** from driver step 6514092 into the monitor,
+   RPC and client while preserving alert evidence and existing protective behavior.
+   Calibration provenance is native-tested in de420e0, not yet deployed. Qualify
+   the combined source before deployment; physical readback/metrology needs
+   populated hardware.
 3. Add **read-only fan command/raw tach** observations after checking the exact
    deployed RTL and board wiring. RPM, presence and stall claims need validated
    pulse/scaling/population and an approved minimum-speed policy; no PWM writes.
