@@ -147,6 +147,16 @@ std::shared_ptr<RuntimeState> make_process_runtime_state() {
   });
 }
 
+void validate_runtime_gateware(const GatewareIdentity& identity, GatewareMode mode,
+    std::optional<uint32_t> expected_build, RuntimeState* runtime) {
+  try {
+    validate_gateware_identity(identity, mode, expected_build);
+  } catch (...) {
+    if (runtime) runtime->invalidate("Observed gateware no longer matches the admitted profile");
+    throw;
+  }
+}
+
 bool invalidates_configuration(daphne::MessageTypeV2 type) {
   switch (type) {
     case daphne::MT2_CONFIGURE_CLKS_REQ:

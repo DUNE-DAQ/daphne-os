@@ -88,5 +88,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
       "Optional private startup artifact supplies source-referenced assignments, not FPGA readback. "
       "Management controller/MAC/IPv4 are compared with a protected host baseline; private values require include_identity_details. "
       "No implicit network/analog writes, physical-link inference or assignment authentication");
+  add("FpgaHealthEvidence", true,
+      "Sampled ZynqMP configuration STAT, bracketed gateware identity/timing and named acquisition-prerequisite checklist. "
+      "Unknown evidence cannot pass; no run permit, automatic recovery, continuous integrity or Hermes delivery claim");
 }
 }

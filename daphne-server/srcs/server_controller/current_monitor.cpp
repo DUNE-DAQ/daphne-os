@@ -3,6 +3,7 @@
 #include "server_controller/board_monitor.hpp"
 #include "server_controller/readonly_mmio.hpp"
 #include "server_controller/devmem_mmio.hpp"
+#include "server_controller/runtime_state.hpp"
 #include "BoardSPI.hpp"
 #include "SpiDevice.hpp"
 #include <chrono>
@@ -13,7 +14,7 @@
 namespace daphne_sc {
 daphne::cmd_readCurrentMonitor_response read_current_monitor(
     const daphne::cmd_readCurrentMonitor& request, GatewareMode mode,
-    std::optional<GatewareIdentity> admitted, bool mezzanines_enabled) {
+    std::optional<GatewareIdentity> admitted, bool mezzanines_enabled, RuntimeState* runtime) {
   daphne::cmd_readCurrentMonitor_response response;
   response.set_quality(daphne::CURRENT_MONITOR_ERROR);
   response.set_current_quality(daphne::CURRENT_MONITOR_UNAVAILABLE);
@@ -30,7 +31,7 @@ daphne::cmd_readCurrentMonitor_response read_current_monitor(
     std::lock_guard<std::mutex> lock(mutex);
     ReadOnlyMmio id_mmio(kGatewareIdentityMagicAddress, 16);
     const auto identity = probe_gateware_identity(id_mmio);
-    validate_gateware_identity(identity, mode, admitted ? std::optional<uint32_t>(admitted->build_id) : std::nullopt);
+    validate_runtime_gateware(identity, mode, admitted ? std::optional<uint32_t>(admitted->build_id) : std::nullopt, runtime);
     const auto path = board_current_spi_device();
     response.set_source("Carrier U6 ADS1261 / PL SPI 9c020000 CS0 / " + path +
         " / AFE " + std::to_string(plan.afe) + " DA-DB / local channel " + std::to_string(plan.local_channel));

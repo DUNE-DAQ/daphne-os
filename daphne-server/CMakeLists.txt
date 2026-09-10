@@ -146,7 +146,14 @@ add_library(daphne_identity
 )
 target_include_directories(daphne_identity PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_identity PUBLIC daphne_configuration)
+add_library(daphne_fpga_status srcs/server_controller/fpga_status.cpp)
+target_include_directories(daphne_fpga_status PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_link_libraries(daphne_fpga_status PUBLIC daphne_telemetry_protocol daphne_configuration)
 if(BUILD_TESTING)
+  add_executable(fpga_status_tests tests/fpga_status_tests.cpp)
+  target_link_libraries(fpga_status_tests PRIVATE daphne_fpga_status)
+  add_test(NAME fpga_status_unit COMMAND fpga_status_tests)
+  set_tests_properties(fpga_status_unit PROPERTIES LABELS unit)
   add_executable(identity_probe tests/identity_probe.cpp)
   target_link_libraries(identity_probe PRIVATE daphne_identity)
   # Opt-in local network read only; not an automatic hardware test.
@@ -354,6 +361,7 @@ target_link_libraries(daphneServer PRIVATE
   daphne_telemetry_protocol
   daphne_configuration
   daphne_identity
+  daphne_fpga_status
   cppzmq
   ${DAPHNE_ZMQ_TARGET}
   CLI11::CLI11

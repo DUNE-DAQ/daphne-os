@@ -44,6 +44,7 @@
 #include "server_controller/configuration_fingerprint.hpp"
 #include "server_controller/current_monitor.hpp"
 #include "server_controller/sfp_monitor.hpp"
+#include "server_controller/fpga_status.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -2279,31 +2280,19 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     daphne::ReadSystemStatusRequest req;
     daphne::SystemStatusSnapshot resp;
     add_register_capabilities(resp, mode);
+    daphne::ManagementNetworkObservation network;
+    bool accepted = false;
     try {
       if (!req.ParseFromString(in)) throw std::invalid_argument("Bad ReadSystemStatusRequest payload");
       if (req.level() != 0 || req.include_i2c_scan() || req.include_xmutil())
         throw std::invalid_argument("Only level=0 without I2C scans or xmutil probes is supported");
-      const auto network = board_identity ? read_management_network(board_identity->artifact.binding()) :
+      accepted = true;
+      network = board_identity ? read_management_network(board_identity->artifact.binding()) :
           daphne::ManagementNetworkObservation{};
       *resp.mutable_board_identity() = make_board_identity_status(
           board_identity.get(), network, req.include_identity_details(), monotonic_time_ns());
-      ReadOnlyMmio identity_mmio(kGatewareIdentityMagicAddress, 16);
-      const auto identity = probe_gateware_identity(identity_mmio);
-      try {
-        validate_gateware_identity(identity, mode, admitted_identity ?
-            std::optional<uint32_t>(admitted_identity->build_id) : std::nullopt);
-      } catch (...) {
-        if (d.runtime) d.runtime->invalidate("Observed gateware no longer matches the admitted profile");
-        throw;
-      }
-      auto* id = resp.mutable_gateware_identity();
-      id->set_magic(identity.magic);
-      id->set_abi(identity.abi);
-      id->set_variant(identity.variant);
-      id->set_build_id(identity.build_id);
-      ReadOnlyMmio timing_mmio(kTimingRegisterBase, 16);
-      *resp.mutable_endpoint() = read_timing_status(timing_mmio);
-      resp.set_ps_local_unix_ns(resp.endpoint().observed_host_unix_ns());
+      const bool fpga_ok = collect_fpga_status(resp, mode, admitted_identity, d.runtime.get());
+      resp.set_ps_local_unix_ns(host_unix_time_ns());
       add_ams_temperatures(resp);
       {
         std::lock_guard<std::mutex> lock(d.i2c_1_mutex);
@@ -2311,15 +2300,15 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       }
       add_service_status(resp);
       add_host_status(resp, d.mezzanine_access_enabled);
-      if (req.include_sfp_diagnostics()) {
+      if (req.include_sfp_diagnostics() && fpga_ok) {
         std::lock_guard<std::mutex> lock(d.i2c_2_mutex);
         add_sfp_status(resp, temperature_policy);
       }
       const auto evaluated_at = monotonic_time_ns();
       for (auto& temperature : *resp.mutable_temperatures())
         evaluate_temperature_alarm(temperature, temperature_policy, evaluated_at);
-      resp.set_success(true);
-      resp.set_message("Gateware identity and timing registers read; named die/carrier temperatures attempted. "
+      resp.set_success(fpga_ok);
+      if (fpga_ok) resp.set_message("Gateware identity and timing registers read; named die/carrier temperatures attempted. "
                         "Service/host status attempted; optional SFP collection uses targeted mux/EEPROM reads. Check individual observation quality. Other inventory fields are not collected; "
                         "consult capabilities. Success does not mean timing is ready");
     } catch (const std::exception& e) {
@@ -2329,6 +2318,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       resp.mutable_endpoint()->set_message(e.what());
     }
     if (d.runtime) *resp.mutable_server_state() = d.runtime->snapshot();
+    if (accepted) *resp.mutable_fpga_health() = assess_fpga_health(resp, network, monotonic_time_ns());
     out = serialize_or_empty(resp);
   };
 
@@ -2376,7 +2366,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       return;
     }
 
-    resp = read_current_monitor(req, mode, admitted_identity, d.mezzanine_access_enabled);
+    resp = read_current_monitor(req, mode, admitted_identity, d.mezzanine_access_enabled, d.runtime.get());
     out = serialize_or_empty(resp);
   };
 

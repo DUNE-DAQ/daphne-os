@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include "daphneV3_high_level_confs.pb.h"
+#include "server_controller/gateware.hpp"
 
 namespace daphne_sc {
 struct ObservationTime { uint64_t monotonic_ns; uint64_t host_unix_ns; };
@@ -35,4 +36,8 @@ class RuntimeState {
 };
 std::shared_ptr<RuntimeState> make_process_runtime_state();
 bool invalidates_configuration(daphne::MessageTypeV2 type);
+// An observed mismatch invalidates prior FE evidence before throwing. Does not
+// access hardware, infer resets, or turn request-validation failures into resets.
+void validate_runtime_gateware(const GatewareIdentity&, GatewareMode,
+                              std::optional<uint32_t> expected_build, RuntimeState*);
 } // namespace daphne_sc
