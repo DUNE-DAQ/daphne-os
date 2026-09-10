@@ -481,6 +481,51 @@ message GatewareIdentityStatus {
   uint32 abi = 2;
   uint32 variant = 3;
   uint32 build_id = 4;
+  MeasurementQuality quality = 5;
+  optional bool matches_admitted_profile = 6;
+  uint64 observed_monotonic_ns = 7;
+  string message = 8;
+  uint64 acquisition_started_monotonic_ns = 9;
+}
+
+// Linux manager state is cached programming bookkeeping. The separate
+// ZynqMP platform-device status reads configuration STAT (UG570), not PCAP
+// interrupt status and not a continuous bitstream-integrity/SEM guarantee.
+message FpgaProgrammingStatus {
+  MeasurementQuality manager_quality = 1;
+  string manager_state = 2;
+  uint64 manager_observed_monotonic_ns = 3;
+  MeasurementQuality configuration_quality = 4;
+  optional uint32 configuration_status_raw = 5;
+  uint64 configuration_observed_monotonic_ns = 6;
+  uint64 acquisition_started_monotonic_ns = 7;
+  string source = 8;
+  string message = 9;
+  optional uint32 manager_error_raw = 10; // Kernel errno rendered as unsigned hex, when supplied.
+}
+enum FpgaHealthState {
+  FPGA_HEALTH_UNKNOWN = 0; // Missing/stale evidence is never a pass.
+  FPGA_HEALTH_OBSERVED_OK = 1; // Only the declared checklist, never an interlock/permit.
+  FPGA_HEALTH_NOT_READY = 2; // A failed requirement, not necessarily a broken board.
+}
+enum HealthCheckState {
+  HEALTH_CHECK_UNKNOWN = 0;
+  HEALTH_CHECK_PASS = 1;
+  HEALTH_CHECK_FAIL = 2;
+}
+message FpgaHealthCheck {
+  string name = 1;
+  HealthCheckState state = 2;
+  string message = 3;
+  uint64 observed_monotonic_ns = 4;
+}
+message FpgaHealthAssessment {
+  FpgaHealthState state = 1;
+  string scope = 2;
+  repeated FpgaHealthCheck checks = 3;
+  uint64 evaluated_monotonic_ns = 4;
+  uint64 maximum_observation_age_ms = 5;
+  string message = 6;
 }
 message RegisterCapability {
   string name = 1;
@@ -527,6 +572,8 @@ message SystemStatusSnapshot {
   string server_instance_id = 22; // systemd InvocationID, only when MainPID is this process; NOT authentication
   ServerState server_state = 23;
   BoardIdentityStatus board_identity = 24;
+  FpgaProgrammingStatus fpga_programming = 25;
+  FpgaHealthAssessment fpga_health = 26;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }

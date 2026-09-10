@@ -127,6 +127,8 @@ add_library(daphne_telemetry_protocol
   srcs/server_controller/service_status.cpp
   srcs/server_controller/telemetry_protocol.cpp
   srcs/server_controller/timing_status.cpp
+  srcs/server_controller/fpga_health.cpp
+  srcs/server_controller/fpga_programming_linux.cpp
   srcs/server_controller/readonly_mmio.cpp
 )
 target_include_directories(daphne_telemetry_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
@@ -195,6 +197,13 @@ if(BUILD_TESTING)
   target_link_libraries(timing_status_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME timing_status_unit COMMAND timing_status_tests)
   set_tests_properties(timing_status_unit PROPERTIES LABELS unit)
+  add_executable(fpga_health_tests tests/fpga_health_tests.cpp)
+  target_link_libraries(fpga_health_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME fpga_health_unit COMMAND fpga_health_tests)
+  set_tests_properties(fpga_health_unit PROPERTIES LABELS unit TIMEOUT 10)
+  add_executable(fpga_programming_probe tests/fpga_programming_probe.cpp)
+  target_link_libraries(fpga_programming_probe PRIVATE daphne_telemetry_protocol)
+  # Explicit sysfs readback only; not registered as an automatic hardware test.
   add_executable(configuration_plan_tests tests/configuration_plan_tests.cpp)
   target_link_libraries(configuration_plan_tests PRIVATE daphne_configuration)
   add_test(NAME configuration_plan_unit COMMAND configuration_plan_tests)
