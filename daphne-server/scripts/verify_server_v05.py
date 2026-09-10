@@ -12,6 +12,7 @@ import math
 from pathlib import Path
 import sys
 import time
+from host_resource_checks import check_host_resources
 
 
 def check_temperature_alarm(item, high, required=False):
@@ -143,6 +144,8 @@ def main():
                         help="Require good voltage acquisition and refreshed cache timestamps")
     parser.add_argument("--require-services", action="store_true",
                         help="Require eight service observations and matching server process identity")
+    parser.add_argument("--require-host-resources", action="store_true",
+                        help="Require all six typed host observations and advancing acquisition times")
     parser.add_argument("--require-temperature-alarms", action="store_true",
                         help="Require active policy and correct alarm evaluation on all named temperature observations")
     parser.add_argument("--check-rejections", action="store_true",
@@ -207,6 +210,17 @@ def main():
         carrier = check_carrier_temperature([item for item in status.temperatures if item.name == "Carrier_U9_MCP9808"],
                                             high, args.require_carrier_temperature)
         services = check_service_status(status, high, args.require_services)
+        host_resources = check_host_resources(status, high, args.require_host_resources,
+                                             now_monotonic_ns=status.server_state.observed_monotonic_ns)
+        if args.require_host_resources:
+            require(capabilities.get("HostResources") is True, "Missing host resource capability")
+            fresh_host = call(high.MT2_READ_SYSTEM_STATUS_REQ, high.ReadSystemStatusRequest(), high.SystemStatusSnapshot)
+            require(fresh_host.success, fresh_host.message)
+            newer_host = check_host_resources(fresh_host, high, True,
+                                             now_monotonic_ns=fresh_host.server_state.observed_monotonic_ns)
+            previous_host = {item["metric"]: item["observed_monotonic_ns"] for item in host_resources}
+            require(all(item["observed_monotonic_ns"] > previous_host[item["metric"]] for item in newer_host),
+                    "Host resource acquisition times did not advance")
         if args.require_ams_temperatures:
             require(capabilities.get("AMSTemperatures") is True, "Missing AMS capability")
             again = call(high.MT2_READ_SYSTEM_STATUS_REQ, high.ReadSystemStatusRequest(), high.SystemStatusSnapshot)
@@ -276,6 +290,7 @@ def main():
         report["voltages"] = [{"name": item.name, "volts": item.volts if math.isfinite(item.volts) else None,
                                "source": item.source} for item in volts.named_voltages]
         report["services"] = services
+        report["host_resources"] = host_resources
         report["server_instance_id"] = status.server_instance_id
         report["server_uptime_ms"] = status.server_uptime_ms
         report["kernel_release"] = status.kernel_release

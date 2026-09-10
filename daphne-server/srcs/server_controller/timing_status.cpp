@@ -76,9 +76,6 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("RuntimeServices", true,
       "Eight allow-listed systemd units, host metadata and configured population/app; no journal/env/command-line export. "
       "Service active/success does not establish hardware health");
-  add("HostResources", true,
-      "I088/I101-I104: fixed proc uptime/load/MemAvailable and root statvfs; typed values with per-source quality/times. "
-      "Free and unprivileged-available bytes are distinct; no memory/disk alarm, verified UTC or operational-health inference");
   add("ServerBookkeeping", true,
       "Request 326 remains responsive during serialized hardware work; heartbeat, correlated configuration result and canonical successful evidence. "
       "Validity tracks known local invalidations, not all external resets or analog calibration");
@@ -102,5 +99,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
       "Opt-in include_regulator_telemetry: four fixed schematic PJT004 rails on identified PL I2C with mandatory PEC. "
       "Bracketed module/mode identity, raw and decoded VOUT/IOUT/TEMPERATURE_2, host alarms, factory calibration raw and retained status flags. "
       "No VIN, qualified manufacturer status, regulator writes, network changes or overall rail-health claim");
+  add("HostResources", true,
+      "I088/I101-I104: fixed proc uptime/load/MemAvailable and root statvfs; typed values with per-source quality/times. "
+      "Free and unprivileged-available bytes are distinct; no memory/disk alarm, verified UTC or operational-health inference");
 }
 }
