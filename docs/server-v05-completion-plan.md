@@ -68,7 +68,9 @@ the qualified synthesis/routing toolchain and hardware regression.
 
 The configured route to Cooper still times out at the FNAL bridge; no synthesis
 job is running. DAPHNE-015 remains on server `a729c2b` and firmware `3f17f1b`;
-this work did not connect to or change the board. The deployed server accepts
+the firmware work did not change the board. A subsequent five-suite ARM run
+used hardware-free fixtures on the board; all passed with service, executable,
+boot and protected/private-file guards unchanged. The deployed server accepts
 ABI 2.0 exactly. New source admission `7139e28` explicitly admits known ABI 2.1
 while requiring exact installed-profile agreement. The collector `a8adaec`,
 health integration `ef2ffe9` and independent client checks pass 24 native C++

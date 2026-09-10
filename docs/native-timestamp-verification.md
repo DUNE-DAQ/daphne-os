@@ -48,8 +48,11 @@ board or run-permit claim is possible from this addition alone.
 ## Verification completed
 
 - All **24 native C++ suites** and **102 Python tests** pass.
-- ARM64 server and test executables cross-build successfully. These new ARM
-  executables have **not** yet been run on the board.
+- ARM64 server and test executables cross-build successfully. Five affected ARM
+  suites now pass on DAPHNE-015: `native_timestamp_tests`, `fpga_status_tests`,
+  `fpga_health_tests`, `timing_status_tests` and `gateware_mode_tests`. They use
+  scripted MMIO/fake sysfs/temporary files, not FPGA or analog accesses. This
+  does **not** qualify the new server or ABI 2.1 firmware on hardware.
 - Tests cover both modes and admitted ABIs, zero/rollover/stalled/backward
   counters, all low-byte status patterns, reserved flags, partial reads,
   conflicts/retry limits, source/context changes, stale observations and
@@ -58,9 +61,20 @@ board or run-permit claim is possible from this addition alone.
   timing/CDC evidence**. See the firmware's `docs/native-timestamp-snapshot.md`.
 
 Logs: firmware qualification workspace `firmware-health.W1CUQ3E7`, files
-`native-timestamp-{native,arm,python}-qualification.txt`. No board contact,
-runtime restart, remote write or private identity change was needed for this
-server/client work.
+`native-timestamp-{native,arm,python}-qualification.txt`. Follow-up ARM log:
+`native-arm.tJWJ9FOa/arm-onboard-tests-final.txt`. The test archive was staged
+in private temporary directories and executed unprivileged. Before/after
+guards confirm unchanged service PID/restart count, server executable, boot ID,
+eight protected-file hashes and private identity. No server was installed or
+restarted, and no hardware configuration or network settings were changed.
+
+The image uses BusyBox checksum options (`sha256sum -c`, quiet check `-c -s`),
+has no `timeout` utility, and needs `LD_LIBRARY_PATH=/usr/lib/daphne-server`
+for protobuf's transitive libraries. Earlier attempts stopped at those
+environment prerequisites; they were not passing test runs. The final runner
+uses installed Python's `subprocess.run(..., timeout=30)` for each executable
+and performs post-run guards even when a test fails. Test archive SHA-256:
+`7534e1178a2534fc4508de2b7d9b2d130ee8b1a6b1aa71f2badc62d6836edbdb`.
 
 ## Client command — only after qualifying/deploying the matching firmware
 
@@ -88,7 +102,7 @@ report, **not full FPGA health**. Output contains no private network values.
    relabel old profiles or bypass admission.
 2. Run qualified Cooper synthesis/routing, review mandatory CDC/path reports,
    and qualify both firmware variants. No synthesis job is running yet.
-3. Run ARM executables and guarded live ABI 2.0/2.1 regression. Preserve CERN
+3. Complete the remaining ARM suites and guarded live ABI 2.0/2.1 regression. Preserve CERN
    MAC/IP, private identity and zero BIAS/BIASCTRL; verify the complete FE
    configuration, alignment and all 40 spy waveforms separately.
 4. Publish the qualified client/source/bundle and update the wiki with actual
