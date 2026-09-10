@@ -23,10 +23,12 @@ offset-gain measurements below retain their original server provenance.
 
 ## Scope and provenance
 
-Source-only candidate **ebf3988** adds [host clock and kernel synchronization observations](host-clock-verification.md).
-Clean builds, unit/client tests and standalone ARM clock probes pass. It is not
-deployed: current server/runtime/pin remain **eecff61**. Timesyncd peer/sample
-reporting and candidate live regression remain pending.
+Source-only candidate **702155b** adds [host clock and kernel observations](host-clock-verification.md)
+and [timesync service/history reporting](timesync-verification.md). Clean builds,
+31 host/31 actual ARM suites, 185 Python tests per binding and standalone probes
+pass. It is not deployed: current server/runtime/pin remain **eecff61**.
+Candidate live regression, runtime handoff and approved-source/fresh NTP evidence
+remain pending. The board reports no processed NTP samples and unsynchronized.
 
 Deployed **eecff61** adds [compiled server/schema identity](software-build-verification.md).
 Native and live self-trigger ABI 2.0 qualification, complete runtime, matching
@@ -59,7 +61,7 @@ preserved history. Relevant prior work:
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
 | I143/I144, server/schema version | Deployed eecff61 embeds Git software version, source/tree/dirty provenance, exact schema hashes and the router's shared envelope-version constant; same metadata in system status and independent bookkeeping | 28 host/28 native ARM suites, 162 Python tests per binding, native and live RPC/busy-Configure metadata, full regression and ONL handoff pass. Hashes are not semantic compatibility or authentication; other service versions remain open |
-| I086/I087/I090, host time; supporting I098 evidence | Source ebf3988 exposes same-sample UTC/Unix time, a suspend-inclusive derived boot estimate and read-only kernel synchronization/adjustment parameters; per-group quality, range/step/bracket checks and exact legacy aliases | Not deployed. 29 host/29 actual ARM suites and 174 Python tests per binding pass; standalone board observations report May 2025 and unsynchronized. Kernel adjustment offset is not I099 peer offset; I098 service-level evidence and I100 source, candidate live regression and runtime handoff remain pending |
+| I086/I087/I090, host time; partial I098–I100 time-service evidence | Source 702155b exposes same-sample UTC/Unix time, suspend-inclusive derived boot estimate, kernel state and typed timesync service/history; explicit quality/age, exact counters, historical offset and opt-in selected peer | Not deployed. 31 host/31 actual ARM suites and 185 Python tests per binding pass. Board reports May 2025, unsynchronized and zero processed NTP samples: offset/age unavailable. Approved-source/fresh-offset contract, candidate live regression and runtime handoff remain pending |
 | I071–I084, management Ethernet | Fourteen typed read-only Linux link metrics, individual quality/time, interface/state brackets; unknown operational state cannot pass health | Deployed bffea24; 27 host/native ARM suites, 144 Python tests, native probes and live RPC/zero-bias/all-channel regression pass. Complete runtime native smoke/staging, 124 packaging tests and ONL handoff pass. No Hermes delivery or counter-epoch claim |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
 | I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Local sweep: x2/x1 slope ratios 1.934–2.062; 36/40 within 164 counts at all five points. Analog calibration unqualified |
