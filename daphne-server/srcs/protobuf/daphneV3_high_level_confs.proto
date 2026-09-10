@@ -297,13 +297,31 @@ message SFPMonitor {
 
 message FanStatus {
   string name                 = 1; // e.g. fan0, fan1
-  bool   present              = 2;
-  bool   pwm_enabled          = 3;
-  double duty_cycle_percent   = 4;
-  double tach_rpm             = 5;
+  optional bool present       = 2; // Absent without physical population evidence.
+  optional bool pwm_enabled   = 3; // No enable bit in the legacy fan register bank.
+  optional double duty_cycle_percent = 4; // Physical duty, not code/255.
+  optional double tach_rpm     = 5; // Requires qualified fan/clock/conversion evidence.
   bool   tach_valid           = 6;
   string source               = 7; // e.g. PL register, GPIO, hwmon
   string message              = 8;
+  // GOOD qualifies these sequential register reads, NOT physical fan health
+  // or freshness of the FPGA's last completed tach measurement window.
+  MeasurementQuality quality = 9;
+  optional uint32 pwm_control_raw = 10; // 0x94000000, shared by BOTH fans.
+  optional uint32 tachometer_raw = 11; // 0x94000004/08; unmodified 32-bit read.
+  optional uint32 pwm_control_after_raw = 12; // Command bracket, not a latch.
+  optional uint32 pwm_command = 13; // Qualified applied 8-bit control code (I250).
+  optional uint32 tach_pulses_capped = 14; // raw >> 7, not physical revolutions.
+  optional bool tach_at_counter_limit = 15; // 31: exact vs saturation unknowable.
+  uint64 acquisition_started_monotonic_ns = 16; // Host receipt interval only.
+  uint64 observed_monotonic_ns = 17;
+  bool identity_bracket_verified = 18;
+  uint32 maximum_acquisition_ms = 19;
+  bool source_sample_time_known = 20; // False: firmware exports no sample time.
+  optional bool running = 21;
+  optional bool stalled = 22;
+  optional uint64 stall_count = 23;
+  optional string control_mode = 24; // No owner/automatic-mode register exists.
 }
 
 message TemperatureStatus {

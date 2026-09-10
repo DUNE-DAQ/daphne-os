@@ -31,6 +31,12 @@ FpgaStatusReaders default_fpga_status_readers() {
       ReadOnlyMmio afe(kAfeGlobalControlAddress, 4);
       ReadOnlyMmio bias(kBiasEnableAddress, 4);
       return read_afe_global(afe, bias, admitted, monotonic_time_ns);
+    },
+    [](const GatewareIdentity& admitted) {
+      if (!supports_fan_registers(admitted))
+        throw std::logic_error("Fan mapping requested without supported identity admission");
+      ReadOnlyMmio mmio(kFanControlAddress, 12);
+      return read_fan_registers(mmio, admitted, monotonic_time_ns);
     }
   };
 }
@@ -41,6 +47,8 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
   status.clear_gateware_identity();
   status.clear_fpga_programming();
   status.clear_afe_global();
+  status.clear_fans();
+  for (const auto& fan : unavailable_fan_observations()) *status.add_fans() = fan;
   status.mutable_afe_global()->set_message("AFE global MMIO not collected: programming/admission prerequisites required");
   auto* id = status.mutable_gateware_identity();
   auto* endpoint = status.mutable_endpoint();
@@ -118,15 +126,20 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
     if (status.afe_global().quality() == daphne::MEASUREMENT_GOOD &&
         !afe_global_consistent(status.afe_global()))
       throw std::runtime_error("Inconsistent AFE global observation");
+    const auto fans = read.fans(before);
+    for (unsigned i = 0; i < fans.size(); ++i) *status.mutable_fans(i) = fans[i];
+    if (!fan_observations_consistent(fans))
+      throw std::runtime_error("Inconsistent fan register observation");
     // Recheck host programming state before closing the MMIO identity bracket.
     *p = read.programming();
     if (!fpga_status_mmio_prerequisites(*p, monotonic_time_ns()))
       throw std::runtime_error("FPGA programming prerequisites changed or became unavailable during timing observation");
     observe_identity(before);
     status.mutable_afe_global()->set_identity_bracket_verified(true);
+    for (auto& fan : *status.mutable_fans()) fan.set_identity_bracket_verified(true);
     if (supports_live_timestamp(before.abi)) endpoint->mutable_live_timestamp()->set_identity_bracket_verified(true);
     if (supports_protocol_error_history(before.abi)) endpoint->mutable_protocol_errors()->set_identity_bracket_verified(true);
-    id->set_message("Matching complete admitted identity samples bracket timing/native diagnostics and AFE global reads; not a hardware latch or protection against identical reloads");
+    id->set_message("Matching complete admitted identity samples bracket timing/native diagnostics, AFE global and fan reads; not a hardware latch or protection against identical reloads");
     return true;
   } catch (const std::exception&) {
     if (mmio_started && runtime) runtime->invalidate("FPGA status could not confirm a stable admitted fabric observation");
@@ -140,6 +153,9 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
     endpoint->set_observation_quality(daphne::MEASUREMENT_ERROR);
     invalidate_afe_global(*status.mutable_afe_global(), daphne::MEASUREMENT_ERROR,
         "AFE global readback not qualified across FPGA admission/programming checks");
+    for (auto& fan : *status.mutable_fans())
+      invalidate_fan_registers(fan, daphne::MEASUREMENT_ERROR,
+          "Fan readback not qualified across FPGA admission/programming checks");
     if (endpoint->has_live_timestamp()) {
       invalidate_native_timestamp(*endpoint->mutable_live_timestamp(), daphne::MEASUREMENT_ERROR,
           "Native timestamp not qualified across FPGA admission/programming/timing checks");

@@ -11,7 +11,7 @@ struct Fixture {
   RuntimeState runtime{"instance", "boot", [] { return ObservationTime{monotonic_time_ns(), 1}; }};
   daphne::SystemStatusSnapshot status;
   GatewareIdentity identity{kGatewareIdentityMagic, kGatewareAbiV2, 1, 0x03f17f1b};
-  unsigned programs = 0, ids = 0, timings = 0, timestamps = 0, histories = 0, afes = 0;
+  unsigned programs = 0, ids = 0, timings = 0, timestamps = 0, histories = 0, afes = 0, fans = 0;
   unsigned fail_program = 0, change_id = 0, throw_id = 0, change_abi = 0;
   bool fail_timing = false, unknown_program = false, change_timing = false;
   FpgaStatusReaders readers;
@@ -86,6 +86,14 @@ struct Fixture {
       r.set_source(kAfeGlobalSource); r.set_maximum_acquisition_ms(kAfeGlobalMaximumAcquisitionMs);
       return r;
     };
+    readers.fans = [&](const GatewareIdentity& value) {
+      ++fans; require(same_gateware_identity(value, identity));
+      struct FanIo : Mmio32 {
+        uint32_t read32(uint64_t address) override { return address == kFanControlAddress ? 255 : 128; }
+        void write32(uint64_t, uint32_t) override { throw std::runtime_error("Unexpected fan write"); }
+      } io;
+      return read_fan_registers(io, value, monotonic_time_ns);
+    };
   }
   bool collect() {
     return collect_fpga_status(status, static_cast<GatewareMode>(identity.variant), identity, &runtime, readers);
@@ -103,6 +111,9 @@ int main() {
     require(f.timestamps == (abi == kGatewareAbiV2 ? 0 : 1));
     require(f.histories == (abi == kGatewareAbiV22 ? 1 : 0));
     require(f.afes == 1 && afe_global_consistent(f.status.afe_global()) && f.status.afe_global().identity_bracket_verified());
+    require(f.fans == 1 && f.status.fans_size() == 2);
+    for (unsigned i = 0; i < 2; ++i)
+      require(fan_registers_consistent(f.status.fans(i), i) && f.status.fans(i).identity_bracket_verified());
     require(f.status.endpoint().live_timestamp().identity_bracket_verified() == (abi != kGatewareAbiV2));
     require(f.status.endpoint().protocol_errors().identity_bracket_verified() == (abi == kGatewareAbiV22));
     require(f.status.endpoint().protocol_errors().has_count() == (abi == kGatewareAbiV22));
@@ -130,6 +141,10 @@ int main() {
     const bool collected = failure == 1 || failure == 3 || failure == 5 || failure == 7;
     require(f.histories == unsigned(collected));
     require(f.afes == unsigned(collected));
+    require(f.fans == unsigned(collected));
+    for (const auto& fan : f.status.fans())
+      require(!fan.has_pwm_command() && !fan.has_tach_pulses_capped() && !fan.identity_bracket_verified() &&
+          fan.has_tachometer_raw() == collected);
     require(!f.status.afe_global().has_bias_enabled() && !f.status.afe_global().has_power_state_bit() &&
         !f.status.afe_global().identity_bracket_verified());
     require(f.status.afe_global().has_global_control_raw() == collected);
@@ -283,12 +298,19 @@ int main() {
     try { default_fpga_status_readers().afe_global(id); }
     catch (const std::logic_error&) { rejected = true; }
     require(rejected); // Invalid identity rejected before opening /dev/mem.
+    rejected = false;
+    try { default_fpga_status_readers().fans(id); }
+    catch (const std::logic_error&) { rejected = true; }
+    require(rejected);
   }
   {
     Fixture f; require(f.collect());
     f.unknown_program = true;
     require(!f.collect() && !f.status.afe_global().has_global_control_raw() && !f.status.afe_global().has_bias_enabled());
     require(f.afes == 1); // Reusing a snapshot cannot retain the previous successful observation.
+    require(f.fans == 1 && f.status.fans_size() == 2);
+    for (const auto& fan : f.status.fans())
+      require(!fan.has_tachometer_raw() && !fan.has_pwm_command() && !fan.identity_bracket_verified());
   }
   for (unsigned failure = 0; failure < 2; ++failure) {
     Fixture f;
@@ -314,5 +336,34 @@ int main() {
     require(f.status.afe_global().identity_bracket_verified());
     // A completed identity bracket is not a guarantee that every diagnostic succeeded.
   }
-  std::cout << "Both ABI variants, lazy admission, before/after failures, known invalidation and ADC-shared guard passed\n";
+  for (unsigned fault = 0; fault < 7; ++fault) {
+    Fixture f;
+    auto original = f.readers.fans;
+    f.readers.fans = [original, fault](const GatewareIdentity& id) {
+      if (fault == 0) throw std::runtime_error("fan mapping failed");
+      auto fans = original(id);
+      if (fault == 1) fans[0].set_tach_pulses_capped(2);
+      if (fault == 2) fans[1].set_present(false);
+      if (fault == 3) { fans[1].set_pwm_control_raw(1); fans[1].set_pwm_control_after_raw(1); fans[1].set_pwm_command(1); }
+      if (fault == 4) fans[1].set_observed_monotonic_ns(fans[1].observed_monotonic_ns() + 1);
+      if (fault == 5) fans[1].set_quality(daphne::MEASUREMENT_ERROR); // Must clear decoded values.
+      if (fault == 6) fans[1].set_quality(static_cast<daphne::MeasurementQuality>(99));
+      return fans;
+    };
+    require(!f.collect() && !f.runtime.snapshot().applied_configuration_valid());
+    for (const auto& fan : f.status.fans())
+      require(!fan.has_pwm_command() && !fan.has_tach_pulses_capped() && !fan.has_present() && !fan.identity_bracket_verified());
+  }
+  for (auto quality : {daphne::MEASUREMENT_UNAVAILABLE, daphne::MEASUREMENT_ERROR, daphne::MEASUREMENT_STALE}) {
+    Fixture f;
+    f.readers.fans = [quality](const GatewareIdentity&) {
+      auto result = unavailable_fan_observations();
+      for (auto& fan : result) fan.set_quality(quality);
+      return result;
+    };
+    require(f.collect() && f.runtime.snapshot().applied_configuration_valid());
+    for (const auto& fan : f.status.fans())
+      require(fan.quality() == quality && !fan.has_pwm_command() && fan.identity_bracket_verified());
+  }
+  std::cout << "Both ABI variants, lazy admission, before/after failures, known invalidation, fan reads and ADC-shared guard passed\n";
 }

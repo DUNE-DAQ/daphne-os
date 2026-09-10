@@ -133,6 +133,7 @@ target_link_libraries(daphne_software_build PUBLIC daphne_proto)
 add_library(daphne_telemetry_protocol
   srcs/server_controller/hdmezz_protocol.cpp
   srcs/server_controller/afe_global.cpp
+  srcs/server_controller/fan_monitor.cpp
   srcs/server_controller/protocol_errors.cpp
   srcs/server_controller/native_timestamp.cpp
   srcs/server_controller/regulator_monitor.cpp
@@ -198,6 +199,12 @@ if(BUILD_TESTING)
   add_test(NAME fpga_status_unit COMMAND fpga_status_tests)
   set_tests_properties(fpga_status_unit PROPERTIES LABELS unit)
   add_executable(afe_global_tests tests/afe_global_tests.cpp)
+  add_executable(fan_monitor_tests tests/fan_monitor_tests.cpp)
+  target_link_libraries(fan_monitor_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME fan_monitor_unit COMMAND fan_monitor_tests)
+  set_tests_properties(fan_monitor_unit PROPERTIES LABELS unit)
+  add_executable(fan_register_probe tests/fan_register_probe.cpp)
+  target_link_libraries(fan_register_probe PRIVATE daphne_fpga_status)
   target_link_libraries(afe_global_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME afe_global_unit COMMAND afe_global_tests)
   set_tests_properties(afe_global_unit PROPERTIES LABELS unit)

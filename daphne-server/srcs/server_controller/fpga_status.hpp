@@ -2,6 +2,7 @@
 #include <functional>
 #include "server_controller/fpga_health.hpp"
 #include "server_controller/runtime_state.hpp"
+#include "server_controller/fan_monitor.hpp"
 
 namespace daphne_sc {
 // Lazy readers let admission finish before any fabric MMIO is opened, and make
@@ -13,6 +14,7 @@ struct FpgaStatusReaders {
   std::function<daphne::NativeTimestampObservation(const GatewareIdentity&)> timestamp;
   std::function<daphne::ProtocolErrorObservation(const GatewareIdentity&)> protocol_errors;
   std::function<daphne::AfeGlobalObservation(const GatewareIdentity&)> afe_global;
+  std::function<FanObservations(const GatewareIdentity&)> fans;
 };
 FpgaStatusReaders default_fpga_status_readers();
 bool collect_fpga_status(daphne::SystemStatusSnapshot&, GatewareMode,
