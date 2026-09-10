@@ -284,7 +284,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
     def test_current_source_contract_stages_abi22_capability(self) -> None:
         # Real reviewed source contract, synthetic ELF fixture; not an image build.
         bundle, _ = self.make_bundle()
-        candidate = "79f6e5d94ea23260a624d3b8b752d15ea475bda8"
+        candidate = "a23e5a9d1078dd8601c0964a45aa8a924d30121e"
         self.assertEqual(REQUIRED_COMMIT, candidate)
         self.assertEqual(REQUIRED_MINORS, "0 1 2")
         result = self.run_stage(bundle)
@@ -311,6 +311,16 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
         metadata = bundle.parent / "BUILD-METADATA.txt"
         metadata.write_text(metadata.read_text().replace(
             REQUIRED_COMMIT, "fb82e0a6f6607e9486a98ed6fc1a26b07b0b0665"))
+        result = self.run_stage(bundle)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match required commit", result.stderr)
+        self.assert_prior_state_preserved()
+
+    def test_previous_mezzanine_runtime_cannot_replace_fan_reporting_runtime(self) -> None:
+        bundle, _ = self.make_bundle()
+        metadata = bundle.parent / "BUILD-METADATA.txt"
+        metadata.write_text(metadata.read_text().replace(
+            REQUIRED_COMMIT, "79f6e5d94ea23260a624d3b8b752d15ea475bda8"))
         result = self.run_stage(bundle)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not match required commit", result.stderr)
