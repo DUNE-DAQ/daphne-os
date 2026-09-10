@@ -1,0 +1,464 @@
+{
+  "format": "daphne-server-v05-row-audit-v1",
+  "worksheet": "Server Platform",
+  "workbook_filename": "DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx",
+  "workbook_sha256": "7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8",
+  "source_export_sha256": "393eac4e1a61513c76230f889670ce4a7841e3968272df33e829866461db2fe1",
+  "reviewed_os_commit": "abef83190d2121a1c4bfc94a9f7e42bbeee62808",
+  "server_commit": "75972de44150fb164886522ea79592a2cc638a1e",
+  "server_subtree": "0f19aab5c8d66ca779f8cd4e1048193127e60818",
+  "row_count": 251,
+  "source_semantics_sha256": "6c404e29337ac147638a8693511b2fceac9c0f42be17054544b617329b8802ec",
+  "snapshot_only": true,
+  "full_goal_complete": false,
+  "implementation_definitions": {
+    "implemented": "Concrete server producer/export provides the described observation within the named scope. Not a claim that all hardware, modes, forwarding paths or metrology are qualified.",
+    "partial": "Related implementation exists but differs in meaning, readback/cache provenance, completeness, validity, persistent reporting or qualified context. This row is not closed.",
+    "missing": "No corresponding server observation/export was found. Internal helpers or schema-only placeholders do not establish an implementation.",
+    "contract-pending": "Implementation requires an unresolved authority, authenticated identity, safety/lease or boot-recovery policy; do not invent that policy."
+  },
+  "expected_counts": {
+    "implemented": 84,
+    "partial": 95,
+    "missing": 59,
+    "contract-pending": 13
+  },
+  "global_limits": [
+    "Human source/evidence audit, not consortium approval. The checker validates completeness/provenance/references, not semantic correctness.",
+    "Live qualification is DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
+    "Hardware/missing-assignment conditions remain open even on implemented rows; inspect evidence-group limits and per-row remaining work.",
+    "No mezzanines are fitted. No new firmware, fan/bias/power writes, EEPROM changes, network/time changes or configuration mutations were performed for this audit.",
+    "Crate/slot/detector, timing assignment and Hermes identity requirements also exist outside the Server Platform sheet; this sheet is not the complete user objective.",
+    "Source meanings/IDs/row numbers are preserved from the hash-pinned workbook/export; original draft implementation colours are not current implementation evidence."
+  ],
+  "evidence_groups": {
+    "authority": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/router_server.cpp",
+        "daphne-server/srcs/server_controller/runtime_state.cpp"
+      ],
+      "evidence_refs": [
+        "docs/server-bookkeeping-verification.md"
+      ],
+      "evidence_scope": "source-review",
+      "limit": "Serialization is not authenticated authority, a lease, DPS admission or verified safe state."
+    },
+    "audit": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/runtime_state.cpp",
+        "daphne-server/srcs/server_controller/router_server.cpp",
+        "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto"
+      ],
+      "evidence_refs": [
+        "docs/server-bookkeeping-verification.md",
+        "daphne-server/tests/runtime_state_tests.cpp"
+      ],
+      "evidence_scope": "Configure-only live-ABI2.0 and software",
+      "limit": "LastConfigurationResult covers Configure, not every accepted/rejected mutation; no authenticated requester."
+    },
+    "identity": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/board_identity.cpp",
+        "daphne-server/srcs/server_controller/board_identity_linux.cpp",
+        "daphne-server/scripts/prepare_identity_assignment.py"
+      ],
+      "evidence_refs": [
+        "docs/board-identity-verification.md",
+        "docs/hardware-database-identity-import.md"
+      ],
+      "evidence_scope": "live-ABI2.0 and synthetic identity tests",
+      "limit": "Approved missing timing/MAC assignments and physical Hermes mapping remain unavailable; protected baseline is not HWDB authentication."
+    },
+    "host_name": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/service_status.cpp"
+      ],
+      "evidence_refs": [
+        "docs/carrier-telemetry-and-services-verification.md"
+      ],
+      "evidence_scope": "source-review and live host metadata",
+      "limit": "uname nodename is exposed without an individual quality/source bracket or assigned-hostname comparison."
+    },
+    "network": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/board_identity_linux.cpp",
+        "daphne-server/srcs/server_controller/management_link.cpp"
+      ],
+      "evidence_refs": [
+        "docs/management-link-verification.md",
+        "daphne-server/tests/management_link_tests.cpp"
+      ],
+      "evidence_scope": "live-ABI2.0 and software",
+      "limit": "Linux management NIC only; private identity opt-in, no network writes, Hermes delivery or durable counter epoch."
+    },
+    "clock": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/host_clock.cpp",
+        "daphne-server/srcs/server_controller/timesync.cpp",
+        "daphne-server/srcs/server_controller/timesync_linux.cpp"
+      ],
+      "evidence_refs": [
+        "docs/host-clock-verification.md",
+        "docs/timesync-verification.md"
+      ],
+      "evidence_scope": "native and live-ABI2.0; unsynchronized board",
+      "limit": "Host wall clock unverified; selected peer and historical samples do not establish approved-source synchronization or fresh offset."
+    },
+    "resources": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/host_resources.cpp"
+      ],
+      "evidence_refs": [
+        "docs/host-resource-verification.md",
+        "daphne-server/tests/host_resources_tests.cpp"
+      ],
+      "evidence_scope": "native and live-ABI2.0",
+      "limit": "Read-only operating-system observations, not resource alarms or boot/recovery guarantees."
+    },
+    "host_software": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/host_software.cpp"
+      ],
+      "evidence_refs": [
+        "docs/host-software-verification.md",
+        "daphne-server/tests/host_software_tests.cpp"
+      ],
+      "evidence_scope": "native and live-ABI2.0 plus ONL client",
+      "limit": "Release labels are not installed-rootfs identity/integrity; optional BUILD_ID/IMAGE_ID/IMAGE_VERSION absent."
+    },
+    "boot": {
+      "source_refs": [
+        "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto",
+        "daphne-server/srcs/server_controller/service_status.cpp"
+      ],
+      "evidence_refs": [
+        "docs/host-software-verification.md",
+        "docs/server-v05-completion-plan.md"
+      ],
+      "evidence_scope": "source-review; no recovery qualification",
+      "limit": "No boot-slot/watchdog/reset-reason collector. A/B recovery requires actual corruption testing and unattended/network recovery without JTAG."
+    },
+    "services": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/service_status.cpp",
+        "daphne-server/srcs/server_controller/service_status.hpp"
+      ],
+      "evidence_refs": [
+        "docs/carrier-telemetry-and-services-verification.md",
+        "daphne-server/tests/service_status_tests.cpp"
+      ],
+      "evidence_scope": "eight allow-listed units, native and live-ABI2.0",
+      "limit": "systemd properties do not prove service function, network endpoint ownership, authenticated resource locks or boot-lifetime history."
+    },
+    "fpga": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/gateware.cpp",
+        "daphne-server/srcs/server_controller/fpga_status.cpp",
+        "daphne-server/srcs/server_controller/fpga_programming_linux.cpp",
+        "daphne-server/srcs/server_controller/fpga_health.cpp"
+      ],
+      "evidence_refs": [
+        "docs/server-fpga-health.md",
+        "daphne-server/tests/fpga_status_tests.cpp",
+        "daphne-server/tests/fpga_health_tests.cpp"
+      ],
+      "evidence_scope": "live-ABI2.0 plus software admission/fault tests",
+      "limit": "Sampled state/admitted identity only; not artifact authenticity, continuous health, logic-fault history or a reset epoch."
+    },
+    "capabilities": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/timing_status.cpp"
+      ],
+      "evidence_refs": [
+        "docs/server-v05-register-coverage.md",
+        "daphne-server/tests/timing_status_tests.cpp"
+      ],
+      "evidence_scope": "live-ABI2.0 and source/software",
+      "limit": "Supported-name list does not fully describe all settings, dimensional limits or semantic wire compatibility."
+    },
+    "build": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/software_build.cpp"
+      ],
+      "evidence_refs": [
+        "docs/software-build-verification.md",
+        "daphne-server/tests/software_build_tests.cpp"
+      ],
+      "evidence_scope": "native and live-ABI2.0 plus ONL client",
+      "limit": "Compiled Git/schema metadata, not installed-file authenticity, every service version or semantic schema compatibility."
+    },
+    "rpu": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/main.cpp",
+        "daphne-server/srcs/server_controller/handlers.cpp",
+        "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto"
+      ],
+      "evidence_refs": [
+        "docs/server-v05-completion-plan.md"
+      ],
+      "evidence_scope": "source-review; conditional RPU profile not qualified",
+      "limit": "No server RPU/remoteproc status contract or qualified deployed RPU profile; do not fabricate absent safety evidence."
+    },
+    "i2c": {
+      "source_refs": [
+        "daphne-server/srcs/BoardI2C.cpp",
+        "daphne-server/srcs/server_controller/handlers.cpp",
+        "daphne-server/srcs/server_controller/monitoring.cpp",
+        "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto"
+      ],
+      "evidence_refs": [
+        "docs/carrier-telemetry-and-services-verification.md"
+      ],
+      "evidence_scope": "source-review; device-specific live collectors only",
+      "limit": "I2CPortStatus is not populated; broad scans are rejected. Individual device samples do not implement bus-wide ownership/history."
+    },
+    "spi": {
+      "source_refs": [
+        "daphne-server/srcs/BoardSPI.cpp",
+        "daphne-server/srcs/server_controller/current_monitor.cpp",
+        "daphne-server/srcs/server_controller/current_monitor_protocol.cpp"
+      ],
+      "evidence_refs": [
+        "docs/ads1261-readout-verification.md"
+      ],
+      "evidence_scope": "40-channel live ADC path; no generic SPI inventory",
+      "limit": "Use identified controller, not fixed spidev3.0; current transactions are qualified but persistent SPI status/statistics are not exported."
+    },
+    "rails": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/board_monitor.hpp",
+        "daphne-server/srcs/server_controller/board_voltage_acquisition.hpp",
+        "daphne-server/srcs/server_controller/telemetry_protocol.cpp"
+      ],
+      "evidence_refs": [
+        "docs/telemetry-ams-verification.md",
+        "docs/carrier-telemetry-and-services-verification.md",
+        "daphne-server/tests/board_monitor_tests.cpp"
+      ],
+      "evidence_scope": "live-ABI2.0 scan/freshness; no metrology qualification",
+      "limit": "GeneralInfo named_voltages use a complete common cache/quality bracket; quality is not a voltage fault/threshold policy."
+    },
+    "regulators": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/regulator_monitor.cpp",
+        "daphne-server/srcs/server_controller/regulator_linux.cpp"
+      ],
+      "evidence_refs": [
+        "docs/onboard-regulator-verification.md",
+        "daphne-server/tests/regulator_monitor_tests.cpp"
+      ],
+      "evidence_scope": "four PJT004 modules live-ABI2.0 plus software",
+      "limit": "Mandatory PEC; no writes/fault clear. Existing CML flags retained; VIN/manufacturer status and analog metrology remain unqualified."
+    },
+    "temperature": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/ams_temperature.cpp",
+        "daphne-server/srcs/server_controller/carrier_temperature.cpp",
+        "daphne-server/srcs/server_controller/temperature_alarm.cpp"
+      ],
+      "evidence_refs": [
+        "docs/temperature-alarm-verification.md",
+        "docs/carrier-telemetry-and-services-verification.md",
+        "daphne-server/tests/temperature_alarm_tests.cpp"
+      ],
+      "evidence_scope": "four named sensors live; threshold/fault cases synthetic",
+      "limit": "85/95/105 C provisional monitoring thresholds, not safe ratings or physical trip qualification. Host observation times, not ADC conversion timestamps."
+    },
+    "mezzanine": {
+      "source_refs": [
+        "daphne-server/srcs/DaphneI2CDrivers.cpp",
+        "daphne-server/srcs/server_controller/handlers.cpp",
+        "daphne-server/srcs/server_controller/monitoring.cpp",
+        "daphne-server/srcs/protobuf/daphneV3_low_level_confs.proto"
+      ],
+      "evidence_refs": [
+        "daphne-server/docs/hdmezz-integration-reference.md",
+        "daphne-server/tests/hdmezz_driver_tests.cpp"
+      ],
+      "evidence_scope": "driver software tests; no mezzanines on DAPHNE-015",
+      "limit": "Legacy status atomics lack coherent per-sample quality/time; failed monitor reads can leave old values. Cached configuration is not live register readback."
+    },
+    "sfp": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/sfp_monitor.cpp",
+        "daphne-server/srcs/server_controller/sfp_linux.cpp"
+      ],
+      "evidence_refs": [
+        "docs/sfp-diagnostics-verification.md",
+        "docs/server-remaining-hardware-evidence.md",
+        "daphne-server/tests/sfp_monitor_tests.cpp"
+      ],
+      "evidence_scope": "GTH0/TMG/GTR live; other three routes unknown; software faults",
+      "limit": "Targeted six-route EEPROM/DDM only. Failed I2C is not absence/wiring diagnosis; physical Hermes LinkId association and unopened cages unqualified."
+    },
+    "fans": {
+      "source_refs": [
+        "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto",
+        "daphne-server/srcs/server_controller/handlers.cpp"
+      ],
+      "evidence_refs": [
+        "docs/server-v05-register-coverage.md"
+      ],
+      "evidence_scope": "source-review; no populated FanStatus",
+      "limit": "No server fan collector. Review exact deployed firmware register/scaling and physical fan population; no PWM writes for diagnosis."
+    },
+    "afe": {
+      "source_refs": [
+        "daphne-server/srcs/Afe.cpp",
+        "daphne-server/srcs/Daphne.cpp",
+        "daphne-server/srcs/server_controller/handlers.cpp"
+      ],
+      "evidence_refs": [
+        "docs/server-v05-register-coverage.md"
+      ],
+      "evidence_scope": "source-review; zero-BIAS command/guard evidence only",
+      "limit": "Setter responses or command dictionaries are not fresh read-only AFE global register observations."
+    },
+    "bias_loop": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/handlers.cpp",
+        "daphne-server/srcs/protobuf/daphneV3_low_level_confs.proto"
+      ],
+      "evidence_refs": [
+        "docs/server-v05-register-coverage.md"
+      ],
+      "evidence_scope": "source implementation; no nonzero-BIAS qualification",
+      "limit": "Terminal result exists only in controlled-set reply; no retained quality/timed per-AFE read-only result. Do not run voltage-setting RPC to obtain telemetry."
+    },
+    "alignment": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/handlers.cpp",
+        "daphne-server/srcs/Daphne.cpp"
+      ],
+      "evidence_refs": [
+        "docs/offset-gain-full-configuration-verification.md",
+        "docs/aggregate-bias-verification.md"
+      ],
+      "evidence_scope": "five-AFE alignment/all-40-channel live zero-BIAS",
+      "limit": "Align command has matched scan/final pattern evidence; no persistent per-AFE quality/epoch-aware Aligned observation."
+    },
+    "current": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/current_monitor.cpp",
+        "daphne-server/srcs/server_controller/current_monitor_protocol.cpp",
+        "daphne-server/srcs/BoardSPI.cpp"
+      ],
+      "evidence_refs": [
+        "docs/ads1261-readout-verification.md",
+        "daphne-server/tests/current_mux_tests.cpp"
+      ],
+      "evidence_scope": "all 40 physical channels, 80 CRC-checked live reads; software faults",
+      "limit": "Raw signed code/nominal differential volts, not calibrated amperes or physical mezzanine-current mapping."
+    },
+    "bookkeeping": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/runtime_state.cpp",
+        "daphne-server/srcs/server_controller/router_server.cpp",
+        "daphne-server/srcs/server_controller/configuration_fingerprint.cpp"
+      ],
+      "evidence_refs": [
+        "docs/server-bookkeeping-verification.md",
+        "docs/host-software-verification.md",
+        "daphne-server/tests/runtime_state_tests.cpp"
+      ],
+      "evidence_scope": "live Configure concurrency and both-order/all-channel zero-BIAS; software faults",
+      "limit": "Known local invalidations only; not analog calibration or detection of every external reset/identical reload."
+    },
+    "fullstream": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/gateware.cpp",
+        "daphne-server/srcs/server_controller/handlers.cpp",
+        "daphne-server/srcs/server_controller/configuration_fingerprint.cpp"
+      ],
+      "evidence_refs": [
+        "daphne-server/tests/gateware_mode_tests.cpp",
+        "docs/server-v05-completion-plan.md"
+      ],
+      "evidence_scope": "source and software tests; no full-stream hardware qualification",
+      "limit": "Activation checks shadow selectors and request/ack internally; no typed polling/last committed-plan observation."
+    },
+    "overlay": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/service_status.cpp",
+        "daphne-server/srcs/server_controller/handlers.cpp"
+      ],
+      "evidence_refs": [
+        "docs/gateware-bundle-identity.md",
+        "docs/server-v05-completion-plan.md"
+      ],
+      "evidence_scope": "configured APP label only; source-review",
+      "limit": "active.env and a completed oneshot are not independent observed overlay lifecycle/inventory; include_xmutil is rejected."
+    },
+    "telemetry": {
+      "source_refs": [
+        "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto",
+        "daphne-server/srcs/server_controller/runtime_state.cpp",
+        "daphne-server/srcs/server_controller/register_reads.hpp"
+      ],
+      "evidence_refs": [
+        "docs/server-v05-register-coverage.md"
+      ],
+      "evidence_scope": "collector-specific software/live evidence, not all forwarding paths",
+      "limit": "Quality/time improvements are not universal; no common sample epoch/sequence or global forwarding guarantee."
+    },
+    "counters": {
+      "source_refs": [
+        "daphne-server/srcs/server_controller/register_reads.hpp",
+        "daphne-server/srcs/server_controller/protocol_errors.cpp",
+        "daphne-server/srcs/server_controller/management_link.cpp"
+      ],
+      "evidence_refs": [
+        "docs/protocol-error-server-verification.md",
+        "docs/management-link-verification.md"
+      ],
+      "evidence_scope": "live ABI2.0 compatibility; ABI2.2 source/software only",
+      "limit": "No complete reset epoch; management width is export width, not necessarily native hardware width."
+    }
+  },
+  "reviewed_code_sha256": {
+    "daphne-server/scripts/prepare_identity_assignment.py": "069c1c48e6f6cb38db2e3a959914c7d72ce1a993262e6ab4337a41a22615f9ab",
+    "daphne-server/srcs/Afe.cpp": "c2accbeefb3cb3e194961ba518c73de6206fbaaf8ed794bb63dc9125d87f9991",
+    "daphne-server/srcs/BoardI2C.cpp": "360932a64042142206ffb4168ee4aaa75b1d4fba0822cba07c9590e29db96ef3",
+    "daphne-server/srcs/BoardSPI.cpp": "9492e0f2aeabe178930a6cd5cf9d6d5ba6a4c1bd16a925928aeb798f1866e1a0",
+    "daphne-server/srcs/Daphne.cpp": "87fb5404824d3f8069d8ae8ae8c45ed6064fb2a651c45d02a2181da14ed9fb76",
+    "daphne-server/srcs/DaphneI2CDrivers.cpp": "c8b61e9ab470335dfc2ac71fa4ebab067f5f387c244177da233c437370425069",
+    "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto": "50f5bb37e8046c5494a63099bb6377ff967cd1bdd4a0742802a6cb34854e697e",
+    "daphne-server/srcs/protobuf/daphneV3_low_level_confs.proto": "a5e32b9233db16bde401375dfd535d9d4543c9e5c0873dbfcb5ed87376e24af1",
+    "daphne-server/srcs/server_controller/ams_temperature.cpp": "711663b17bc021a02b5972583d1e430228f14d2bbcdb5b92e95b63b488a6c7c8",
+    "daphne-server/srcs/server_controller/board_identity.cpp": "008148de4a41bf225dafe69c30d0c375a563e46086b095148111f00038b840f1",
+    "daphne-server/srcs/server_controller/board_identity_linux.cpp": "41c72f427072e725d8d32a9ba5e644e572c47b463cb6e5a9916bf54a3136ab6a",
+    "daphne-server/srcs/server_controller/board_monitor.hpp": "25e22017743cbd90b4c667d62e28e4ec704162fa3dd5a97bbe9fc7fcd38d4aef",
+    "daphne-server/srcs/server_controller/board_voltage_acquisition.hpp": "aa6568528cf4113236a7f25c65e4c4bdfd1ded36e6ee18083c80dd4e98681006",
+    "daphne-server/srcs/server_controller/carrier_temperature.cpp": "d2a0de01da8fb3e23fe626f9a0799e7e7a99d5cbf1d4e33c7c309a34a838539c",
+    "daphne-server/srcs/server_controller/configuration_fingerprint.cpp": "b92dc108d1d3077a4e04a82684b4e66992f12b1e6bb0681cd944229ad920878f",
+    "daphne-server/srcs/server_controller/current_monitor.cpp": "3b6fcd5934f2e3139c335ff37339e7cc6a08b8ae1cdfbe35b86b326a84fcaba4",
+    "daphne-server/srcs/server_controller/current_monitor_protocol.cpp": "009437eeb88d02cb8b55255901bf5e0f704f5a74700e7ec9fe402ef50f3dc134",
+    "daphne-server/srcs/server_controller/fpga_health.cpp": "11b9004a84eb70cd7be9921645fee48f332217ffa562aa7deda37492262d731c",
+    "daphne-server/srcs/server_controller/fpga_programming_linux.cpp": "f854e40a6d81d29d772e88b609a343daa2510ff62558e6b3c56d55d3752f6343",
+    "daphne-server/srcs/server_controller/fpga_status.cpp": "1af73e4cc74e5ea9a5ea37ac404250a91b7d48ae27b95b68347090a67538cd2f",
+    "daphne-server/srcs/server_controller/gateware.cpp": "12e98f0a68f91cbe57a88c6fc5b4b2d1082211e1e97a1a538029d9e926b0cccb",
+    "daphne-server/srcs/server_controller/handlers.cpp": "b2a0fba0d71035cc40f00d6e77bb3b40bd8aa2963888c067094965eb13849f53",
+    "daphne-server/srcs/server_controller/host_clock.cpp": "24cf324b17b0a2f01091334249e930e3f35f5df17842e16bf66b2be59ea52c6f",
+    "daphne-server/srcs/server_controller/host_resources.cpp": "6ebe9218587a13e814929928956fbaf30074b9d56b48fa20cb7d996de9c036c7",
+    "daphne-server/srcs/server_controller/host_software.cpp": "f6d8a3109efb4401efd240a5f523bc799b7e16dce893aa01c424d1b6323a2940",
+    "daphne-server/srcs/server_controller/main.cpp": "0402695030a78d0bdd6dcbea736be25c5a109b79edf5c04880de5cb8b40e77b6",
+    "daphne-server/srcs/server_controller/management_link.cpp": "42b6390e0f0396495213f8f55373c34d781931df3d85961b6419158a556a987d",
+    "daphne-server/srcs/server_controller/monitoring.cpp": "d320d64ba5852243900d4a5da7f38ac9dfcf01484a10380ce5f0e9901ac6b2f4",
+    "daphne-server/srcs/server_controller/protocol_errors.cpp": "b6d808660727520eff04cacbc22cfd6887b58630528961b05fcd8bdbefb55bef",
+    "daphne-server/srcs/server_controller/register_reads.hpp": "cc09b96d3d4702f2c908537ed6a2ac4a9f8e29c35c387749d3b805e13a88d914",
+    "daphne-server/srcs/server_controller/regulator_linux.cpp": "6564122328d4e64f687f699cb1a4df716825606e16b58b479e9c19d8ee4846df",
+    "daphne-server/srcs/server_controller/regulator_monitor.cpp": "a0278fa3984739fc055c85e095a149dbc27926e2b3ddb5dd6e2ef957fab674f9",
+    "daphne-server/srcs/server_controller/router_server.cpp": "a0f670b85bab9893fd3e142e65e3c9549c3d7405e7e80e24f4f145416d961436",
+    "daphne-server/srcs/server_controller/runtime_state.cpp": "86d46b1afa38554ccccee9168a02ec718882fdc9b44521795dae3089234246e2",
+    "daphne-server/srcs/server_controller/service_status.cpp": "bd228bc718f8f1f8d4ff8d313ef142e6e980bc74a3549f1e224aae78f620ebeb",
+    "daphne-server/srcs/server_controller/service_status.hpp": "886f1ba20a8b2990685330d152394cf1085e3829a28aad47f80f7b0ad24b7991",
+    "daphne-server/srcs/server_controller/sfp_linux.cpp": "6660652417ae3a49a86e6b635f80a3c92ac3559e959fa7d8194c94c2c7a081bc",
+    "daphne-server/srcs/server_controller/sfp_monitor.cpp": "46e707326df622269eddc1f4a38d84d6449222dba2e33bf63a7a59eba8207117",
+    "daphne-server/srcs/server_controller/software_build.cpp": "63e9ad45735a91bb06993ff04b1f69e9fea0bda966fab469cac59f1168d4d0ed",
+    "daphne-server/srcs/server_controller/telemetry_protocol.cpp": "313d2e24e38a347e1154ac9875b372711ffc2ac1526531095d24ac676e60215a",
+    "daphne-server/srcs/server_controller/temperature_alarm.cpp": "e95bac0d4dbb9e33fd6b52c4f0fff58d970b4e224b543c2b41898734107b0cb7",
+    "daphne-server/srcs/server_controller/timesync.cpp": "a65e2d70261ae463405e9a1a2557a94cadea535ccd928f824153a0c9e6d8770f",
+    "daphne-server/srcs/server_controller/timesync_linux.cpp": "e0b84338c50e69be7d7dbcfed326605a16bca5db2f8cc61622d434234ceb323d",
+    "daphne-server/srcs/server_controller/timing_status.cpp": "951f5be8e676075c1d367fb87a4205a25787544bac0d61e004cd59350bac2fd8"
+  }
+}
