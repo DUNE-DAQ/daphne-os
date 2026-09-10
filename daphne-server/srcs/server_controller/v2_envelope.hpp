@@ -8,6 +8,7 @@
 #include "daphneV3_high_level_confs.pb.h"
 
 namespace daphne_sc::v2 {
+inline constexpr uint32_t kControlEnvelopeVersion = 2;
 
 inline uint64_t now_ns() {
   using namespace std::chrono;
@@ -31,7 +32,7 @@ inline daphne::ControlEnvelopeV2 make_response(const daphne::ControlEnvelopeV2& 
                                                daphne::MessageTypeV2 resp_type,
                                                std::string payload) {
   daphne::ControlEnvelopeV2 out;
-  out.set_version(2);
+  out.set_version(kControlEnvelopeVersion);
   out.set_dir(daphne::DIR_RESPONSE);
   out.set_type(resp_type);
   out.set_task_id(req.task_id());
@@ -44,4 +45,3 @@ inline daphne::ControlEnvelopeV2 make_response(const daphne::ControlEnvelopeV2& 
 }
 
 }  // namespace daphne_sc::v2
-

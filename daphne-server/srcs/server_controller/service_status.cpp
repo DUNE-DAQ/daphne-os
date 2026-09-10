@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "server_controller/board_monitor.hpp"
+#include "server_controller/software_build.hpp"
 
 extern char** environ;
 namespace daphne_sc {
@@ -229,6 +230,7 @@ void add_service_status(daphne::SystemStatusSnapshot& status) {
 }
 
 void add_host_status(daphne::SystemStatusSnapshot& status, bool mezzanine_access_enabled) {
+  *status.mutable_server_build() = server_build_info();
   utsname identity{};
   if (uname(&identity) == 0) {
     status.set_hostname(identity.nodename);

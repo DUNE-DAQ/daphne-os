@@ -117,6 +117,13 @@ target_include_directories(daphne_proto PUBLIC
 )
 target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/server_build_target.cmake")
+add_library(daphne_software_build srcs/server_controller/software_build.cpp "${DAPHNE_BUILD_INFO_HEADER}")
+add_dependencies(daphne_software_build daphne_build_metadata)
+target_include_directories(daphne_software_build PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/srcs"
+  PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(daphne_software_build PUBLIC daphne_proto)
+
 add_library(daphne_telemetry_protocol
   srcs/server_controller/protocol_errors.cpp
   srcs/server_controller/native_timestamp.cpp
@@ -137,14 +144,14 @@ add_library(daphne_telemetry_protocol
   srcs/server_controller/readonly_mmio.cpp
 )
 target_include_directories(daphne_telemetry_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
-target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto daphne_gateware daphne_i2c_hw daphne_current_adc Threads::Threads)
+target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto daphne_software_build daphne_gateware daphne_i2c_hw daphne_current_adc Threads::Threads)
 add_library(daphne_configuration
   srcs/server_controller/configuration_plan.cpp
   srcs/server_controller/runtime_state.cpp
   srcs/server_controller/configuration_fingerprint.cpp
 )
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
-target_link_libraries(daphne_configuration PUBLIC daphne_proto daphne_gateware)
+target_link_libraries(daphne_configuration PUBLIC daphne_proto daphne_software_build daphne_gateware)
 add_library(daphne_identity
   srcs/server_controller/management_link.cpp
   srcs/server_controller/board_identity.cpp
@@ -156,6 +163,12 @@ add_library(daphne_fpga_status srcs/server_controller/fpga_status.cpp)
 target_include_directories(daphne_fpga_status PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_fpga_status PUBLIC daphne_telemetry_protocol daphne_configuration)
 if(BUILD_TESTING)
+  add_executable(software_build_tests tests/software_build_tests.cpp)
+  target_link_libraries(software_build_tests PRIVATE daphne_configuration)
+  add_test(NAME software_build_unit COMMAND software_build_tests)
+  set_tests_properties(software_build_unit PROPERTIES LABELS unit)
+  add_executable(software_build_probe tests/software_build_probe.cpp)
+  target_link_libraries(software_build_probe PRIVATE daphne_software_build)
   add_executable(fpga_status_tests tests/fpga_status_tests.cpp)
   target_link_libraries(fpga_status_tests PRIVATE daphne_fpga_status)
   add_test(NAME fpga_status_unit COMMAND fpga_status_tests)

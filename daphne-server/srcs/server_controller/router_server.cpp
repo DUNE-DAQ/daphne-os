@@ -69,7 +69,7 @@ void run_router_server(zmq::context_t& ctx,
     const std::string client_id(static_cast<const char*>(frames.front().data()), frames.front().size());
     daphne::ControlEnvelopeV2 req;
     if (!req.ParseFromArray(payload.data(), static_cast<int>(payload.size())) ||
-        req.version() != 2 || req.dir() != daphne::DIR_REQUEST) continue;
+        req.version() != v2::kControlEnvelopeVersion || req.dir() != daphne::DIR_REQUEST) continue;
 
     if (req.type() == daphne::MT2_READ_SERVER_STATE_REQ) {
       daphne::ReadServerStateRequest query;

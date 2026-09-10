@@ -1,0 +1,13 @@
+#pragma once
+// Generated at build time; immutable metadata, not runtime filesystem readback.
+namespace daphne_sc::compiled_build {
+inline constexpr char source_commit[] = "@SOURCE_COMMIT@";
+inline constexpr char source_tree[] = "@SOURCE_TREE@";
+inline constexpr char source_dirty[] = "@SOURCE_DIRTY@";
+inline constexpr char high_schema_sha256[] = "@HIGH_SCHEMA_SHA256@";
+inline constexpr char low_schema_sha256[] = "@LOW_SCHEMA_SHA256@";
+inline constexpr char compiler_id[] = "@COMPILER_ID@";
+inline constexpr char compiler_version[] = "@COMPILER_VERSION@";
+inline constexpr char target_architecture[] = "@TARGET_ARCH@";
+inline constexpr char protobuf_version[] = "@PROTOBUF_VERSION@";
+}

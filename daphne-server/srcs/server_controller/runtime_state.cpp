@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include "server_controller/board_monitor.hpp"
+#include "server_controller/software_build.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -24,6 +25,7 @@ RuntimeState::RuntimeState(std::string instance_id, std::string boot_id, Clock c
   if (!clock_ || instance_id.empty() || boot_id.empty())
     throw std::invalid_argument("Runtime state needs a clock and process/boot identities");
   state_.set_success(true);
+  *state_.mutable_server_build() = server_build_info();
   state_.set_instance_id(std::move(instance_id));
   state_.set_boot_id(std::move(boot_id));
   state_.set_invalidation_reason("Server started; no complete configuration applied by this process");

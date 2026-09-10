@@ -750,6 +750,30 @@ message HostResourceObservation {
   // ROOT_READ_ONLY observes ST_RDONLY, not whether this state is unexpected.
 }
 
+// Immutable compiled-in server metadata. Parent reply supplies process identity
+// and observation time; this message is NOT a live installed-file inventory.
+message ServerBuildInfo {
+  uint32 metadata_format_version = 1; // 1 for this metadata layout, not a wire-compatibility promise
+  string component = 2; // daphne-server only; not firmware, Hermes or the OS
+  optional string software_version = 3; // git:<full HEAD>[-dirty], absent without Git provenance
+  optional string source_git_commit = 4;
+  optional string committed_source_tree = 5; // HEAD tree of server directory, NOT dirty source content
+  optional bool source_worktree_dirty = 6; // tracked/staged/untracked server files; false has presence
+  MeasurementQuality source_quality = 7; // GOOD means metadata collected, not clean/approved source
+  string source_detail = 8;
+  string high_level_schema_sha256 = 9; // exact .proto source bytes captured at build time
+  string low_level_schema_sha256 = 10;
+  uint32 control_envelope_version = 11; // server router admits ControlEnvelopeV2 version 2
+  string compiler_id = 12;
+  string compiler_version = 13;
+  string target_architecture = 14;
+  string protobuf_compile_version = 15; // build dependency, not runtime library observation
+  // Schema hashes identify exact source text, not semantic compatibility; a
+  // mismatch may be additive or comment-only. No paths, UTC/build time, remote
+  // URLs, credentials or private network identity are included. Build from a
+  // stable source tree: metadata collection is not an atomic source snapshot.
+}
+
 message SystemStatusSnapshot {
   bool   success               = 1;
   string message               = 2;
@@ -779,6 +803,7 @@ message SystemStatusSnapshot {
   FpgaHealthAssessment fpga_health = 26;
   repeated RegulatorMonitor regulators = 27;
   repeated HostResourceObservation host_resources = 28;
+  ServerBuildInfo server_build = 29;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }
@@ -824,6 +849,7 @@ message ServerState {
   uint64 observed_monotonic_ns = 16;
   uint64 observed_host_unix_ns = 17;
   string configuration_scope = 18;
+  ServerBuildInfo server_build = 19;
 }
 
 // Allow-listed systemd observations. Active/exited + success is a successful
