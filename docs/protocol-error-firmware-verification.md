@@ -1,8 +1,9 @@
 # Protocol-error firmware: implemented source, not deployed
 
 2026-09-10. This closes the missing **firmware source-to-PS path**, not the whole
-workbook I281 requirement. The server reader, ABI 2.2 OS integration and real
-FPGA qualification still need work. No board, bias, network or service changes
+workbook I281 requirement. The [typed server/client reader](protocol-error-server-verification.md)
+is now source-tested and cross-built; ABI 2.2 OS integration and real FPGA
+qualification still need work. No board, bias, network or service changes
 were made during this step.
 
 ## Small commits
@@ -73,8 +74,9 @@ attempt was followed by its correct four-suite run.
 
 ## Still required
 
-1. Typed server/client count, reasons, quality, sequence, width and reset-lifetime
-   reporting; exact ABI 2.2 admission without probing old firmware.
+1. Native ARM execution and live qualification of the now-implemented typed
+   server/client history and exact ABI 2.2 admission. Software fixtures do not
+   prove new register behavior on hardware.
 2. ABI 2.2 OS report validation and compatible, qualified server/runtime/image
    pairing. Do not manually widen a profile to bypass admission.
 3. Supported-tool synthesis/routing, actual CDC checks, both variants/timing

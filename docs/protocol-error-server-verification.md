@@ -1,0 +1,110 @@
+# Parser-error history: server/client source qualified, not deployed
+
+2026-09-10. Small commits: `41aea4c` (reader/protobuf), `0962e7a`
+(runtime admission/bracketing), `3f636f4` (independent client/wire tests).
+The [firmware implementation](protocol-error-firmware-verification.md) still
+needs supported synthesis, routed CDC checks and live qualification.
+
+## What the operator gets
+
+`ReadSystemStatus.endpoint.protocol_errors` reports a **history**, not a
+current-health verdict. It counts RX-parser error episodes, not physical bit
+errors, all protocol errors or network errors. Multiple reasons can describe
+one episode. Zero is a valid measurement only when its optional field is present.
+
+| Admitted platform ABI | Native timestamp | Parser history |
+| --- | --- | --- |
+| 2.0 | Unavailable; no extension reads | Unavailable; no diagnostic reads |
+| 2.1 | Existing coherent snapshot | Unavailable; no diagnostic reads |
+| 2.2 | Same timestamp contract | New coherent PS snapshot |
+| Unknown ABI | Admission rejected | No speculative support |
+
+The 32-bit history saturates; separate flags report saturation, lost further
+episodes and receiver reset at capture. Five accumulated reasons cover async
+checksum/length, sync length/comma and unavailable control buffer. History
+survives parser recovery and clears on common platform reset. That reset epoch
+is **not observed**: neither zero nor a nonzero count establishes since-boot
+history or current health. The existing 15-check health assessment is unchanged.
+Optical register 0x76 and the unimplemented command decoder remain separate.
+
+## Collection and failure handling
+
+After exact image admission, the reader validates feature `0x50450100`, then
+reads sequence/request/sequence/status/count/detail/sequence. It requires one
+modulo-32-bit sequence increment, matching status and complete raw words.
+Only conflicting transactions are retried, at most three times. Timeout/busy
+returns unavailable; malformed words, changing metadata or failed reads return
+error. Raw evidence is retained, but failed observations have no usable count.
+The 100 ms host budget is checked after calls return; it cannot interrupt stuck
+MMIO. Firmware bounds its response only while the AXI clock/reset allow progress.
+
+Complete firmware identity and programming checks surround collection. The
+existing timing-context checks remain conservative; timestamp unavailability
+alone does not invalidate good parser history. The server's single hardware
+worker serializes requests; outside raw readers are not locked out. Matching
+IDs cannot detect an identical-image reload. No MMIO writes, history clears,
+network/bias changes or protection actions are introduced.
+
+The Python client independently checks raw/decoded agreement, optional-field
+presence, limits, order, scope, lifetime, freshness and outer context. Only
+qualified counts appear in its redacted report; the protobuf retains raw failures.
+
+## Verified scope
+
+Clean detached source: `3f636f4acf3f795e96d1e20e89936c6a861ac58a`;
+server tree: `afdcc5997d31d32232c23ba9bcd5a6d1dcf62353`.
+
+- **26 native C++ suites pass**, including both firmware modes, ABI admission,
+  no old-register probes, all low-byte status combinations, zero/saturation,
+  sequence wrap/conflicts, partial failures, timing and invalidated observations.
+- **119 Python tests pass** with each generated binding set: host Protobuf
+  3.21.12 and ARM-build Protobuf 30.1. No untracked waveform test was included.
+- **13 C++-to-Python wire cases pass** with each binding set. These use actual
+  collector serialization with scripted MMIO and synthetic outer context.
+- Server and all unit executables **cross-build for AArch64** with GCC 12.2.
+  These new ARM binaries have **not been executed on the board**.
+
+ARM server SHA-256:
+`22989ec267179f7d53e1547ab794380a4d0d0b6b96d90cd09bacad37f62754fa`.
+RUNPATH is `/usr/lib/daphne-server`; generated-message deprecation warnings
+remain. Evidence directory: `firmware-health.W1CUQ3E7/protocol-server.Mh4iBcOB`,
+including `qualification.json`, clean native logs, ARM build log and wire reports.
+Changed Markdown passes its checks. Repository-wide documentation lint still
+reports five pre-existing developer-path findings in unrelated files.
+
+## Reproduce the focused software checks
+
+From the OS repository root, with the [build dependencies](../daphne-server/README.md)
+and a Python environment compatible with the generated Protobuf:
+
+```bash
+daphne_build=build/protocol-native
+cmake -S daphne-server -B "$daphne_build" \
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON \
+  -DDAPHNE_BUILD_SERVER=OFF -DDAPHNE_BUILD_PROTOCOL_TESTS=ON \
+  -DDAPHNE_BUILD_PY_PROTO=ON -DDAPHNE_ENABLE_HARDWARE_TESTS=OFF
+cmake --build "$daphne_build" --parallel 4
+ctest --test-dir "$daphne_build" --output-on-failure
+PYTHONDONTWRITEBYTECODE=1 \
+PYTHONPATH="$daphne_build/srcs/protobuf:daphne-server/tests" \
+  python3 -m unittest test_protocol_errors test_native_timestamp test_fpga_health
+PYTHONDONTWRITEBYTECODE=1 python3 daphne-server/tests/check_protocol_error_wire.py \
+  --probe "$daphne_build/protocol_error_tests" \
+  --proto-dir "$daphne_build/srcs/protobuf"
+```
+
+Future live verification uses `scripts/verify_fpga_health.py` under
+`daphne-server`, with explicit `--expected-abi 0x20002`, the **actual** firmware
+build ID, selected mode, matching generated bindings and an approved tunnel.
+Its default remains exact ABI 2.0. `verify_server_v05.py` remains the separate
+ABI 2.0 regression tool; it has not been silently loosened for new firmware.
+
+## Still required
+
+Execute/qualify the new ARM candidate and complete ABI 2.2 OS staging plus
+runtime/image pairing. The image contract remains pinned to qualified server
+`3556811`, minors `0 1`; do not widen it merely to pass a build.
+Then qualify supported-tool firmware builds, routed paths, both modes/sources
+and live zero-bias readout/regression. The current Cooper probe still times out
+at the FNAL bridge; **no synthesis job was launched**. No board or service was
+changed in this software-only step. This does not close the entire workbook.

@@ -6,6 +6,11 @@ commits `a8adaec` and `ef2ffe9` collect it and assess progress. OS admission
 `7139e28` accepts known platform ABIs 2.0 and 2.1 but still requires the exact
 installed profile to match the loaded FPGA. Unknown minors are rejected.
 
+Follow-up [parser-history server source](protocol-error-server-verification.md)
+also admits exact ABI 2.2 while retaining this timestamp contract. That new
+candidate is cross-built, not yet executed/deployed; historical deployment
+results below are not ABI 2.2 qualification.
+
 **DAPHNE-015:** the `13bc725` deployment passed the live self-trigger ABI 2.0
 regression below. It is now superseded by the [host-resource server `3556811`](host-resource-verification.md),
 which also passes live ABI 2.0 regression. Firmware remains `3f17f1b`; native
