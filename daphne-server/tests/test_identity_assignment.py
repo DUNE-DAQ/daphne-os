@@ -13,6 +13,7 @@ import daphneV3_high_level_confs_pb2 as h
 import extract_oks_identity as extraction
 import prepare_identity_assignment as prepare
 import test_oks_identity as fixtures
+from verify_board_identity import check_status
 
 
 class IdentityAssignmentTests(unittest.TestCase):
@@ -105,6 +106,52 @@ class IdentityAssignmentTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             prepare.write_artifact(file, self.build())
         self.assertEqual(file.read_bytes(), before)
+
+    def status(self, details=True):
+        artifact = self.build()
+        status = h.BoardIdentityStatus(assignment_configured=True, assignment_artifact_sha256="a" * 64,
+                                       source_revision_sha256=artifact.assignments.source_revision_sha256,
+                                       binding_state=h.IDENTITY_BINDING_MATCH, message="Scope", details_included=details,
+                                       observed_monotonic_ns=200)
+        if details:
+            status.assignments.CopyFrom(artifact.assignments)
+            status.binding.CopyFrom(artifact.binding)
+            status.management.CopyFrom(h.ManagementNetworkObservation(
+                quality=h.MEASUREMENT_GOOD, present=True, interface_name="eth0", controller_node="ethernet@ff0b0000",
+                mac_address=artifact.binding.expected_mac_address, ipv4_cidrs=artifact.binding.expected_ipv4_cidrs,
+                interface_index=2, flags_raw=65, interface_up=True, running_flag=True,
+                acquisition_started_monotonic_ns=1, observed_monotonic_ns=100, observed_host_unix_ns=1))
+        return status, artifact
+
+    def test_client_checks_exact_assignment_and_presence(self):
+        status, artifact = self.status()
+        check_status(status, artifact, "a" * 64, h, True)
+        for mutate in (
+            lambda s: setattr(s.assignments.crate_id, "value", 7),
+            lambda s: setattr(s.assignments.timing_endpoint_address, "value", 0),
+            lambda s: s.management.ClearField("mac_address"),
+            lambda s: s.management.ClearField("interface_up"),
+            lambda s: setattr(s.management, "flags_raw", 0),
+            lambda s: setattr(s.management, "observed_monotonic_ns", 201),
+            lambda s: setattr(s, "binding_state", h.IDENTITY_BINDING_MISMATCH),
+            lambda s: setattr(s, "assignment_artifact_sha256", "b" * 64),
+        ):
+            wrong = h.BoardIdentityStatus()
+            wrong.CopyFrom(status)
+            mutate(wrong)
+            with self.assertRaises(RuntimeError):
+                check_status(wrong, artifact, "a" * 64, h, True)
+
+    def test_client_checks_default_redaction(self):
+        status, artifact = self.status(False)
+        check_status(status, artifact, "a" * 64, h, False)
+        status.message = artifact.binding.expected_mac_address
+        with self.assertRaises(RuntimeError):
+            check_status(status, artifact, "a" * 64, h, False)
+        status.message = "Scope"
+        status.assignments.CopyFrom(artifact.assignments)
+        with self.assertRaises(RuntimeError):
+            check_status(status, artifact, "a" * 64, h, False)
 
 
 if __name__ == "__main__":
