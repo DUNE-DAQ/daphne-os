@@ -108,5 +108,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("HostClock", true,
       "I086/I087/I090: local realtime/UTC and suspend-inclusive derived boot estimate, plus read-only kernel discipline state. "
       "Separate monotonic brackets and quality; no clock setting, NTP peer/offset, verified UTC or FPGA-time inference");
+  add("TimesyncService", true,
+      "Read-only pinned-owner timesync1 GetAll: selected peer (private opt-in), poll policy and historical NTP sample/offset/spike. "
+      "Monotonic age bounds require observed same-context packet progress. No service activation, clock setting or verified synchronization");
 }
 }

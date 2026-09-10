@@ -95,6 +95,11 @@ endif()
 
 # ---------------- Protobuf --------------
 if(DAPHNE_BUILD_SERVER OR DAPHNE_BUILD_PROTOCOL_TESTS)
+find_path(DAPHNE_SYSTEMD_INCLUDE_DIR systemd/sd-bus.h)
+find_library(DAPHNE_SYSTEMD_LIBRARY NAMES systemd libsystemd.so.0)
+if(NOT DAPHNE_SYSTEMD_INCLUDE_DIR OR NOT DAPHNE_SYSTEMD_LIBRARY)
+  message(FATAL_ERROR "libsystemd headers/library are required for read-only timesync service observations")
+endif()
 find_package(Protobuf REQUIRED)
 message(STATUS "Using protoc: ${Protobuf_PROTOC_EXECUTABLE}")
 include_directories(${Protobuf_INCLUDE_DIRS})
@@ -138,6 +143,8 @@ add_library(daphne_telemetry_protocol
   srcs/server_controller/service_status.cpp
   srcs/server_controller/host_resources.cpp
   srcs/server_controller/host_clock.cpp
+  srcs/server_controller/timesync.cpp
+  srcs/server_controller/timesync_linux.cpp
   srcs/server_controller/telemetry_protocol.cpp
   srcs/server_controller/timing_status.cpp
   srcs/server_controller/fpga_health.cpp
@@ -145,6 +152,8 @@ add_library(daphne_telemetry_protocol
   srcs/server_controller/readonly_mmio.cpp
 )
 target_include_directories(daphne_telemetry_protocol PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_include_directories(daphne_telemetry_protocol PUBLIC ${DAPHNE_SYSTEMD_INCLUDE_DIR})
+target_link_libraries(daphne_telemetry_protocol PUBLIC ${DAPHNE_SYSTEMD_LIBRARY})
 target_link_libraries(daphne_telemetry_protocol PUBLIC daphne_proto daphne_software_build daphne_gateware daphne_i2c_hw daphne_current_adc Threads::Threads)
 add_library(daphne_configuration
   srcs/server_controller/configuration_plan.cpp
@@ -246,6 +255,16 @@ if(BUILD_TESTING)
   set_tests_properties(host_clock_unit PROPERTIES LABELS unit)
   add_executable(host_clock_probe tests/host_clock_probe.cpp)
   target_link_libraries(host_clock_probe PRIVATE daphne_telemetry_protocol)
+  add_executable(timesync_tests tests/timesync_tests.cpp)
+  target_link_libraries(timesync_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME timesync_unit COMMAND timesync_tests)
+  set_tests_properties(timesync_unit PROPERTIES LABELS unit)
+  add_executable(timesync_probe tests/timesync_probe.cpp)
+  target_link_libraries(timesync_probe PRIVATE daphne_telemetry_protocol)
+  add_executable(timesync_bus_tests tests/timesync_bus_tests.cpp)
+  target_link_libraries(timesync_bus_tests PRIVATE daphne_telemetry_protocol Threads::Threads)
+  add_test(NAME timesync_bus_unit COMMAND timesync_bus_tests)
+  set_tests_properties(timesync_bus_unit PROPERTIES LABELS unit TIMEOUT 10)
   add_executable(carrier_temperature_tests tests/carrier_temperature_tests.cpp)
   target_link_libraries(carrier_temperature_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME carrier_temperature_unit COMMAND carrier_temperature_tests)

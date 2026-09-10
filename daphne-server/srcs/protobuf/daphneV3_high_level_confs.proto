@@ -186,6 +186,7 @@ message ReadSystemStatusRequest {
   bool   include_ps_values       = 5; // include generic PS-exposed values
   bool   include_identity_details = 6; // Explicit opt-in to private assignment/network values.
   bool   include_regulator_telemetry = 7; // Four onboard PJT004 regulators; targeted PEC reads only.
+  bool   include_time_source_details = 8; // Private selected NTP peer name/address; opt-in is not authorization.
 }
 
 message StatusValue {
@@ -785,7 +786,59 @@ message KernelClockObservation {
 message HostTimeStatus {
   HostClockObservation clock = 1;
   KernelClockObservation kernel = 2;
+  TimesyncObservation timesync = 3;
   // Separate sequential samples; neither establishes FPGA timing health.
+}
+
+message NtpSampleObservation {
+  MeasurementQuality quality = 1; // Valid decoded historical sample, NOT current UTC accuracy/freshness.
+  string detail = 2;
+  optional uint32 leap = 3;
+  optional uint32 version = 4;
+  optional uint32 mode = 5;
+  optional uint32 stratum = 6;
+  optional int32 precision_exponent = 7;
+  optional uint64 root_delay_us = 8;
+  optional uint64 root_dispersion_us = 9;
+  optional uint64 origin_unix_us = 10;
+  optional uint64 receive_unix_us = 11;
+  optional uint64 transmit_unix_us = 12;
+  optional uint64 destination_unix_us = 13; // Pre-adjustment host realtime, NOT monotonic receipt time.
+  optional bool ignored_spike = 14; // False does not prove clock adjustment succeeded.
+  optional uint64 jitter_us = 15;
+  optional int64 offset_ns = 16; // ((T2-T1)+(T3-T4))/2, positive means peer ahead.
+  optional uint64 round_trip_delay_ns = 17;
+  MeasurementQuality age_bound_quality = 18;
+  optional uint64 not_before_monotonic_ns = 19; // Derived only after observing packet-count progress in same context.
+  optional uint64 maximum_age_ns = 20; // Parent observed time minus not_before; conservative, not exact age.
+  // No reference ID: it can encode another private peer address. No assumed
+  // relation between selected peer and historical sample after server rotation.
+}
+message TimesyncObservation {
+  MeasurementQuality quality = 1;
+  string source = 2;
+  string detail = 3;
+  uint64 acquisition_started_monotonic_ns = 4;
+  uint64 observed_monotonic_ns = 5;
+  string bus_id = 6;
+  string unique_owner = 7;
+  bool owner_bracket_verified = 8;
+  bool details_included = 9;
+  optional bool selected_name_present = 10;
+  optional bool selected_address_present = 11;
+  optional string selected_server_name = 12; // Private; omitted by default, never inferred to be sample origin.
+  optional string selected_server_address = 13; // Private; no IPv6 scope ID supplied by this API.
+  optional uint64 poll_interval_us = 14;
+  optional uint64 poll_minimum_us = 15;
+  optional uint64 poll_maximum_us = 16;
+  optional uint64 root_distance_maximum_us = 17;
+  optional uint64 processed_packet_count = 18; // Process/server-context history, not a persistent counter.
+  optional int64 frequency_scaled_ppm = 19; // Last daemon value, scaled by 65536, not independently measured.
+  NtpSampleObservation last_sample = 20;
+  // One timesync1 GetAll reply, pinned to a bracketed unique owner on one local
+  // bus connection. Query success does not establish unit health or NTP sync.
+  // Initial/history-only sample age is unavailable; never use corrected wall
+  // time minus pre-adjustment destination time as a monotonic sample age.
 }
 
 // Immutable compiled-in server metadata. Parent reply supplies process identity

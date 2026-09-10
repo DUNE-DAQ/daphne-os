@@ -43,6 +43,7 @@
 #include "server_controller/service_status.hpp"
 #include "server_controller/host_resources.hpp"
 #include "server_controller/host_clock.hpp"
+#include "server_controller/timesync.hpp"
 #include "server_controller/configuration_fingerprint.hpp"
 #include "server_controller/current_monitor.hpp"
 #include "server_controller/sfp_monitor.hpp"
@@ -2304,6 +2305,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       add_host_status(resp, d.mezzanine_access_enabled);
       add_host_resources(resp);
       add_host_clock(resp);
+      add_timesync_status(resp, req.include_time_source_details());
       if (req.include_sfp_diagnostics() && fpga_ok) {
         std::lock_guard<std::mutex> lock(d.i2c_2_mutex);
         add_sfp_status(resp, temperature_policy);
