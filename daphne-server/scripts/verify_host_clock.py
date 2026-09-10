@@ -13,6 +13,7 @@ import sys
 import time
 
 from host_clock import check_host_time, require
+from timesync import check_timesync
 from software_build import check_build
 from verify_server_bookkeeping import check_state
 
@@ -23,6 +24,7 @@ def main():
     parser.add_argument("--proto-dir", type=Path, required=True)
     parser.add_argument("--server-source", type=Path, required=True)
     parser.add_argument("--expected-server-commit", required=True, help="Full expected clean Git revision")
+    parser.add_argument("--require-timesync-service", action="store_true", help="Require a successful timesync1 observation; still does not require or prove UTC synchronization")
     args = parser.parse_args()
     sys.path.insert(0, str(args.proto_dir.resolve()))
     import zmq
@@ -67,6 +69,8 @@ def main():
             require(state.heartbeat_sequence > prior.heartbeat_sequence and
                     state.observed_monotonic_ns > prior.observed_monotonic_ns)
             report = check_host_time(status, high, now_monotonic_ns=state.observed_monotonic_ns)
+            report["timesync"] = check_timesync(status, high, now_monotonic_ns=state.observed_monotonic_ns,
+                                                require_available=args.require_timesync_service)
             require(status.host_time.clock.acquisition_started_monotonic_ns > prior.observed_monotonic_ns)
             reports.append(report)
             prior = state
