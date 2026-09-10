@@ -53,7 +53,7 @@ def read_record(path, sealed=False):
     for name in ("schema_version", "magic", "abi", "variant", "build_id"):
         require(type(record[name]) is int, "Identity word is not an integer")
     require(record["schema_version"] == 1 and record["magic"] == 0x44415048 and
-            record["abi"] in (0x20000, 0x20001) and record["variant"] in (1, 2), "Unsupported identity contract")
+            record["abi"] in (0x20000, 0x20001, 0x20002) and record["variant"] in (1, 2), "Unsupported identity contract")
     sha = record["build_sha"]
     require(type(sha) is str and re.fullmatch(r"[0-9a-f]{7}", sha) and int(sha, 16) != 0 and
             record["build_id"] == int(sha, 16), "Build stamp mismatch")
@@ -88,23 +88,29 @@ def write_record(path, record):
         stream.write("\n")
 
 
-def check_report(path):
+def check_report(path, abi=0x20001):
+    require(abi in (0x20001, 0x20002), "Unsupported diagnostic timing ABI")
+    widths = {"local_snapshot": 65, "external_snapshot": 65}
+    header = "Native timestamp payload timing: per-bit routed checks"
+    if abi == 0x20002:
+        widths["protocol_snapshot"] = 40
+        header = "Native diagnostic payload timing: per-bit routed checks"
     lines = read_small(path, 256 * 1024).decode("utf-8").splitlines()
-    require(len(lines) == 131 and lines[0] == "Native timestamp payload timing: per-bit routed checks",
+    require(len(lines) == sum(widths.values()) + 1 and lines[0] == header,
             "Missing/incomplete timestamp routed report")
     seen, parents = set(), set()
     for line in lines[1:]:
-        match = re.fullmatch(r"(.+)/(local_snapshot|external_snapshot)/destination_data_reg\[([0-9]+)\] requirement_ns=(\S+) slack_ns=(\S+)", line)
+        match = re.fullmatch(r"(.+)/(local_snapshot|external_snapshot|protocol_snapshot)/destination_data_reg\[([0-9]+)\] requirement_ns=(\S+) slack_ns=(\S+)", line)
         require(match is not None, "Unexpected timestamp timing row")
         parent, mailbox, bit, requirement, slack = match.groups()
         key = (mailbox, int(bit))
-        require(key not in seen and 0 <= int(bit) < 65, "Duplicate/invalid timestamp payload bit")
+        require(mailbox in widths and key not in seen and 0 <= int(bit) < widths[mailbox], "Duplicate/invalid timestamp payload bit")
         requirement, slack = float(requirement), float(slack)
         require(math.isfinite(requirement) and requirement > 0 and math.isfinite(slack) and slack >= 0,
                 "Non-finite/failing timestamp timing")
         seen.add(key)
         parents.add(parent)
-    require(len(seen) == 130 and len(parents) == 1, "Unexpected mailbox population")
+    require(len(seen) == sum(widths.values()) and len(parents) == 1, "Unexpected mailbox population")
     return digest(path)
 
 
@@ -120,7 +126,7 @@ def capture(source, sha, version, output, build_word):
     record = dict(schema_version=1, build_sha=sha, build_id=int(sha, 16), vivado_version=version,
                   **source_identity(source))
     # Validate without creating a possibly misleading record on failure.
-    require(record["magic"] == 0x44415048 and record["abi"] in (0x20000, 0x20001) and
+    require(record["magic"] == 0x44415048 and record["abi"] in (0x20000, 0x20001, 0x20002) and
             record["variant"] in (1, 2) and record["build_id"] != 0 and version == "2026.1", "Unsupported build identity/tool")
     write_record(output, record)
 
@@ -132,7 +138,7 @@ def seal(record_path, source, binary, xsa, report, output):
     require(binary.name == f"{prefix}_{record['build_sha']}.bin" and xsa.name == f"{prefix}_{record['build_sha']}.xsa",
             "Export names disagree with captured build identity")
     record.update(binary_sha256=digest(binary), xsa_sha256=digest(xsa),
-                  snapshot_report_sha256=check_report(report) if record["abi"] == 0x20001 else None)
+                  snapshot_report_sha256=check_report(report, record["abi"]) if record["abi"] != 0x20000 else None)
     write_record(output, record)
 
 
@@ -142,8 +148,8 @@ def verify(record_path, binary, report, sha, variant, xsa=None):
     require(record["binary_sha256"] == digest(binary), "Binary does not match sealed identity")
     if xsa is not None:
         require(record["xsa_sha256"] == digest(xsa), "XSA does not match sealed identity")
-    if record["abi"] == 0x20001:
-        require(record["snapshot_report_sha256"] == check_report(report), "Timestamp report does not match sealed identity")
+    if record["abi"] != 0x20000:
+        require(record["snapshot_report_sha256"] == check_report(report, record["abi"]), "Timestamp report does not match sealed identity")
     return record["abi"] & 0xffff
 
 
