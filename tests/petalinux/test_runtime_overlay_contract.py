@@ -153,7 +153,7 @@ class RuntimeOverlayContractTests(unittest.TestCase):
 
     def test_current_release_contract_accepts_all_nine_overlay_combinations(self):
         self.assertEqual(self.values["DAPHNE_SERVER_REQUIRED_GIT_COMMIT"],
-                         "eecff616ea6841732e9422c7af6afaa2b06c4ce9")
+                         "702155b8068823118fd7dbecd2f4a982ec031785")
         self.assertEqual(self.values["DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS"], "0 1 2")
         for left in ("0", "1", "2"):
             for right in ("0", "1", "2"):
