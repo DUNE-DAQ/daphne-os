@@ -283,6 +283,13 @@ message SFPMonitor {
   TemperatureAlarm temperature_alarm = 51; // Host observation-only policy, not module factory flags.
   uint64 diagnostics_observed_monotonic_ns = 52; // Host receipt of monitored values, before optional flag confirmation.
   optional uint32 previous_mux_route = 53;
+  optional uint32 vendor_oui = 54; // 24 bits; all-zero unspecified OUI remains absent.
+  optional uint32 nominal_signaling_rate_mbd = 55; // SFF-8472 line signaling rate, NOT Ethernet payload Mbps.
+  optional uint32 wavelength_nm = 56; // Optical variants only; copper compliance bytes are not wavelength.
+  optional bool dom_supported = 57; // Module advertisement, distinct from collector support/measurement quality.
+  optional bool identity_eeprom_readable = 58; // Complete A0 0..95 read, not proof of valid identity/checksum.
+  optional bool diagnostic_eeprom_readable = 59; // Complete requested static+monitor A2 reads; absent if not attempted.
+  optional uint32 rate_select_raw = 60; // A2 byte 110 bits 5:3 only; not verified physical pin wiring/implementation.
 }
 
 message FanStatus {

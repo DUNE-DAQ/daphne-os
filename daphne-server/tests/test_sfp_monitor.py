@@ -22,7 +22,8 @@ def good_port(channel=0):
                      diagnostic_type=0x68, enhanced_options=0xf0, standard_revision=0x0c,
                      calibration=h.SFP_CALIBRATION_INTERNAL, data_ready=True, tx_disabled=False,
                      loss_of_signal=False, tx_fault=False, status_a2_0x6e=0, status_a2_0x6f=0,
-                     alarm_flags=0, warning_flags=0, flags_observed_monotonic_ns=3)
+                     alarm_flags=0, warning_flags=0, flags_observed_monotonic_ns=3,
+                     identity_eeprom_readable=True, diagnostic_eeprom_readable=True, dom_supported=True, rate_select_raw=0)
     p.temperature_alarm.state = h.TEMPERATURE_ALARM_GOOD
     p.temperature_alarm.warning_c = 85; p.temperature_alarm.high_c = 95; p.temperature_alarm.critical_c = 105
     p.temperature_alarm.maximum_age_ms = 5000; p.temperature_alarm.evaluated_monotonic_ns = 4
@@ -49,6 +50,18 @@ class SfpTests(unittest.TestCase):
             p = good_port(); p.ClearField(field)
             with self.assertRaises(RuntimeError):
                 check_port(p, h)
+
+    def test_inventory_units_and_copper_not_wavelength(self):
+        p = good_port(); a0 = bytearray(p.a0_raw)
+        a0[37:40] = b"\x12\x34\x56"; a0[12] = 255; a0[66] = 200; a0[60:62] = b"\x03\x52"
+        a0[63], a0[95] = sum(a0[:63]) % 256, sum(a0[64:95]) % 256
+        p.a0_raw = bytes(a0); p.vendor_oui = 0x123456; p.nominal_signaling_rate_mbd = 50000; p.wavelength_nm = 850
+        check_port(p, h)
+        p.nominal_signaling_rate_mbd = 25500
+        with self.assertRaises(RuntimeError): check_port(p, h)
+        p.nominal_signaling_rate_mbd = 50000; a0[8] = 4; a0[63] = sum(a0[:63]) % 256; p.a0_raw = bytes(a0)
+        with self.assertRaises(RuntimeError): check_port(p, h)
+        p.ClearField("wavelength_nm"); check_port(p, h)
 
     def test_bad_checksum_route_restoration_and_time(self):
         for change in (

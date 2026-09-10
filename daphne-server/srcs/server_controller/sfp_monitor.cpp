@@ -88,6 +88,8 @@ void invalidate(daphne::SFPMonitor& r, const std::string& error, bool identity) 
   if (identity) {
     r.set_identity_quality(daphne::MEASUREMENT_ERROR);
     r.clear_present(); r.clear_vendor(); r.clear_part(); r.clear_revision(); r.clear_serial(); r.clear_date_code();
+    r.clear_vendor_oui(); r.clear_nominal_signaling_rate_mbd(); r.clear_wavelength_nm(); r.clear_dom_supported();
+    r.clear_rate_select_raw();
   }
 }
 double ieee_float(const Bytes& b, size_t p) {
@@ -127,6 +129,12 @@ void identity(daphne::SFPMonitor& r, const Bytes& a0) {
   r.set_revision(ascii(a0, 56, 4)); r.set_serial(ascii(a0, 68, 16));
   r.set_date_code(ascii(a0, 84, 8));
   r.set_diagnostic_type(a0[92]); r.set_enhanced_options(a0[93]); r.set_standard_revision(a0[94]);
+  const unsigned oui = (unsigned(a0[37]) << 16) | (unsigned(a0[38]) << 8) | a0[39];
+  if (oui) r.set_vendor_oui(oui);
+  const unsigned rate = a0[12] == 255 ? a0[66] * 250u : a0[12] * 100u;
+  if (rate) r.set_nominal_signaling_rate_mbd(rate);
+  if (!(a0[8] & 0x0c) && word(a0, 60)) r.set_wavelength_nm(word(a0, 60));
+  r.set_dom_supported(bool(a0[92] & 0x40));
   r.set_present(true);
   r.set_identity_quality(daphne::MEASUREMENT_GOOD);
 }
@@ -142,6 +150,7 @@ void diagnostics(daphne::SFPMonitor& r, const Bytes& a0, const SfpIO& io) {
   require(((type & 0x30) == 0x10) || ((type & 0x30) == 0x20), "SFP calibration mode missing or contradictory");
   r.set_calibration(external ? daphne::SFP_CALIBRATION_EXTERNAL : daphne::SFP_CALIBRATION_INTERNAL);
   r.set_rx_power_is_oma(!(type & 8));
+  r.set_diagnostic_eeprom_readable(false);
   const auto constants = read(io, 0x51, 0, 96);
   r.set_a2_static_raw(raw(constants));
   r.set_diagnostic_checksum_valid(checksum(constants, 0, 95));
@@ -149,6 +158,7 @@ void diagnostics(daphne::SFPMonitor& r, const Bytes& a0, const SfpIO& io) {
   const auto before = read(io, 0x51, 110, 1)[0];
   const auto live = read(io, 0x51, 96, 16);
   const auto after = read(io, 0x51, 110, 1)[0];
+  r.set_diagnostic_eeprom_readable(true);
   r.set_a2_monitor_raw(raw(live));
   r.set_status_a2_0x6e(live[14]); r.set_status_a2_0x6f(live[15]);
   r.set_data_ready(!((before | live[14] | after) & 1));
@@ -158,6 +168,7 @@ void diagnostics(daphne::SFPMonitor& r, const Bytes& a0, const SfpIO& io) {
   }
   require(before == live[14] && after == live[14], "SFP status changed while diagnostics were read");
   r.set_diagnostics_observed_monotonic_ns(io.now());
+  r.set_rate_select_raw((live[14] >> 3) & 7);
   if (options & 0x40) r.set_tx_disabled(bool(live[14] & 0xc0)); // Hard OR soft disable.
   if (options & 0x20) r.set_tx_fault(bool(live[14] & 4));
   if (options & 0x10) r.set_loss_of_signal(bool(live[14] & 2));
@@ -259,7 +270,9 @@ daphne::SFPMonitor collect_sfp_port(unsigned channel, const SfpIO& io, const std
     r.set_mux_restored(false);
     try {
       route.select(channel);
+      r.set_identity_eeprom_readable(false);
       const auto a0 = read(io, 0x50, 0, 96);
+      r.set_identity_eeprom_readable(true);
       identity(r, a0);
       try { diagnostics(r, a0, io); }
       catch (const std::exception& e) { invalidate(r, e.what(), false); }

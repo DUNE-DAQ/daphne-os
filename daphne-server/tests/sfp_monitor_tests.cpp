@@ -118,6 +118,15 @@ int main() {
     Fake f; f.a0[bad] ^= 1; auto r = f.run(); check(!r.has_present() && f.a2_reads == 0 && r.mux_restored());
   }
   { Fake f; f.a0[0] = 0x0d; f.sums(); auto r = f.run(); check(!r.has_present() && f.a2_reads == 0); }
+  { Fake f; f.a0[37] = 0x12; f.a0[38] = 0x34; f.a0[39] = 0x56; f.a0[12] = 103; put(f.a0, 60, 850);
+    f.sums(); auto r = f.run(); good(r);
+    check(r.vendor_oui() == 0x123456 && r.nominal_signaling_rate_mbd() == 10300 && r.wavelength_nm() == 850);
+    check(r.dom_supported() && r.identity_eeprom_readable() && r.diagnostic_eeprom_readable());
+    f.a0[12] = 255; f.a0[66] = 200; f.a0[8] = 4; f.sums(); r = f.run();
+    check(r.nominal_signaling_rate_mbd() == 50000 && !r.has_wavelength_nm());
+    f.a0[12] = 0; std::fill_n(f.a0.begin()+37, 3, 0); f.sums(); r = f.run();
+    check(!r.has_nominal_signaling_rate_mbd() && !r.has_vendor_oui());
+  }
   { Fake f; std::fill_n(f.a0.begin() + 56, 4, 0); f.sums(); auto r = f.run(); good(r); check(r.revision().empty()); }
   { Fake f; f.a0[21] = 0; f.sums(); auto r = f.run(); check(!r.has_present()); }
   { Fake f; f.a2[95] ^= 1; auto r = f.run(); check(r.present() && !r.diagnostic_checksum_valid() && !r.has_temperature_c()); }

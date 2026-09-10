@@ -58,6 +58,14 @@ def check_port(p, h):
     require(sum(a0[:63]) % 256 == a0[63] and sum(a0[64:95]) % 256 == a0[95], "Identity checksum mismatch")
     require(p.base_checksum_valid and p.extended_checksum_valid
             and p.diagnostic_type == a0[92] and p.enhanced_options == a0[93], "Wrong identity metadata")
+    require(p.HasField("identity_eeprom_readable") and p.identity_eeprom_readable
+            and p.HasField("dom_supported") and p.dom_supported == bool(a0[92] & 0x40), "Missing readability/DOM advertisement")
+    oui = int.from_bytes(a0[37:40], "big")
+    rate = a0[66] * 250 if a0[12] == 255 else a0[12] * 100
+    wavelength = int.from_bytes(a0[60:62], "big") if not a0[8] & 0x0c else 0
+    for field, expected in (("vendor_oui", oui), ("nominal_signaling_rate_mbd", rate), ("wavelength_nm", wavelength)):
+        require(p.HasField(field) == bool(expected) and (not expected or getattr(p, field) == expected),
+                "Wrong/missing or fabricated SFP inventory field: " + field)
     if not a0[92] & 0x40 or a0[92] & 0x84:
         require(p.diagnostic_quality == h.MEASUREMENT_UNAVAILABLE and not p.a2_static_raw
                 and all(not p.HasField(f) for f in FIELDS), "Unsupported diagnostics look measured")
@@ -68,6 +76,9 @@ def check_port(p, h):
             and p.diagnostic_checksum_valid, "Diagnostic checksum mismatch")
     require(len(live) == 16 and not live[14] & 1 and p.HasField("data_ready") and p.data_ready,
             "Diagnostics are not ready")
+    require(p.HasField("diagnostic_eeprom_readable") and p.diagnostic_eeprom_readable
+            and p.HasField("rate_select_raw") and p.rate_select_raw == ((live[14] >> 3) & 7),
+            "Missing DMI readability or raw rate-select bits")
     require(p.acquisition_started_monotonic_ns <= p.diagnostics_observed_monotonic_ns <= p.observed_monotonic_ns,
             "Wrong diagnostic acquisition time")
     require(p.status_a2_0x6e == live[14] and p.status_a2_0x6f == live[15], "Wrong raw status")
