@@ -130,6 +130,7 @@ target_include_directories(daphne_software_build PUBLIC "${CMAKE_CURRENT_SOURCE_
 target_link_libraries(daphne_software_build PUBLIC daphne_proto)
 
 add_library(daphne_telemetry_protocol
+  srcs/server_controller/hdmezz_protocol.cpp
   srcs/server_controller/afe_global.cpp
   srcs/server_controller/protocol_errors.cpp
   srcs/server_controller/native_timestamp.cpp
@@ -176,6 +177,10 @@ target_include_directories(daphne_fpga_status PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(daphne_fpga_status PUBLIC daphne_telemetry_protocol daphne_configuration)
 if(BUILD_TESTING)
   add_executable(software_build_tests tests/software_build_tests.cpp)
+  add_executable(hdmezz_protocol_tests tests/hdmezz_protocol_tests.cpp)
+  target_link_libraries(hdmezz_protocol_tests PRIVATE daphne_telemetry_protocol daphne_i2c_hw)
+  add_test(NAME hdmezz_protocol_unit COMMAND hdmezz_protocol_tests)
+  set_tests_properties(hdmezz_protocol_unit PROPERTIES LABELS unit)
   add_executable(host_software_tests tests/host_software_tests.cpp)
   target_link_libraries(host_software_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME host_software_unit COMMAND host_software_tests)

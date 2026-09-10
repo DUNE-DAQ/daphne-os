@@ -421,6 +421,14 @@ message cmd_readHDMezzBlockConfig {
   uint32 afeBlock   = 2;
 }
 
+enum HDMezzReadbackQuality {
+  HDMEZZ_READBACK_UNSPECIFIED = 0;
+  HDMEZZ_READBACK_GOOD = 1;
+  HDMEZZ_READBACK_UNAVAILABLE = 2;
+  HDMEZZ_READBACK_ERROR = 3;
+  HDMEZZ_READBACK_INVALID = 4;
+}
+
 message cmd_readHDMezzBlockConfig_response {
   bool   success                  = 1;
   string message                  = 2;
@@ -435,8 +443,20 @@ message cmd_readHDMezzBlockConfig_response {
   float max_power_3V3             = 11;
   float current_lsb_5V            = 12;
   float current_lsb_3V3           = 13;
+  // Actual sequential register-0x05 readback, only valid with GOOD quality.
+  // Before this extension these fields incorrectly contained cached targets.
   int32 shunt_cal_5V              = 14;
   int32 shunt_cal_3V3             = 15;
+  bool block_enabled = 16; // Software access/population selection, not physical presence.
+  bool driver_configured = 17; // Last programming result; not fresh protection readback.
+  bool calibration_matches_requested = 18; // Interpret only with GOOD + settings available.
+  int32 requested_shunt_cal_5V = 19;
+  int32 requested_shunt_cal_3V3 = 20;
+  HDMezzReadbackQuality calibration_readback_quality = 21;
+  uint64 acquisition_started_monotonic_ns = 22;
+  uint64 observed_monotonic_ns = 23; // Zero without a complete qualified pair; not UTC.
+  // Fields 4..13 and 19..20 are cached requested/derived settings, not metrology.
+  bool requested_settings_available = 24;
 }
 
 message cmd_setHDMezzPowerStates {

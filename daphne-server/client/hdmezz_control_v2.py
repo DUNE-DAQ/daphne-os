@@ -27,6 +27,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from srcs.protobuf import daphneV3_high_level_confs_pb2 as pb_high
 from srcs.protobuf import daphneV3_low_level_confs_pb2 as pb_low
+from scripts.hdmezz_configuration import check_configuration_readback
 
 
 DEFAULT_R_SHUNT_5V = 36e-3
@@ -157,6 +158,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def print_config_response(resp) -> None:
     print(f"success={resp.success} afe={resp.afeBlock} message='{resp.message}'")
+    print("Configuration fields are requested/derived software settings, not measured hardware state.")
     print(f"r_shunt_5V={resp.r_shunt_5V} ohm")
     print(f"r_shunt_CE={resp.r_shunt_3V3} ohm")
     print(f"max_current_5V_scale={resp.max_current_5V_scale} A")
@@ -168,8 +170,20 @@ def print_config_response(resp) -> None:
         print(f"max_power_CE={resp.max_power_3V3} W")
         print(f"current_lsb_5V={resp.current_lsb_5V} A/LSB")
         print(f"current_lsb_CE={resp.current_lsb_3V3} A/LSB")
-        print(f"shunt_cal_5V={resp.shunt_cal_5V}")
-        print(f"shunt_cal_CE={resp.shunt_cal_3V3}")
+        try:
+            report = check_configuration_readback(resp, pb_low)
+        except ValueError as error:
+            print(f"Calibration readback rejected: {error}")
+            return
+        print(f"calibration_readback_quality={report['quality']}")
+        if report.get("requested_calibration_5v_ce") is not None:
+            print(f"requested_shunt_cal_5V_CE={report['requested_calibration_5v_ce']}")
+        if report["available"]:
+            print(f"actual_shunt_cal_5V_CE={report['actual_calibration_5v_ce']}")
+            print(f"calibration_matches_requested={report['calibration_matches_requested']}")
+            print(f"calibration_observed_monotonic_ns={report['observed_monotonic_ns']}")
+        else:
+            print("Actual calibration readback unavailable; no zero or cached code substituted.")
 
 
 def print_status_response(resp) -> None:
