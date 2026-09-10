@@ -2,8 +2,8 @@
 # Update this only with a reviewed daphne-server commit that enforces the
 # declared identity ABI and supports both --gateware-mode variants.
 # This is a DUNE-DAQ/daphne-os commit, with source under daphne-server/;
-# it is not an ecristal/daphneZMQ revision. See docs/native-timestamp-verification.md.
-DAPHNE_SERVER_REQUIRED_GIT_COMMIT = "13bc7251b6a8dceedf4db3a8d6f91c4f4782c5e7"
+# it is not an ecristal/daphneZMQ revision. See docs/host-resource-verification.md.
+DAPHNE_SERVER_REQUIRED_GIT_COMMIT = "3556811fbe5bf01b7c66c862a8a6e1821a4f6246"
 DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MAJOR = "2"
 # Explicit supported minors of the pinned server, not of the packaging tools.
 # Native ARM software qualification and live self-trigger ABI 2.0 regression
