@@ -1,7 +1,8 @@
 # Kernel and OS release observations
 
 Collector `710e336` adds `SystemStatusSnapshot.host_software`, field **31**.
-This is a source-tested candidate, **not yet installed**. DAPHNE-015 still runs
+Candidate `75972de` now passes clean host and native ARM qualification, but is
+**not yet installed**. DAPHNE-015 still runs
 server `702155b`; its runtime/image pin and ONL handoff remain unchanged.
 
 ## What is covered
@@ -46,12 +47,49 @@ No network, clock, boot, EEPROM, power, I2C, SPI or FPGA changes are performed.
 
 ## Verification and commands
 
-Initial worktree build: **32 host C++ suites** and the full AArch64 server build
-pass. Twelve new Python tests pass, including the actual CLI against a local
-synthetic server. Tests cover precedence, no merging, missing/invalid fields,
+Clean source `75972de44150fb164886522ea79592a2cc638a1e`, server subtree
+`0f19aab5c8d66ca779f8cd4e1048193127e60818`: **32 host C++ suites**, the full
+AArch64 server build, and **197 Python tests with each independently generated
+binding set** pass. The twelve new Python tests include the actual CLI against
+a local synthetic server. Tests cover precedence, no merging, missing/invalid fields,
 UTF-8/escaping, size limits, clock failures, protobuf presence, stale samples,
 restart/correlation/schema rejection, and suppression of unrelated private
 response data. These are software checks, not deployed RPC qualification.
+
+All **32 exact clean-build ARM suite binaries** also pass on DAPHNE-015. The
+candidate loader/help and two compiled build-metadata samples match the source,
+tree and both schema hashes. Two actual `host_software_probe` reads report:
+
+- Kernel `6.18.10-xilinx-g4f7afe14f724`.
+- OS `petalinux`, version `2026.1-release-s06060014`, with its PetaLinux display name.
+- `BUILD_ID`, `IMAGE_ID` and `IMAGE_VERSION`: UNAVAILABLE, not substituted.
+
+Both workstation binding sets independently decode/audit the native proof and
+produce identical reports. Inherited read-only clock/timesync probes pass too;
+the board remains unsynchronized, with no processed NTP samples.
+
+Before/after native guards match service PIDs/invocations, boot, exact installed
+server/libraries, protected network/SSH/identity files, release file and time
+configuration. A final FPGA/generator/current-selector read-only guard passes.
+No server restart, package installation, hardware configuration or clock update.
+
+Evidence: `host-software.MSil6c4w/native-qualification.json`, its two binding
+audits, clean build/test logs and `post-native-board-guard.json`. Native staging
+is `/tmp/daphne-host-software.XXRg0hm1` on the board, not an ONL runtime bundle.
+
+| Exact artifact | SHA-256 |
+| --- | --- |
+| Candidate server | `f557d4e1da72f391f8ec4a423787895ff25a80baa56966c64894059c3c58823c` |
+| Host-software probe | `a83884b7d3b802c390599778271efddf2c0e6ee0059dadbd73f624eacb24dd06` |
+| Native proof | `006ac4dfed2b8386c5b55a41f6238643e07316453863cfa0c449fdc6d3406339` |
+| Test-only archive | `6ea860d9cfb6e11f17354940f6e09e3fced27c0bf1b29b58cee42c5723f26ec6` |
+
+The archive contains 40 regular files: software tests, explicit metadata probes,
+candidate/help and qualification helpers. It is not a deploy image or complete
+runtime. A copied guard UUID typo was caught locally before transfer; the
+superseded local archive is retained as `native-tests.pre-guard-fix.tgz` and was
+not sent to the board. The corrected guard retains the exact known boot identity;
+no qualification check was relaxed.
 
 The explicit `host_software_probe` reads only local kernel/release metadata;
 it is not registered as an automatic hardware test. With a matching ARM build:
@@ -78,6 +116,6 @@ It requires valid kernel/OS identification, but permits absent optional image
 labels. It prints only selected metadata; no private identity/time-source
 opt-ins. Exit zero means reporting verified, not boot health or rootfs integrity.
 
-Remaining: clean-source/native ARM checks, guarded live RPC/full regression,
-runtime assembly/pin/ONL/wiki handoff. Full-stream, new firmware and full-image
+Remaining: guarded deployment/live RPC/full regression, runtime assembly/pin/
+ONL/wiki handoff. Full-stream, new firmware and full-image
 qualification remain distinct; the broader 251-row semantic audit is not closed.

@@ -61,8 +61,10 @@ preserved history. Relevant prior work:
 
 ## Corrections
 
-Candidate `710e336` adds [typed kernel/OS release observations](host-software-verification.md)
-for I091/I092 and partial I093 metadata. It is not deployed; current runtime and
+Candidate `75972de` adds [typed kernel/OS release observations](host-software-verification.md)
+for I091/I092 and partial I093 metadata. Clean 32 host/32 native ARM suites and
+197 Python tests per binding pass, including actual ARM metadata reads.
+It is not deployed; current runtime and
 handoff remain `702155b`. No rootfs integrity or A/B boot-health claim is added.
 
 | Workbook issue / path | Implemented behavior | Remaining qualification |
