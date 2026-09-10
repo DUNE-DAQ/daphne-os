@@ -25,8 +25,8 @@
   },
   "global_limits": [
     "Human source/evidence audit, not consortium approval. The checker validates completeness/provenance/references, not semantic correctness.",
-    "Installed server 4e74f10 is native/live-RPC qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0; runtime/native loader and image pin pass. Refreshed ONL/wiki handoff pending. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
-    "AFE-reset health: clean 33 host/33 actual ARM suites, 208 Python tests per binding, two independently audited native probes and deployed full RPC/zero-BIAS regression pass. Health has 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. No overall healthy-board or physical reset-stimulation claim.",
+    "Installed server 4e74f10 is native/live-RPC qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0; runtime/native loader, image pin, 35-file ONL handoff and five exported clients pass. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
+    "AFE-reset health: clean 33 host/33 actual ARM suites, 208 Python tests per binding, two independently audited native probes and deployed full RPC/zero-BIAS regression pass. Health has 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. Normal Configure reset pulses are retained; no held-reset fault injection, pin measurement or overall healthy-board claim.",
     "Hardware/missing-assignment conditions remain open even on implemented rows; inspect evidence-group limits and per-row remaining work.",
     "No mezzanines are fitted. No new firmware, fan/bias/power writes, EEPROM changes, network/time changes or configuration mutations were performed for this audit.",
     "Crate/slot/detector, timing assignment and Hermes identity requirements also exist outside the Server Platform sheet; this sheet is not the complete user objective.",
@@ -334,7 +334,7 @@
         "daphne-server/tests/fpga_status_tests.cpp",
         "daphne-server/tests/test_afe_global.py"
       ],
-      "evidence_scope": "4e74f10 clean/native and deployed ABI2.0 RPC/full regression/runtime/pin; 33 suites and 208 Python tests per binding; refreshed ONL handoff pending",
+      "evidence_scope": "4e74f10 clean/native and deployed ABI2.0 RPC/full regression/runtime/pin/ONL; 33 suites and 208 Python tests per binding; five exported ONL clients pass",
       "limit": "SC owns requested BiasEnable state; observation is FPGA register readback, not BIASCTRL DAC cache, physical power/bias voltage or busy history. Active transitions and full-stream/new-firmware qualification remain pending. No write-policy change."
     },
     "bias_loop": {

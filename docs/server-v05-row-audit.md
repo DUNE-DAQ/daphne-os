@@ -9,7 +9,7 @@ Source snapshot and deployed server: **4e74f10**, adding AFE-reset health assess
 Clean/native tests, standalone probes and full live RPC regression pass.
 DAPHNE-015 retains unchanged self-trigger firmware
 **3f17f1b / ABI 2.0**. Native and live RPC/full regression, the complete runtime
-and image pin pass; refreshed ONL/wiki handoff remains pending. This audit is
+and image pin/35-file ONL handoff pass. This audit is
 not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
@@ -37,7 +37,7 @@ calibration or overall FPGA-health qualification is inferred.
   prerequisite from qualified readback, without SC bias/power policy changes.
   33 host/33 actual ARM suites, 208 Python tests per binding and two native
   probes and full live RPC regression pass. Runtime/native loader and image pin
-  pass; refreshed ONL/wiki handoff is still pending. See
+  and 35-file ONL handoff/five exported clients pass. See
   [verification and scope](afe-reset-health-verification.md).
 - **I207–I214, mezzanine samples:** independent cached atomics have no coherent
   quality/time; monitor exceptions can leave old values visible. No mezzanines
@@ -60,9 +60,10 @@ and deployment evidence are retained, not retroactively upgraded.
 
 ## Next implementation order
 
-1. Finish the **AFE reset-health ONL/wiki handoff**; deployed 4e74f10, full
-   regression, runtime/native loader and image pin pass. The prior 78504f1
-   handoff is unchanged. Keep physical transitions and SC policy separate.
+1. **AFE reset-health implementation/handoff is qualified on ABI 2.0**:
+   deployed 4e74f10, full regression, runtime/native loader, image pin and ONL
+   clients pass. Physical transitions and full-stream remain separate gaps;
+   proceed with the missing producers below without changing SC policy.
 2. Correct **mezzanine cache quality/time and calibration provenance** with
    deterministic tests. Keep no-mezzanine behavior explicitly unavailable;
    hardware readback/metrology needs populated hardware.

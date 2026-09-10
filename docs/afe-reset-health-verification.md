@@ -4,7 +4,8 @@ Server change **a01d95e**, client checks **4e74f10**. Server **4e74f10 is deploy
 and live-qualified** on DAPHNE-015 with unchanged self-trigger
 **3f17f1b / ABI 2.0** firmware and a 16-check RPC assessment. Complete runtime,
 native loader, image pin **ecff25e** and 140 packaging/audit tests pass.
-The refreshed ONL home/source/client handoff and wiki update remain pending.
+The refreshed ONL home/source/client handoff is verified; see below and the
+[wiki instructions](https://github.com/DUNE-DAQ/daphne-os/wiki/DAPHNE-015-AFE-global-and-SC-ownership).
 
 ## What changed
 
@@ -84,6 +85,9 @@ as expected. No board reboot, library, partition, identity, network or time chan
 
 Initial and final full zero-BIAS passes each completed **153 exchanges**:
 both AFE orders, five-AFE alignment and all 40 usable spybuffer channels.
+The existing Configure path issued its normal AFE reset pulse; no held-reset
+fault was injected and the physical pin was not measured. The live health check
+was verified in the released state afterward, not during the pulse.
 Bookkeeping checked **48 observations**, 32 during Configure; maximum round trip
 **282.021 ms**. Rejections preserved applied state, a rewrite of the existing
 channel-0 offset invalidated it, and full Configure restored the reference hash.
@@ -106,7 +110,7 @@ journal entries were observed for this invocation. Private messages were not exp
 Live proof `live-abi20.PfrVGkis/qualification.json` SHA-256:
 `ab11336bbc5ec59b582b4c7e8f5fcfa6113d6af23f44e2d91b7cb58b2fafac83`.
 Complete runtime SHA-256:
-`715579b9d37c96cfeb42aca53b6926dc66b45bdabf4648932ef3318dc4b3f6b4`.
+`bc1b0d60179d7d116f5cedc39b784772505e7cf9a00f0c410a6a6927478824e6`.
 Its 22 regular files and four aliases include the exact server, unchanged
 qualified Hermes/protobuf/utf8/ZeroMQ dependencies and qualification evidence.
 Native payload checks and loader/help pass with the private libraries resolved
@@ -115,6 +119,23 @@ Actual staging and all nine synthetic overlay-minor combinations pass.
 The source version include remains fail-closed until an actual project stages
 the matching runtime. This is not BitBake, a complete image build or new firmware.
 
-Next: refreshed ONL/wiki handoff, then physical transitions
+## ONL home handoff
+
+`$HOME/daphne015-server-runtime-4e74f10` on `np04-onl-004` holds 35 payload files
+plus `SHA256SUMS` in owner-only storage. Server export base is 4e74f10; OS
+integration base is 4c5273e, with an identical server subtree. Production/build
+files match Git. Known private literals in legacy examples become placeholders;
+one serialized seed request is omitted per export. These are modified exports,
+not exact Git snapshots or a general secret-audit guarantee.
+
+ONL's existing Python 3.9.16/protobuf 6.33.5/pyzmq 25.1.2 passed all five exported
+clients: AFE, kernel/OS, clock and build (three RPCs each), and FPGA health (four).
+One bookkeeping read confirmed the same process/boot and unchanged valid FE hash.
+No packages were installed. All handoff and internal runtime payload hashes pass;
+the previous 78504f1 payload and manifest were reverified unchanged.
+Handoff manifest SHA-256:
+`0923e685a297f45208f7519418768d12e8c8bb8655509d8d5bc4c6ec765dbd9d`.
+
+Next: physical transitions
 and full-stream/new-firmware qualification. Do not toggle SC-owned state merely
 to make a diagnostic pass. See the [remaining objective](server-v05-completion-plan.md).
