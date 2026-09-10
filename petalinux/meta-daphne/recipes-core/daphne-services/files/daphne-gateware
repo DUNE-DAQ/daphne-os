@@ -28,7 +28,7 @@ FULL_STREAM_ACTIVE_ACK = 1 << 1
 FULL_STREAM_CONTROL_MASK = FULL_STREAM_ENABLE_REQUEST | FULL_STREAM_ACTIVE_ACK
 COMMON_MAGIC = 0x44415048
 COMMON_ABI_MAJOR = 2
-COMMON_ABI_MINOR = 0
+SUPPORTED_ABI_MINORS = frozenset({0, 1})
 
 PROFILE_VARIANTS = {
     "self-trigger": 1,
@@ -174,11 +174,8 @@ def profile_from_path(path: Path, expected_name: str | None = None) -> Profile:
     )
     if profile.magic != COMMON_MAGIC:
         raise GatewareError(f"{path}: identity magic must be 0x{COMMON_MAGIC:08X}")
-    if (profile.abi_major, profile.abi_minor) != (
-        COMMON_ABI_MAJOR,
-        COMMON_ABI_MINOR,
-    ):
-        raise GatewareError(f"{path}: both release profiles must use ABI 2.0")
+    if profile.abi_major != COMMON_ABI_MAJOR or profile.abi_minor not in SUPPORTED_ABI_MINORS:
+        raise GatewareError(f"{path}: release profiles must use supported ABI 2.0 or 2.1")
     if profile.variant != PROFILE_VARIANTS[mode]:
         raise GatewareError(
             f"{path}: variant {profile.variant} does not match mode {mode}"

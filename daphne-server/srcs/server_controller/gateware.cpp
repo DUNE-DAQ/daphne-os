@@ -82,6 +82,16 @@ GatewareIdentity probe_gateware_identity(Mmio32& mmio) {
   return identity;
 }
 
+bool supports_gateware_abi(uint32_t abi) noexcept {
+  return abi == kGatewareAbiV2 || abi == kGatewareAbiV21;
+}
+bool supports_live_timestamp(uint32_t abi) noexcept {
+  return abi == kGatewareAbiV21;
+}
+bool same_gateware_identity(const GatewareIdentity& a, const GatewareIdentity& b) noexcept {
+  return a.magic == b.magic && a.abi == b.abi && a.variant == b.variant && a.build_id == b.build_id;
+}
+
 void validate_gateware_identity(const GatewareIdentity& identity,
                                 GatewareMode expected_mode,
                                 std::optional<uint32_t> expected_build_id) {
@@ -90,9 +100,8 @@ void validate_gateware_identity(const GatewareIdentity& identity,
                              hex32(kGatewareIdentityMagic) + ", read " +
                              hex32(identity.magic));
   }
-  if (identity.abi != kGatewareAbiV2) {
-    throw std::runtime_error("Gateware register ABI mismatch: expected " +
-                             hex32(kGatewareAbiV2) + ", read " + hex32(identity.abi));
+  if (!supports_gateware_abi(identity.abi)) {
+    throw std::runtime_error("Gateware register ABI mismatch: supported 2.0/2.1, read " + hex32(identity.abi));
   }
   if ((identity.build_id & kGatewareBuildIdUpperNibbleMask) != 0) {
     throw std::runtime_error(

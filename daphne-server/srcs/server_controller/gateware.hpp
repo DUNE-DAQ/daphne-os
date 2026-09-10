@@ -19,6 +19,9 @@ constexpr uint64_t kGatewareIdentityVariantAddress = 0x940000F8ULL;
 constexpr uint64_t kGatewareIdentityBuildAddress = 0x940000FCULL;
 constexpr uint32_t kGatewareIdentityMagic = 0x44415048U;
 constexpr uint32_t kGatewareAbiV2 = 0x00020000U;
+constexpr uint32_t kGatewareAbiV21 = 0x00020001U;
+bool supports_gateware_abi(uint32_t abi) noexcept;
+bool supports_live_timestamp(uint32_t abi) noexcept;
 constexpr uint32_t kGatewareBuildIdUpperNibbleMask = 0xF0000000U;
 
 constexpr uint64_t kSelfTriggerBaseAddress = 0xA0010000ULL;
@@ -45,6 +48,7 @@ struct GatewareIdentity {
   uint32_t variant = 0;
   uint32_t build_id = 0;
 };
+bool same_gateware_identity(const GatewareIdentity&, const GatewareIdentity&) noexcept;
 
 struct RegisterWrite {
   uint64_t address = 0;

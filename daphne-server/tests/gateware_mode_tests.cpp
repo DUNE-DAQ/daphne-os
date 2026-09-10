@@ -102,6 +102,26 @@ void TestIdentityAdmission() {
       [&] { validate_gateware_identity(identity, GatewareMode::kFullStream, 0x07654321U); },
       "build ID mismatch", "wrong build ID is rejected");
   Require(mmio.writes.empty(), "failed admission still performs no writes");
+  for (auto mode : {GatewareMode::kSelfTrigger, GatewareMode::kFullStream}) {
+    for (auto abi : {kGatewareAbiV2, kGatewareAbiV21}) {
+      auto candidate = identity;
+      candidate.variant = static_cast<uint32_t>(mode);
+      candidate.abi = abi;
+      validate_gateware_identity(candidate, mode, identity.build_id);
+      Require(supports_gateware_abi(abi), "known ABI supported");
+      Require(supports_live_timestamp(abi) == (abi == kGatewareAbiV21), "snapshot requires exact ABI 2.1");
+      Require(same_gateware_identity(candidate, candidate), "whole identity equality");
+      auto changed = candidate;
+      changed.abi = abi == kGatewareAbiV2 ? kGatewareAbiV21 : kGatewareAbiV2;
+      Require(!same_gateware_identity(candidate, changed), "compatible minor change is still a changed image identity");
+    }
+  }
+  for (uint32_t abi : {0U, 0x00010000U, 0x00020002U, 0x0002FFFFU, 0x00030000U, 0xFFFFFFFFU}) {
+    bad = identity; bad.abi = abi;
+    RequireThrows([&] { validate_gateware_identity(bad, GatewareMode::kFullStream); },
+                  "ABI mismatch", "unknown ABI rejected");
+    Require(!supports_gateware_abi(abi) && !supports_live_timestamp(abi), "no optimistic future ABI support");
+  }
 }
 
 void TestModeParsing() {

@@ -13,8 +13,10 @@ The `daphne-runtime.target` service chain is:
 
 `daphne-gateware-verify.service` reads the common identity words at
 `0x940000F0`, `0x940000F4`, `0x940000F8`, and `0x940000FC`. No clock, Hermes,
-or server process starts unless magic, ABI 2.0, variant, and the zero-extended
-28-bit build stamp match the active profile.
+or server process starts unless magic, the profile's exact ABI (2.0 or 2.1),
+variant, and the zero-extended 28-bit build stamp match the active profile.
+Unknown minors are rejected. Checked-in release profiles remain ABI 2.0;
+support for 2.1 does not relabel or qualify an existing firmware bundle.
 
 Use `sudo daphne-gateware list`, `status`, `switch self-trigger`,
 `switch full-stream`, or `set-default PROFILE`. A switch is serialized and

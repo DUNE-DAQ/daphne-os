@@ -69,7 +69,7 @@ class DaphneGatewareTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def _write_profile(self, name: str, app: str, variant: int) -> None:
+    def _write_profile(self, name: str, app: str, variant: int, minor: int = 0) -> None:
         (self.etc / "profiles" / f"{name}.conf").write_text(
             textwrap.dedent(
                 f"""\
@@ -78,7 +78,7 @@ class DaphneGatewareTests(unittest.TestCase):
                 GATEWARE_MODE={name}
                 IDENTITY_MAGIC=0x44415048
                 IDENTITY_ABI_MAJOR=2
-                IDENTITY_ABI_MINOR=0
+                IDENTITY_ABI_MINOR={minor}
                 IDENTITY_VARIANT={variant}
                 IDENTITY_BUILD_ID=metadata
                 """
@@ -166,7 +166,7 @@ class DaphneGatewareTests(unittest.TestCase):
             fi
             case "$1" in
               0x940000F0) value=$IDENTITY_MAGIC ;;
-              0x940000F4) value=$((IDENTITY_ABI_MAJOR << 16 | IDENTITY_ABI_MINOR)) ;;
+              0x940000F4) value=${DAPHNE_TEST_LIVE_ABI:-$((IDENTITY_ABI_MAJOR << 16 | IDENTITY_ABI_MINOR))} ;;
               0x940000F8)
                 if [ "${DAPHNE_TEST_BAD_VARIANT:-0}" = 1 ]; then
                   value=99
@@ -223,6 +223,25 @@ class DaphneGatewareTests(unittest.TestCase):
         self.assertIn("self-trigger", result.stdout)
         self.assertIn("build=0x01F9CDE5", result.stdout)
         self.assertIn("build=0x07AFA158", result.stdout)
+
+    def test_explicit_abi21_profile_keeps_exact_live_identity_check(self) -> None:
+        self._write_profile("self-trigger", "self_app", 1, minor=1)
+        self._prepare_active_self_trigger()
+        result = self._run("verify")
+        self.assertIn("ABI=2.1", result.stdout)
+        mismatch = self._run("verify", check=False, DAPHNE_TEST_LIVE_ABI="0x00020000")
+        self.assertNotEqual(mismatch.returncode, 0)
+        self.assertIn("identity mismatch", mismatch.stderr)
+        self.assertEqual(set(self.devmem_log.read_text().splitlines()),
+                         {"0x940000F0", "0x940000F4", "0x940000F8", "0x940000FC"})
+
+    def test_unknown_minor_rejected_before_hardware_access(self) -> None:
+        self._write_profile("self-trigger", "self_app", 1, minor=2)
+        result = self._run("prepare-default", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ABI 2.0 or 2.1", result.stderr)
+        self.assertFalse(self.devmem_log.exists())
+        self.assertFalse(self.log.exists())
 
     def test_quiesce_full_stream_verifies_identity_and_waits_for_ack(self) -> None:
         self._prepare_active_full_stream()
