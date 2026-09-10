@@ -7,18 +7,15 @@ test scope and limitation. The original XLSX is unchanged.
 
 Source snapshot: **79f6e5d**, connecting the coherent mezzanine cache to the
 background monitor, status/clear RPCs and client. **34 host/34 actual ARM suites
-and 240 Python tests per binding pass.** It is not deployed or live-RPC qualified;
-no mezzanines are fitted. See [candidate scope and evidence](mezzanine-status-verification.md).
+and 240 Python tests per binding pass.** Installed server **79f6e5d** now passes
+live no-mezzanine RPC/CLI and full SC-preserving zero-BIAS/all-channel regression.
+No mezzanines are fitted. See [scope and evidence](mezzanine-status-verification.md).
 
-Installed server: **fb82e0a**, correcting Configure's implicit
-SC-enable write. 33 host/33 actual ARM suites, 216 Python tests per binding and
-the full live SC-preservation/zero-BIAS regression pass. Server-only maintenance
-kept firmware/runtime/Hermes running and enable1 unchanged.
-DAPHNE-015 retains unchanged self-trigger firmware
-**3f17f1b / ABI 2.0**. The complete runtime/native loader, image pin **1039f46**,
-140 packaging tests and 41-file ONL handoff/five exported clients are verified.
-The prior 4e74f10 handoff remains unchanged. This audit is not a full-workbook
-completion claim.
+Server-only maintenance kept firmware/runtime/Hermes running, protected CERN
+settings unchanged and SC enable1 preserved. Self-trigger firmware remains
+**3f17f1b / ABI 2.0**. The complete runtime, image pin **1039f46** and 41-file ONL
+handoff still contain previously qualified **fb82e0a**; packaging 79f6e5d is next.
+Previous handoffs remain unchanged. This audit is not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
@@ -35,10 +32,10 @@ calibration or overall FPGA-health qualification is inferred.
 
 ## Important findings
 
-- **SC003/I288 ownership:** deployed fb82e0a leaves BiasEnable untouched by
+- **SC003/I288 ownership:** deployed 79f6e5d retains fb82e0a's correction, leaving BiasEnable untouched by
   aggregate Configure and fingerprints that no enable command was issued.
   Live preservation is verified at enable1; the other state is synthetic-only.
-  Packaging is verified; the dedicated/authenticated SC request contract remains open. See
+  The fb82e0a handoff is verified; the new handoff and dedicated/authenticated SC request contract remain open. See
   [correction and verification scope](sc-bias-enable-ownership.md).
 - **I283–I288, AFE global state:** the candidate now supplies admitted,
   bracketed read-only register observations with quality/times; two native
@@ -55,12 +52,12 @@ calibration or overall FPGA-health qualification is inferred.
 - **I207–I214, mezzanine samples:** candidate 79f6e5d uses one quality/timed
   snapshot, explicit value presence and independent alert history. Failed/stale
   polls cannot return old numbers as valid, and failed protective writes do not
-  erase the observed alert. Native/wire/CLI tests pass; live candidate RPC,
+  erase the observed alert. Native/wire/CLI and live no-mezzanine RPC tests pass;
   actual Qt event-loop and fitted-hardware/metrology qualification remain open.
-- **I225/I226, mezzanine calibration:** candidate de420e0 replaces the RPC's
+- **I225/I226, mezzanine calibration:** de420e0's correction, included in deployed 79f6e5d, replaces the RPC's
   cached-code substitution with identity-bracketed stable register-0x05 readback,
   quality/times and separate requested codes. Native failure/mismatch/concurrency
-  and protocol tests pass. It is not deployed or qualified on fitted hardware.
+  and protocol tests pass, along with live no-mezzanine responses. Fitted-hardware qualification remains open.
 - **I203/I204, mezzanine state:** coherent software flags/time and a GOOD cycle's
   checked configuration words are now reported. They remain partial, not proof
   of physical population, mux state or complete physical protection/DPS validity.
@@ -89,10 +86,10 @@ The producer backlog remains:
    deployed 4e74f10, full regression, runtime/native loader, image pin and ONL
    clients pass. Physical transitions and full-stream remain separate gaps;
    proceed with the missing producers below without changing SC policy.
-2. **Mezzanine cache/monitor/RPC/client integration is native-tested** in 79f6e5d.
-   Next qualify live no-mezzanine responses and full SC-preserving server-only
-   regression, then package the exact runtime/client for ONL. Physical readback,
-   protection and metrology need populated hardware; no deployment/pin advance yet.
+2. **Mezzanine cache/monitor/RPC/client integration is deployed** in 79f6e5d,
+   with native and live no-mezzanine/full SC-preserving regression passing.
+   Next package the exact runtime/client for ONL and advance the image pin.
+   Physical readback, protection and metrology need populated hardware.
 3. Add **read-only fan command/raw tach** observations after checking the exact
    deployed RTL and board wiring. RPM, presence and stall claims need validated
    pulse/scaling/population and an approved minimum-speed policy; no PWM writes.

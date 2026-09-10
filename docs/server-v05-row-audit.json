@@ -24,11 +24,11 @@
     "contract-pending": 13
   },
   "global_limits": [
-    "Source candidate 79f6e5d wires the coherent mezzanine cache into background monitoring, status/clear handlers and the client: 34 clean host/34 actual ARM suites and 240 Python tests per binding pass. Numbers/power requests are present only with GOOD quality, while alert history survives failures/staleness. No live candidate RPC or populated-mezzanine qualification yet; no deployment. Installed server and ONL runtime remain fb82e0a; guards unchanged. Actual Qt event-loop/visual testing remains open; GUI logic was executed with recording widgets.",
-    "Deployed fb82e0a removes Configure's implicit SC-enable write and updates fingerprint evidence to v2. Clean 33 host/33 actual ARM suites, 216 Python tests per binding and full live SC-preservation/zero-BIAS regression pass. Guarded server-only maintenance kept firmware/runtime/Hermes and enable1 unchanged. Exact runtime/native loader, image pin 1039f46, 140 packaging tests and 41-file ONL handoff/five exported clients pass. Dedicated/authenticated SC-request handling remains pending.",
+    "Deployed 79f6e5d wires the coherent mezzanine cache into background monitoring, status/clear handlers and the client: 34 clean host/34 actual ARM suites and 240 Python tests per binding pass. Live no-mezzanine checks each pass 24 exchanges before Configure and after full regression; absent data remain typed unavailable and the CLI exits 2. Full SC-preserving zero-BIAS/all-channel and collector regressions pass. No firmware/runtime/Hermes, network or SC enable change. Runtime/image pin/ONL still contain fb82e0a. Populated-mezzanine and actual Qt event-loop/visual qualification remain open.",
+    "Original fb82e0a qualification removes Configure's implicit SC-enable write and updates fingerprint evidence to v2. Clean 33 host/33 actual ARM suites, 216 Python tests per binding and full live SC-preservation/zero-BIAS regression pass. Guarded server-only maintenance kept firmware/runtime/Hermes and enable1 unchanged. Exact runtime/native loader, image pin 1039f46, 140 packaging tests and 41-file ONL handoff/five exported clients pass. Dedicated/authenticated SC-request handling remains pending.",
     "Human source/evidence audit, not consortium approval. The checker validates completeness/provenance/references, not semantic correctness.",
-    "Installed server fb82e0a is native/live-RPC qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. Complete runtime/image pin/41-file ONL handoff now contain this exact server. Five exported ONL clients pass 18 read-only exchanges including an unchanged process/boot/valid-FE-hash bracket. Prior 4e74f10 handoff hashes are unchanged. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
-    "Original 4e74f10 AFE-reset qualification: 33 host/33 actual ARM suites, 208 Python tests per binding and native/live probes passed. Current fb82e0a retains the 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. Normal Configure reset pulses are retained; no held-reset fault injection, pin measurement or overall healthy-board claim.",
+    "The previously qualified fb82e0a runtime/image pin/41-file ONL handoff are unchanged; the installed server is now 79f6e5d, native/live-qualified on self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. Packaging this new executable remains pending. The earlier fb82e0a exported ONL clients passed 18 read-only exchanges including an unchanged process/boot/valid-FE-hash bracket; this is not a new-handoff qualification. Prior 4e74f10 handoff hashes are unchanged. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
+    "Original 4e74f10 AFE-reset qualification: 33 host/33 actual ARM suites, 208 Python tests per binding and native/live probes passed. Deployed 79f6e5d retains the 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. Normal Configure reset pulses are retained; no held-reset fault injection, pin measurement or overall healthy-board claim.",
     "Hardware/missing-assignment conditions remain open even on implemented rows; inspect evidence-group limits and per-row remaining work.",
     "No mezzanines are fitted. Source-ledger checks are read-only; referenced live maintenance tests do issue zero-BIAS/BIASCTRL Configure and normal AFE reset/power commands. This follow-up sent no SC-enable commands and made no firmware reload, fan/regulator/EEPROM writes or network/time changes.",
     "Crate/slot/detector, timing assignment and Hermes identity requirements also exist outside the Server Platform sheet; this sheet is not the complete user objective.",
@@ -297,8 +297,8 @@
         "docs/mezzanine-status-verification.md",
         "daphne-server/tests/test_hdmezz_status.py"
       ],
-      "evidence_scope": "Candidate 79f6e5d: 34 host/34 actual ARM C++ suites, 240 Python tests per binding, metadata/help and unchanged board guards. Includes 33 fake-bus driver cases, executed protobuf mapping and actual localhost CLI tests. No deployment/live candidate RPC/fitted hardware; Qt GUI logic only.",
-      "limit": "Status handler uses one cache-only snapshot with quality/time/presence and independent historical alerts. Driver config/calibration/status checks invalidate measurements on mismatch; protective write failures retain observed alerts. Calibration RPC separates actual codes from requested values. Software enable/programming flags are not physical presence/protection, and checked configuration words are not metrology/DPS qualification. Native evidence does not prove populated hardware, new firmware/full-stream, live candidate RPC or GUI event-loop behavior."
+      "evidence_scope": "Deployed 79f6e5d: 34 host/34 actual ARM C++ suites, 240 Python tests per binding, 33 fake-bus driver cases, executed mapping and CLI tests. Live no-mezzanine RPC/CLI checks and full SC-preserving regression pass; 83 sealed live evidence files. Runtime handoff, fitted-hardware and Qt event-loop qualification remain pending.",
+      "limit": "Status handler uses one cache-only snapshot with quality/time/presence and independent historical alerts. Driver config/calibration/status checks invalidate measurements on mismatch; protective write failures retain observed alerts. Calibration RPC separates actual codes from requested values. Software enable/programming flags are not physical presence/protection, and checked configuration words are not metrology/DPS qualification. Native and live no-mezzanine evidence do not prove populated hardware, new firmware/full-stream or GUI event-loop behavior."
     },
     "sfp": {
       "source_refs": [
@@ -356,8 +356,8 @@
         "daphne-server/tests/fpga_status_tests.cpp",
         "daphne-server/tests/test_afe_global.py"
       ],
-      "evidence_scope": "Deployed fb82e0a: 33 host/33 actual ARM suites, 216 Python tests per binding and full live ABI2.0 Configure/SC-preservation regression. Exact runtime/native loader, image pin 1039f46, 140 packaging tests and 41-file ONL handoff/five exported clients pass; prior 4e74f10 evidence is retained",
-      "limit": "SC owns requested BiasEnable state; observation is FPGA register readback, not BIASCTRL cache, voltage or busy history. Deployed fb82e0a removes Configure's implicit enable write; existing enable1 was preserved through guarded server-only maintenance and full Configure. State0 is synthetic-only. Dedicated/authenticated SC contract, physical transitions/glitch testing and full-stream/new-firmware qualification remain pending."
+      "evidence_scope": "Original fb82e0a: 33 host/33 actual ARM suites, 216 Python tests per binding and full live ABI2.0 Configure/SC-preservation regression; complete runtime/pin/ONL verified. Deployed 79f6e5d retains the correction and passes 34 host/34 actual ARM suites, 240 Python tests per binding and full SC-preservation/live regression. New runtime handoff remains pending; prior evidence is retained",
+      "limit": "SC owns requested BiasEnable state; observation is FPGA register readback, not BIASCTRL cache, voltage or busy history. Deployed 79f6e5d retains fb82e0a's correction of Configure's implicit enable write; existing enable1 was preserved through guarded server-only maintenance and full Configure. State0 is synthetic-only. Dedicated/authenticated SC contract, physical transitions/glitch testing and full-stream/new-firmware qualification remain pending."
     },
     "bias_loop": {
       "source_refs": [
@@ -526,5 +526,5 @@
     "daphne-server/scripts/hdmezz_status.py": "d7e2ca53c7248f8ca5cfbdd56e16f215340789caf58ebb4a4d0f1b264c90ed6b",
     "daphne-server/srcs/Daphne.hpp": "4739d8c156fdfb50a282e6203836fc9b0f365bbac97c12c2ed3541f491ccdb3f"
   },
-  "deployed_server_commit": "fb82e0a6f6607e9486a98ed6fc1a26b07b0b0665"
+  "deployed_server_commit": "79f6e5d94ea23260a624d3b8b752d15ea475bda8"
 }

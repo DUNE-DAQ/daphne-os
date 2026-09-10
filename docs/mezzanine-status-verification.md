@@ -1,9 +1,10 @@
 # Mezzanine status: coherent cache connected to server and client
 
-Candidate **79f6e5d is native-tested, not deployed**. Server `97831dc` connects
+Server **79f6e5d is deployed and live-tested** on DAPHNE-015. Server `97831dc` connects
 the [cache driver](mezzanine-monitoring-cache.md); client `79f6e5d` validates and
-renders its response. DAPHNE-015, its image pin and ONL runtime remain **fb82e0a**.
-No mezzanines are fitted. SC-owned BiasEnable and BIASCTRL are unchanged.
+renders its response. The image pin and ONL runtime still contain **fb82e0a**;
+the new runtime handoff is pending. No mezzanines are fitted. SC-owned BiasEnable
+remains 1; BIAS and BIASCTRL remain zero. Firmware was not reloaded.
 
 ## Response contract
 
@@ -38,7 +39,7 @@ sample, expires local displays and preserves pending control choices. Qt timers
 are not hard-real-time; the existing synchronous request path can block the UI.
 Actual Qt visual/event-loop testing remains open—Qt is not installed on this host.
 
-## What passed
+## Native qualification
 
 Clean source `79f6e5d94ea23260a624d3b8b752d15ea475bda8`, server subtree
 `27c600141e529177e8bc7a1f7a080688a1c88de4`:
@@ -67,7 +68,48 @@ Source guards verify actual handler/monitor wiring but do not execute the full
 hardware-constructing Daphne handler. Native fake-bus tests do not establish real
 mezzanine identity, measurements, alert circuitry, latency or physical power.
 
-## Operator command after qualified deployment
+## Live qualification
+
+The exact native-tested executable replaced fb82e0a through the previously
+qualified, administrator-only `--job-mode=ignore-requirements` stop/start of
+`daphne.service`. Normal stop hooks and firmware admission stayed enabled.
+Eight guard snapshots preserved firmware/runtime/Hermes, boot, protected CERN
+settings, SC enable1 and ADC selectors0/0. Only the server invocation changed;
+the prior executable remains in private RAM. No rollback or deployment retry.
+An ordinary service restart is not equivalent: it can propagate to the firmware.
+
+- No-mezzanine checks before Configure and after the full regression each pass
+  **24 exchanges**: all five status/calibration pairs, typed invalid status-block
+  rejections and ten actual CLI calls. Every valid block reports unavailable,
+  with no fabricated measurements, requests, alert history or driver state.
+  The CLI returns exit 2. Process/build/boot/configuration evidence and SC enable
+  bracket each read-only run. This tests the configured absence policy, not
+  physical population detection; no mezzanine bus access is enabled.
+- Initial and final aggregate runs each pass **158 exchanges**, both AFE orders,
+  alignment, fresh AFE registers and all 40 spybuffer channels. Configure and
+  capture preserve enable1; normal AFE reset pulses remain. Equal samples are
+  not a physical glitch or reset-pin test.
+- Bookkeeping passes **48 observations, 32 during Configure**, maximum **288.6 ms**.
+  Rejected requests retain evidence; the existing offset rewrite invalidates it;
+  full Configure restores the same FE v2 hash.
+- ADC supplies **80 CRC-checked raw samples**, not calibrated current. Existing
+  platform/temperature, SFP, regulator, identity and FPGA-health regressions pass,
+  plus five build/host/clock/privacy clients. Health remains **12 PASS / 1 external
+  timing FAIL / 3 UNKNOWN**, not an overall healthy-board verdict.
+
+The first no-mezzanine verifier incorrectly required an idle executor during its
+own system-status read. It stopped after that one read. The corrected verifier
+requires its exact read type/task/message IDs; six fault-test cases pass. The
+failed result and original verifier are retained. No server change was needed.
+
+Live evidence: `mezzanine-status.9rUhbWps/live-abi20.n3FkGAaa`, with **83 sealed
+files**, including maintenance scripts, response payloads, captures and checks.
+Live `qualification.json` SHA-256:
+`4a6a4606a5c341d074721b3da3e278b35b9efb812b0e241db0b32161d2446d25`.
+Final policy: BIAS/BIASCTRL0, offset2200/x1, trim0, VGAIN1700, enable1, selectors0/0.
+Final FE hash: `a7c843ddbb3014bc15e5bcb26d528899078b98a6948f034c6c5e487733404bea`.
+
+## Operator read-only command
 
 Use matching generated bindings and an approved local SSH forward:
 
@@ -80,8 +122,8 @@ Set `BUILD_DIR` explicitly. This command never enables/configures a block. With
 the no-mezzanine startup policy, expect typed unavailable, no measurements and
 exit 2—not zero readings and not a reason to enable nonexistent hardware.
 
-Next: qualify the candidate's live no-mezzanine response and full SC-preserving
-server-only regression, then package the exact runtime and matching client for
-ONL. No deployment/runtime-pin advance has happened. Populated-hardware and
+Next: package the exact deployed runtime and matching client for ONL, qualify
+the packaged loader and advance the image pin. The fb82e0a handoff is unchanged
+and does not contain this mezzanine correction. Populated-hardware and
 metrology, firmware/full-stream, missing authoritative assignments and other
 v0.5 producer gaps remain in the [completion plan](server-v05-completion-plan.md).

@@ -1,6 +1,9 @@
 # SC BiasEnable: remove the implicit Configure write
 
-Server **fb82e0a is deployed and live-tested** on DAPHNE-015. Aggregate Configure
+The SC correction was deployed and live-tested as **fb82e0a**. DAPHNE-015 now
+runs [79f6e5d, with the same ownership correction](mezzanine-status-verification.md);
+its runtime handoff is pending. The fb82e0a qualification below is historical.
+Aggregate Configure
 now leaves SC-owned BiasEnable untouched. The FPGA was not reloaded. The complete
 runtime bundle, image pin **1039f46** and **41-file ONL handoff** are verified.
 The previous 4e74f10 bundle is retained unchanged and lacks this correction.

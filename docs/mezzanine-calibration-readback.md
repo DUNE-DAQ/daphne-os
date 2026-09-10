@@ -1,8 +1,10 @@
 # Mezzanine calibration: requested code versus register readback
 
-Candidate **de420e0 is native-tested, not deployed**. DAPHNE-015 and its ONL
-bundle remain **fb82e0a**, with the SC-owned enable state preserved. No mezzanines
-are fitted. This fixes the producer for workbook **I225/I226**; it does not
+This page retains the native qualification of **de420e0**, which was not deployed
+standalone. Its correction is now included in deployed
+[79f6e5d](mezzanine-status-verification.md), with live no-mezzanine responses and
+SC-preserving regression tested. The ONL bundle/image pin still contain fb82e0a.
+No mezzanines are fitted. This fixes the producer for workbook **I225/I226**; it does not
 qualify physical current measurement or close the mezzanine telemetry backlog.
 
 ## Correction
@@ -95,8 +97,8 @@ DAPHNE_BUILD_DIR="$BUILD_DIR" python daphne-server/client/hdmezz_control_v2.py \
 ```
 
 Set `BUILD_DIR` explicitly. This command neither enables nor configures a block.
-Do not enable absent hardware just to obtain a GOOD response. On the currently
-installed old server, this new readback is not available.
+Do not enable absent hardware just to obtain a GOOD response. The installed
+79f6e5d returns typed unavailable under the protected no-mezzanine startup policy.
 
 ## Next gate
 
@@ -107,7 +109,7 @@ Calibration mismatch invalidates scaled monitoring without altering raw readback
 or inventing a shutdown policy. Combined native fixtures and client tests pass;
 the historical native evidence above still covers **de420e0 only**.
 
-Live candidate responses/regression and deployment/runtime/ONL qualification
-remain pending. I203/I204 still do not prove complete physical block/protection
+Live no-mezzanine responses, deployment and regression pass in 79f6e5d; its
+runtime/ONL handoff remains pending. I203/I204 still do not prove complete physical block/protection
 state. Populated-hardware readback/metrology, firmware/full-stream and remaining
-register/database requirements stay open. Current deployment and pins are unchanged.
+register/database requirements stay open. Native de420e0 evidence above is unchanged.
