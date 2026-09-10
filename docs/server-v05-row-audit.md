@@ -5,7 +5,11 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Source snapshot and installed server: **fb82e0a**, correcting Configure's implicit
+Source snapshot: **de420e0**, native-tested calibration readback, not deployed.
+It passes 34 host/34 actual ARM suites and 222 Python tests per binding. See
+[candidate scope and remaining cache work](mezzanine-calibration-readback.md).
+
+Installed server: **fb82e0a**, correcting Configure's implicit
 SC-enable write. 33 host/33 actual ARM suites, 216 Python tests per binding and
 the full live SC-preservation/zero-BIAS regression pass. Server-only maintenance
 kept firmware/runtime/Hermes running and enable1 unchanged.
@@ -17,9 +21,9 @@ completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
-| Implemented | 90 | Concrete producer/export provides the observation within its stated scope |
+| Implemented | 92 | Concrete producer/export provides the observation within its stated scope |
 | Partial | 92 | Related code exists, but semantics, readback, quality, completeness or retained reporting are missing |
-| Missing | 56 | No corresponding server observation; a schema field/internal helper is not enough |
+| Missing | 54 | No corresponding server observation; a schema field/internal helper is not enough |
 | Contract pending | 13 | Authority, authenticated identity, lease/safety or boot-recovery policy must be established |
 
 **Implemented does not mean hardware-qualified everywhere.** Every row retains
@@ -50,8 +54,13 @@ calibration or overall FPGA-health qualification is inferred.
 - **I207–I214, mezzanine samples:** independent cached atomics have no coherent
   quality/time; monitor exceptions can leave old values visible. No mezzanines
   are fitted on this bench, so physical qualification remains unavailable.
-- **I225/I226, mezzanine calibration:** `getShuntCal()` returns cached codes,
-  not fresh INA232 calibration-register readback.
+- **I225/I226, mezzanine calibration:** candidate de420e0 replaces the RPC's
+  cached-code substitution with identity-bracketed stable register-0x05 readback,
+  quality/times and separate requested codes. Native failure/mismatch/concurrency
+  and protocol tests pass. It is not deployed or qualified on fitted hardware.
+- **I203/I204, mezzanine state:** new response flags expose software access
+  selection and last programming result. They remain partial, not proof of
+  physical presence or fresh protection-configuration validity.
 - **I029–I040, command audit:** the existing record covers Configure, not every
   accepted/rejected mutation. ZMQ routing identity is not authentication.
 - **I249–I257, fans, and I159–I173, I2C inventory:** schema/internal helpers exist,
@@ -77,9 +86,10 @@ The producer backlog remains:
    deployed 4e74f10, full regression, runtime/native loader, image pin and ONL
    clients pass. Physical transitions and full-stream remain separate gaps;
    proceed with the missing producers below without changing SC policy.
-2. Correct **mezzanine cache quality/time and calibration provenance** with
-   deterministic tests. Keep no-mezzanine behavior explicitly unavailable;
-   hardware readback/metrology needs populated hardware.
+2. Correct **mezzanine cache quality/time** while preserving alert evidence and
+   existing protective behavior. Calibration provenance is native-tested in
+   de420e0, not yet deployed. Finish the shared cache and client checks before
+   the next deployment; physical readback/metrology needs populated hardware.
 3. Add **read-only fan command/raw tach** observations after checking the exact
    deployed RTL and board wiring. RPM, presence and stall claims need validated
    pulse/scaling/population and an approved minimum-speed policy; no PWM writes.
