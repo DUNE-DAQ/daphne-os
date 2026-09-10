@@ -82,8 +82,10 @@ and SHA selections. **Do not manually edit `IDENTITY_ABI_MINOR` to force admissi
 Evidence is under `completion-VEpMKkGG/firmware-health.W1CUQ3E7/bundle-identity-*`.
 No full PetaLinux image build, real Vivado source-object binding, routed build,
 live ABI 2.1 regression or deployment has been qualified for these changes yet.
-Five affected ARM software suites pass with hardware-free fixtures; that is not
-firmware qualification. Cross-repository log: `fullstream-os-staging-integration-final.txt`;
+All 24 ARM software suites and candidate `--help` pass with hardware-free
+fixtures; that is not firmware qualification. See the
+[clean-candidate evidence](native-timestamp-verification.md#complete-clean-candidate-arm-check).
+Cross-repository log: `fullstream-os-staging-integration-final.txt`;
 retained fixture directory: `fullstream-os-staging-qclbz_wi` (DO NOT DEPLOY).
 
 The image runtime contract still pins server `77b39b7`; updating/qualifying the
@@ -102,6 +104,9 @@ tests execute the actual recipe guard with a datastore double, including mixed
 2.0/2.1 pairs, unknown minors, stale sentinels and unsealed 2.1 inputs. This does
 not replace a real BitBake parse/build or binary/board qualification. The stager
 validates a recorded QEMU result; it does not run QEMU or authenticate metadata.
+All 97 PetaLinux packaging tests pass, including 10 tests executing the actual
+recipe guard with a datastore double and 14 runtime-staging tests. Log:
+`firmware-health.W1CUQ3E7/runtime-overlay-contract-tests.txt`.
 
 The synthesis-source query follows
 [AMD's documented compile-order query](https://docs.amd.com/r/2024.1-English/ug896-vivado-ip/Querying-IP-Customization-Files).

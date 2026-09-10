@@ -97,3 +97,14 @@ set against **both** overlays. The still-pinned RC1 server supports only 2.0,
 so packaging tools accepting a 2.1 overlay can no longer silently imply that
 the image's server supports it. Qualifying and pinning the new ARM runtime is
 still required; the recipe-guard tests are not image qualification.
+
+Clean candidate `13bc725` now cross-builds with the install runtime-library
+path; all 24 hardware-free ARM suites and candidate `--help` pass on DAPHNE-015,
+with all 102 Python tests passing against its generated bindings. Installed
+library/link-input differences were verified as debug/metadata stripping, and
+the final guard checks the actual installed hashes. The running board service,
+private identity and protected configuration remain unchanged. See
+[candidate qualification](native-timestamp-verification.md#complete-clean-candidate-arm-check).
+Next: qualify the candidate's live ABI 2.0 behavior, prepare the complete runtime
+archive with honest execution provenance, then update the image source/minor
+contract. Current firmware still cannot supply ABI 2.1 snapshot evidence.
