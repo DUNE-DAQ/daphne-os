@@ -57,16 +57,6 @@ void add_sfp_status(daphne::SystemStatusSnapshot& snapshot, const TemperatureAla
     for (unsigned channel = 0; channel < 6; ++channel)
       empty(channel, std::string("SFP collector unavailable: ") + e.what(), daphne::MEASUREMENT_ERROR);
   }
-  for (auto& r : *snapshot.mutable_sfps()) {
-    daphne::TemperatureStatus t;
-    t.set_name(r.name() + "_SFP");
-    t.set_quality(r.has_temperature_c() ? daphne::MEASUREMENT_GOOD :
-        (r.diagnostic_quality() == daphne::MEASUREMENT_ERROR ? daphne::MEASUREMENT_ERROR : daphne::MEASUREMENT_UNAVAILABLE));
-    t.set_valid(r.has_temperature_c());
-    if (r.has_temperature_c()) t.set_temperature_c(r.temperature_c());
-    t.set_observed_monotonic_ns(r.diagnostics_observed_monotonic_ns());
-    evaluate_temperature_alarm(t, policy, monotonic_time_ns());
-    *r.mutable_temperature_alarm() = t.alarm();
-  }
+  for (auto& r : *snapshot.mutable_sfps()) evaluate_sfp_temperature_alarm(r, policy, monotonic_time_ns());
 }
 } // namespace daphne_sc

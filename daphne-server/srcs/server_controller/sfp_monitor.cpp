@@ -230,6 +230,21 @@ const char* sfp_connector(unsigned channel) {
   if (channel >= names.size()) throw std::invalid_argument("SFP mux channel outside 0..5");
   return names[channel];
 }
+void evaluate_sfp_temperature_alarm(daphne::SFPMonitor& r, const TemperatureAlarmPolicy& policy, uint64_t now) {
+  daphne::TemperatureStatus t;
+  t.set_name(r.name() + "_SFP");
+  t.set_temperature_c(std::numeric_limits<double>::quiet_NaN());
+  t.set_quality(r.has_temperature_c() ? daphne::MEASUREMENT_GOOD :
+      (r.diagnostic_quality() == daphne::MEASUREMENT_ERROR ? daphne::MEASUREMENT_ERROR : daphne::MEASUREMENT_UNAVAILABLE));
+  t.set_valid(r.has_temperature_c());
+  if (r.has_temperature_c()) {
+    t.set_temperature_c(r.temperature_c());
+    t.set_observed_monotonic_ns(r.diagnostics_observed_monotonic_ns());
+    t.set_observed_host_unix_ns(r.observed_host_unix_ns());
+  }
+  evaluate_temperature_alarm(t, policy, now);
+  *r.mutable_temperature_alarm() = t.alarm();
+}
 daphne::SFPMonitor collect_sfp_port(unsigned channel, const SfpIO& io, const std::string& source) {
   daphne::SFPMonitor r;
   r.set_name(sfp_connector(channel)); // Validate before any IO.

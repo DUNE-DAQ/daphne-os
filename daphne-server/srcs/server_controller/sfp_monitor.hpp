@@ -18,5 +18,6 @@ struct SfpIO {
 };
 const char* sfp_connector(unsigned channel);
 daphne::SFPMonitor collect_sfp_port(unsigned channel, const SfpIO& io, const std::string& source);
+void evaluate_sfp_temperature_alarm(daphne::SFPMonitor& port, const TemperatureAlarmPolicy& policy, uint64_t now);
 void add_sfp_status(daphne::SystemStatusSnapshot& snapshot, const TemperatureAlarmPolicy& policy);
 } // namespace daphne_sc

@@ -152,5 +152,13 @@ int main() {
     check(r.has_temperature_c() && !r.has_rx_power_mw() && r.quantities(4).quality() == daphne::MEASUREMENT_ERROR);
   }
   { Fake f; bool failed = false; try { f.run(6); } catch (...) { failed = true; } check(failed && f.writes == 0 && f.mux_reads == 0); }
+  { daphne::SFPMonitor r;
+    evaluate_sfp_temperature_alarm(r, {}, 10); check(r.temperature_alarm().state() == daphne::TEMPERATURE_ALARM_MISSING);
+    r.set_diagnostic_quality(daphne::MEASUREMENT_ERROR);
+    evaluate_sfp_temperature_alarm(r, {}, 10); check(r.temperature_alarm().state() == daphne::TEMPERATURE_ALARM_INVALID);
+    r.set_temperature_c(85); r.set_diagnostics_observed_monotonic_ns(1);
+    evaluate_sfp_temperature_alarm(r, {}, 10); check(r.temperature_alarm().state() == daphne::TEMPERATURE_ALARM_WARNING);
+    evaluate_sfp_temperature_alarm(r, {}, 6000000000); check(r.temperature_alarm().state() == daphne::TEMPERATURE_ALARM_STALE);
+  }
   std::cout << "SFP 6-route/42-restoration, checksums, unsupported, signed/internal/external calibration, flags, hot-swap and failure tests passed\n";
 }
