@@ -6,6 +6,9 @@ DEPENDS += "patchelf-native"
 
 require daphne-server-contract.inc
 require daphne-server-version.inc
+# Cross-recipe version input: changing either staged overlay invalidates the
+# server task signature and rechecks compatibility, regardless of staging order.
+require recipes-firmware/daphne-overlay/daphne-overlay-version.inc
 
 python validate_daphne_server_runtime () {
     import re
@@ -18,6 +21,8 @@ python validate_daphne_server_runtime () {
 
     expected_commit = d.getVar("DAPHNE_SERVER_REQUIRED_GIT_COMMIT") or ""
     staged_commit = d.getVar("DAPHNE_SERVER_RUNTIME_GIT_COMMIT") or ""
+    if re.fullmatch(r"[0-9a-f]{40}", expected_commit) is None:
+        bb.fatal("Malformed daphne-server source commit contract")
     if staged_commit != expected_commit:
         bb.fatal(
             f"Staged daphne-server commit {staged_commit!r} does not match "
@@ -26,11 +31,29 @@ python validate_daphne_server_runtime () {
 
     expected_abi = d.getVar("DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MAJOR") or ""
     staged_abi = d.getVar("DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR") or ""
-    if staged_abi != expected_abi:
+    if expected_abi != "2" or staged_abi != expected_abi:
         bb.fatal(
             f"Staged daphne-server ABI {staged_abi!r} does not match "
             f"the gateware ABI contract {expected_abi!r}"
         )
+
+    expected_minors = d.getVar("DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS") or ""
+    staged_minors = d.getVar("DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS") or ""
+    if expected_minors not in ("0", "1", "0 1") or staged_minors != expected_minors:
+        bb.fatal("Staged daphne-server ABI minor capabilities do not match the reviewed source contract; restage the runtime")
+
+    if d.getVar("DAPHNE_DUAL_OVERLAY_STAGED") != "1":
+        bb.fatal("Both gateware overlays must be staged before validating server/image compatibility")
+    for prefix, mode in (("DAPHNE_SELF_TRIGGER", "self-trigger"),
+                         ("DAPHNE_FULL_STREAM", "full-stream")):
+        # Only pre-extension stagers omit the minor; those bundles are ABI 2.0.
+        minor = d.getVar(prefix + "_ABI_MINOR")
+        if minor is None:
+            minor = "0"
+        if minor not in expected_minors.split(" "):
+            bb.fatal(f"The pinned daphne-server does not support {mode} overlay ABI 2.{minor}; qualify and stage a compatible server runtime")
+        if minor == "1" and d.getVar(prefix + "_IDENTITY_SEALED") != "1":
+            bb.fatal(f"The {mode} ABI 2.1 overlay lacks its sealed identity declaration")
 
     runtime_sha = d.getVar("DAPHNE_SERVER_RUNTIME_SHA256") or ""
     if re.fullmatch(r"[0-9a-f]{64}", runtime_sha) is None:
@@ -38,6 +61,12 @@ python validate_daphne_server_runtime () {
 }
 
 do_fetch[prefuncs] += "validate_daphne_server_runtime"
+# The guard constructs these getVar names; make task dependencies explicit so
+# changing only the inactive variant cannot reuse a prior successful task.
+validate_daphne_server_runtime[vardeps] += " \
+    DAPHNE_SELF_TRIGGER_ABI_MINOR DAPHNE_FULL_STREAM_ABI_MINOR \
+    DAPHNE_SELF_TRIGGER_IDENTITY_SEALED DAPHNE_FULL_STREAM_IDENTITY_SEALED \
+"
 
 RDEPENDS:${PN} += " \
     i2c-tools \

@@ -122,7 +122,9 @@ validate_digest() {
 
 required_commit="$(contract_value DAPHNE_SERVER_REQUIRED_GIT_COMMIT)"
 required_abi="$(contract_value DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MAJOR)"
-if [[ ! "$required_commit" =~ ^[0-9a-f]{40}$ || ! "$required_abi" =~ ^[0-9]+$ ]]; then
+required_minors="$(contract_value DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS)"
+if [[ ! "$required_commit" =~ ^[0-9a-f]{40}$ || "$required_abi" != "2" ||
+      ! "$required_minors" =~ ^(0|1|0\ 1)$ ]]; then
   echo "ERROR: malformed daphne-server compatibility contract in $CONTRACT_INC" >&2
   exit 2
 fi
@@ -261,6 +263,7 @@ cat > "$temporary_inc" <<EOF
 DAPHNE_SERVER_RUNTIME_QUALIFIED = "$qualified"
 DAPHNE_SERVER_RUNTIME_GIT_COMMIT = "$metadata_server_commit"
 DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR = "$([[ "$qualified" == "1" ]] && printf '%s' "$required_abi" || printf '%s' unqualified)"
+DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "$([[ "$qualified" == "1" ]] && printf '%s' "$required_minors" || printf '%s' unqualified)"
 DAPHNE_SERVER_RUNTIME_SHA256 = "$bundle_sha256"
 EOF
 chmod 0644 "$temporary_inc"

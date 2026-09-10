@@ -92,6 +92,17 @@ Do not combine new ABI 2.1 overlays with the old server merely because both
 declare ABI major 2. The overlay-only integration does not prove compatibility
 of the complete OS image.
 
+The server recipe now reads both overlay version bindings and rejects an
+unsupported minor in **either** variant before fetching/building its payload.
+The reviewed RC1 server contract explicitly supports minor `0` only; staging
+records that exact capability set alongside the pinned source and archive hash.
+Old staged runtimes lacking the minor sentinel must be restaged. Updating only
+an overlay also participates in the server task dependencies. The decision
+tests execute the actual recipe guard with a datastore double, including mixed
+2.0/2.1 pairs, unknown minors, stale sentinels and unsealed 2.1 inputs. This does
+not replace a real BitBake parse/build or binary/board qualification. The stager
+validates a recorded QEMU result; it does not run QEMU or authenticate metadata.
+
 The synthesis-source query follows
 [AMD's documented compile-order query](https://docs.amd.com/r/2024.1-English/ug896-vivado-ip/Querying-IP-Customization-Files).
 That documents the API, not this board's actual object bindings.

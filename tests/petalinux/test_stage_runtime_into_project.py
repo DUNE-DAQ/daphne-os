@@ -179,6 +179,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
             version,
         )
         self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR = "2"', version)
+        self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "0"', version)
         self.assertIn(f'DAPHNE_SERVER_RUNTIME_SHA256 = "{bundle_sha}"', version)
 
     def test_bare_bundle_stages_only_as_unqualified_fallback(self) -> None:
@@ -201,6 +202,30 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
             'DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR = "unqualified"',
             version,
         )
+        self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "unqualified"', version)
+
+    def test_missing_minor_contract_is_not_inferred_from_major(self) -> None:
+        bundle, _ = self.make_bundle()
+        contract = self.recipe / "daphne-server-contract.inc"
+        contract.write_text("\n".join(
+            line for line in contract.read_text().splitlines()
+            if not line.startswith("DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS =")
+        ) + "\n")
+        result = self.run_stage(bundle)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected exactly one DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS", result.stderr)
+        self.assert_prior_state_preserved()
+
+    def test_unknown_minor_contract_is_rejected_before_staging(self) -> None:
+        bundle, _ = self.make_bundle()
+        contract = self.recipe / "daphne-server-contract.inc"
+        contract.write_text(contract.read_text().replace(
+            'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "0"',
+            'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "0 1 2"'))
+        result = self.run_stage(bundle)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("malformed daphne-server compatibility contract", result.stderr)
+        self.assert_prior_state_preserved()
 
     def test_rejects_metadata_tar_digest_mismatch_without_mutation(self) -> None:
         bundle, bundle_sha = self.make_bundle()

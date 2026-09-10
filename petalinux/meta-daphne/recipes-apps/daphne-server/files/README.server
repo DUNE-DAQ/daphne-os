@@ -24,6 +24,14 @@ Qualification contract:
   AArch64 build with passing QEMU validation
 - the executable must expose both `--gateware-mode` and
   `--expected-gateware-build-id`
+- the reviewed source contract lists explicit supported ABI minors; staging
+  records that set without inferring support from the major number
+- the recipe rejects either staged overlay when its minor is unsupported by
+  the pinned server (including the inactive variant). RC1 supports only 2.0;
+  qualify a new source pin/runtime before pairing it with ABI 2.1 gateware
+- older runtime sentinels without the minor set must be restaged
+- validation of a recorded passing QEMU result is not a new QEMU execution,
+  authenticated provenance, or physical board qualification
 - a bare tarball can still be staged for inspection, but its generated
   `daphne-server-version.inc` remains unqualified and cannot build the release
 

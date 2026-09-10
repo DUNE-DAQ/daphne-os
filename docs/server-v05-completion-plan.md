@@ -91,3 +91,9 @@ server `77b39b7`; a matching qualified runtime/compatibility contract must be
 prepared before an ABI 2.1 image can be qualified. Both repositories' actual
 netlist/routing and live qualification remain open. Legacy full-stream ABI 2.0
 remains supported without a native timestamp claim.
+
+The server image recipe now explicitly cross-checks its staged supported minor
+set against **both** overlays. The still-pinned RC1 server supports only 2.0,
+so packaging tools accepting a 2.1 overlay can no longer silently imply that
+the image's server supports it. Qualifying and pinning the new ARM runtime is
+still required; the recipe-guard tests are not image qualification.
