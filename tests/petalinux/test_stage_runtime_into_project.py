@@ -284,7 +284,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
     def test_current_source_contract_stages_abi22_capability(self) -> None:
         # Real reviewed source contract, synthetic ELF fixture; not an image build.
         bundle, _ = self.make_bundle()
-        candidate = "3f636f4acf3f795e96d1e20e89936c6a861ac58a"
+        candidate = "bffea24fc16c93b263ffe5c83872832a7b7f7a82"
         self.assertEqual(REQUIRED_COMMIT, candidate)
         self.assertEqual(REQUIRED_MINORS, "0 1 2")
         result = self.run_stage(bundle)
@@ -317,6 +317,16 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("SHA-256 mismatch", result.stderr)
+        self.assert_prior_state_preserved()
+
+    def test_previous_abi22_runtime_without_management_link_requires_old_pin(self) -> None:
+        bundle, _ = self.make_bundle()
+        metadata = bundle.parent / "BUILD-METADATA.txt"
+        metadata.write_text(metadata.read_text().replace(
+            REQUIRED_COMMIT, "3f636f4acf3f795e96d1e20e89936c6a861ac58a"))
+        result = self.run_stage(bundle)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("does not match required commit", result.stderr)
         self.assert_prior_state_preserved()
 
     def test_rejects_wrong_server_commit_without_mutation(self) -> None:
