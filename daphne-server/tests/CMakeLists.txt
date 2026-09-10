@@ -28,7 +28,7 @@ else()
   target_compile_options(hdmezz_driver_tests PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME hdmezz_driver_unit COMMAND hdmezz_driver_tests)
-set_tests_properties(hdmezz_driver_unit PROPERTIES LABELS unit)
+set_tests_properties(hdmezz_driver_unit PROPERTIES LABELS unit TIMEOUT 30)
 
 add_executable(gateware_mode_tests
   gateware_mode_tests.cpp

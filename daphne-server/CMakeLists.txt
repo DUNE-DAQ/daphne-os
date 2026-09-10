@@ -52,6 +52,7 @@ add_library(daphne_i2c_hw
   srcs/BoardI2C.cpp
   srcs/I2CDevice.cpp
   srcs/DaphneI2CDrivers.cpp
+  srcs/HDMezzMonitoring.cpp
 )
 target_include_directories(daphne_i2c_hw PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/srcs

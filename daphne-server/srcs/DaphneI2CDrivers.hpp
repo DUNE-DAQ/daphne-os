@@ -9,6 +9,7 @@
 #include <mutex>
 #include <sstream>
 #include <iomanip>
+#include <limits>
 
 
 #include "defines.hpp"
@@ -70,6 +71,38 @@ namespace I2CMezzDrivers{
         // Mux selection + non-clearing reads only. Never enables/configures a block.
         // One software lock; sequential register observations, not a hardware latch.
         ConfigurationSnapshot readBlockConfiguration(uint8_t afeBlock);
+        enum class MonitorQuality { Unavailable, Good, Error, Invalid, Stale };
+        static constexpr uint64_t kMaxMonitorAcquisitionNs = 100'000'000ULL;
+        static constexpr uint64_t kMaxMonitorAgeNs = 5'000'000'000ULL;
+        struct RailObservation {
+            double voltage = std::numeric_limits<double>::quiet_NaN(); // V
+            double current = std::numeric_limits<double>::quiet_NaN(); // mA
+            double power = std::numeric_limits<double>::quiet_NaN(); // mW
+            bool powerRequested = false; // TCA output latch, not actual rail power.
+        };
+        struct AlertHistory {
+            bool available = false;
+            bool latched = false; // Software latch, cleared only by explicit clear/successful disable.
+            uint16_t maskEnableRaw = 0;
+            uint64_t observedNs = 0; // Last hardware read, not refreshed when retaining a latch.
+        };
+        struct MonitoringSnapshot {
+            uint8_t afeBlock = 0;
+            bool driverStateAvailable = false, enabled = false, configured = false;
+            MonitorQuality quality = MonitorQuality::Unavailable;
+            std::string detail = "No complete mezzanine monitoring sample";
+            std::array<RailObservation, 2> rails{}; // 5V, CE (legacy 3V3).
+            std::array<AlertHistory, 2> alerts{};
+            uint64_t acquisitionStartedNs = 0, observedNs = 0, stateObservedNs = 0;
+            uint64_t lastGoodNs = 0, sampleAttempt = 0;
+            bool activeConfigurationVerified = false;
+            bool protectiveActionAttempted = false, powerRequestsOffConfirmed = false;
+        };
+        // Background acquisition retains the existing alert-triggered power-removal behavior.
+        // Ordinary status readers only take a cache snapshot and never read clearing registers.
+        MonitoringSnapshot pollMonitoring(uint8_t afeBlock);
+        MonitoringSnapshot monitoringSnapshot(uint8_t afeBlock) const;
+        void clearCachedAlerts(uint8_t afeBlock);
         void configureHdMezzAfeBlock(uint8_t afeBlock);
         void configureHdMezzAfeBlock(uint8_t afeBlock, const BlockConfiguration& configuration);
         void setPowerRequests(uint8_t afeBlock, bool power5V, bool power3V3);
@@ -101,6 +134,8 @@ namespace I2CMezzDrivers{
         std::unique_ptr<I2CRegisterDevice> ina_3V3_;
         std::unique_ptr<I2CRegisterDevice> tca9536_;
         mutable std::mutex mutex_;
+        std::array<MonitoringSnapshot, 5> monitoring_{};
+        std::array<std::array<AlertHistory, 2>, 5> alert_history_{};
 
         std::vector<double> r_shunt_5V = {36e-3, 36e-3, 36e-3, 36e-3, 36e-3}; // Ohm
         std::vector<double> r_shunt_3V3 = {0.3, 0.3, 0.3, 0.3, 0.3}; // Ohm
@@ -128,6 +163,11 @@ namespace I2CMezzDrivers{
         void configureHdMezzAfeBlockUnlocked(uint8_t afeBlock);
         void requireEnabledUnlocked(uint8_t afeBlock) const;
         void requireConfiguredUnlocked(uint8_t afeBlock) const;
+        ConfigurationSnapshot readBlockConfigurationUnlocked(uint8_t afeBlock);
+        MonitoringSnapshot monitoringSnapshotUnlocked(uint8_t afeBlock, uint64_t now) const;
+        void invalidateMonitoringUnlocked(uint8_t afeBlock, MonitorQuality quality, const std::string& detail);
+        uint64_t monitorClockUnlocked() const noexcept;
+        uint16_t readAlertStatusUnlocked(uint8_t afeBlock, size_t rail);
         void probeAfeBlockUnlocked(uint8_t afeBlock);
         void initializeTcaSafeUnlocked(uint8_t afeBlock);
 

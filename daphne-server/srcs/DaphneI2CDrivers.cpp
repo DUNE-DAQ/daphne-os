@@ -172,6 +172,8 @@ void I2CMezzDrivers::HDMezzDriver::enableAfeBlock(uint8_t afeBlock, bool enable)
     if (enable && enabled_afeBlocks[afeBlock]) {
         return;
     }
+    invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable,
+        "Block enable/disable attempted; awaiting a new monitoring sample");
 
     if (enable) {
         // Force unknown/stale output state safe before doing any INA probing.
@@ -185,6 +187,7 @@ void I2CMezzDrivers::HDMezzDriver::enableAfeBlock(uint8_t afeBlock, bool enable)
     initializeTcaSafeUnlocked(afeBlock);
     configured_afeBlocks[afeBlock] = false;
     enabled_afeBlocks[afeBlock] = false;
+    alert_history_[afeBlock] = {}; // Only after successful safe disable.
 }
 
 bool I2CMezzDrivers::HDMezzDriver::isAfeBlockEnabled(uint8_t afeBlock) const {
@@ -212,6 +215,7 @@ void I2CMezzDrivers::HDMezzDriver::setRShunt(uint8_t afeBlock, double rShunt, co
     if(rail == "5V"){
         const auto derived = calculateRailCalibration(
             rShunt, max_current_5V_scale[afeBlock], max_current_5V_shutdown[afeBlock], 5.0);
+        invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Shunt setting update attempted");
         if (enabled_afeBlocks[afeBlock]) {
             setPowerRequestsUnlocked(afeBlock, false, false);
         }
@@ -224,6 +228,7 @@ void I2CMezzDrivers::HDMezzDriver::setRShunt(uint8_t afeBlock, double rShunt, co
     else {
         const auto derived = calculateRailCalibration(
             rShunt, max_current_3V3_scale[afeBlock], max_current_3V3_shutdown[afeBlock], 3.3);
+        invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Shunt setting update attempted");
         if (enabled_afeBlocks[afeBlock]) {
             setPowerRequestsUnlocked(afeBlock, false, false);
         }
@@ -243,6 +248,7 @@ void I2CMezzDrivers::HDMezzDriver::setMaxCurrentScale(uint8_t afeBlock, double m
     if(rail == "5V"){
         const auto derived = calculateRailCalibration(
             r_shunt_5V[afeBlock], maxCurrent, max_current_5V_shutdown[afeBlock], 5.0);
+        invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Current scale update attempted");
         if (enabled_afeBlocks[afeBlock]) {
             setPowerRequestsUnlocked(afeBlock, false, false);
         }
@@ -255,6 +261,7 @@ void I2CMezzDrivers::HDMezzDriver::setMaxCurrentScale(uint8_t afeBlock, double m
     else {
         const auto derived = calculateRailCalibration(
             r_shunt_3V3[afeBlock], maxCurrent, max_current_3V3_shutdown[afeBlock], 3.3);
+        invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Current scale update attempted");
         if (enabled_afeBlocks[afeBlock]) {
             setPowerRequestsUnlocked(afeBlock, false, false);
         }
@@ -274,6 +281,7 @@ void I2CMezzDrivers::HDMezzDriver::setMaxCurrentShutdown(uint8_t afeBlock, doubl
     if(rail == "5V"){
         const auto derived = calculateRailCalibration(
             r_shunt_5V[afeBlock], max_current_5V_scale[afeBlock], maxCurrent, 5.0);
+        invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Current shutdown setting update attempted");
         if (enabled_afeBlocks[afeBlock]) {
             setPowerRequestsUnlocked(afeBlock, false, false);
         }
@@ -286,6 +294,7 @@ void I2CMezzDrivers::HDMezzDriver::setMaxCurrentShutdown(uint8_t afeBlock, doubl
     else {
         const auto derived = calculateRailCalibration(
             r_shunt_3V3[afeBlock], max_current_3V3_scale[afeBlock], maxCurrent, 3.3);
+        invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Current shutdown setting update attempted");
         if (enabled_afeBlocks[afeBlock]) {
             setPowerRequestsUnlocked(afeBlock, false, false);
         }
@@ -362,6 +371,21 @@ I2CMezzDrivers::HDMezzDriver::ConfigurationSnapshot
 I2CMezzDrivers::HDMezzDriver::readBlockConfiguration(uint8_t afeBlock) {
     std::lock_guard<std::mutex> lock(mutex_);
     validateAfeBlock(afeBlock);
+    auto result = readBlockConfigurationUnlocked(afeBlock);
+    if (result.quality != ReadbackQuality::Good) {
+        const auto quality = result.quality == ReadbackQuality::Error ? MonitorQuality::Error :
+            result.quality == ReadbackQuality::Invalid ? MonitorQuality::Invalid : MonitorQuality::Unavailable;
+        invalidateMonitoringUnlocked(afeBlock, quality, "Calibration readback is unavailable or invalid");
+    } else if (result.observedShuntCal != result.requestedShuntCal) {
+        // GOOD raw calibration readback is not GOOD scaled measurement data.
+        // Do not disable monitoring or change the established alert/power policy.
+        invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Invalid, "Observed calibration differs from requested scaling");
+    }
+    return result;
+}
+
+I2CMezzDrivers::HDMezzDriver::ConfigurationSnapshot
+I2CMezzDrivers::HDMezzDriver::readBlockConfigurationUnlocked(uint8_t afeBlock) {
     ConfigurationSnapshot result;
     result.afeBlock = afeBlock;
     result.enabled = enabled_afeBlocks[afeBlock];
@@ -436,6 +460,8 @@ void I2CMezzDrivers::HDMezzDriver::configureHdMezzAfeBlock(uint8_t afeBlock){
 }
 
 void I2CMezzDrivers::HDMezzDriver::configureHdMezzAfeBlockUnlocked(uint8_t afeBlock){
+    invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable,
+        "Block programming attempted; awaiting a new monitoring sample");
     configured_afeBlocks[afeBlock] = false;
 
     initializeTcaSafeUnlocked(afeBlock);
@@ -505,6 +531,9 @@ void I2CMezzDrivers::HDMezzDriver::powerOn_HDMezzAfeBlock(
     std::lock_guard<std::mutex> lock(mutex_);
     validateAfeBlock(afeBlock);
     validateRail(rail);
+    requireEnabledUnlocked(afeBlock);
+    if (powerOn) requireConfiguredUnlocked(afeBlock);
+    invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Rail power request update attempted");
     const auto current = readPowerRequestsUnlocked(afeBlock);
     if (rail == "5V") {
         setPowerRequestsUnlocked(afeBlock, powerOn, current.power3V3);
@@ -563,15 +592,10 @@ bool I2CMezzDrivers::HDMezzDriver::checkAlertStatus(uint8_t afeBlock, const std:
     validateAfeBlock(afeBlock);
     validateRail(rail);
     requireConfiguredUnlocked(afeBlock);
-    const uint8_t address = I2C_drivers_defines::HDMezzAddressMap.at("INA232_" + rail + "_ADDR");
-    const bool alert = readINA232FunctionUnlocked(afeBlock, address, "AFF") != 0;
-    if (alert) {
-        // Reading MASK/ENABLE clears a latched AFF. Remove both software rail
-        // requests immediately so that clearing the latch cannot re-energize
-        // the hardware-gated enable path while the monitor reacts.
-        setPowerRequestsUnlocked(afeBlock, false, false);
-    }
-    return alert;
+    invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable,
+        "Explicit clearing alert read; awaiting a complete monitoring sample");
+    // Records alert evidence before the existing immediate power-request removal.
+    return (readAlertStatusUnlocked(afeBlock, rail == "5V" ? 0 : 1) & 0x0010u) != 0;
 }
 
 void I2CMezzDrivers::HDMezzDriver::selectAfeBlockUnlocked(uint8_t afeBlock){
@@ -752,6 +776,7 @@ void I2CMezzDrivers::HDMezzDriver::setPowerRequestsUnlocked(
     if (power5V || power3V3) {
         requireConfiguredUnlocked(afeBlock);
     }
+    invalidateMonitoringUnlocked(afeBlock, MonitorQuality::Unavailable, "Rail power request update attempted");
 
     const uint8_t outputRegister =
         I2C_drivers_defines::HDMezzAddressMap.at("TCA9536_OUTPUT_PORT_REG");

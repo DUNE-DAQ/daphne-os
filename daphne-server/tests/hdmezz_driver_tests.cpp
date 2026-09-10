@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -45,9 +46,19 @@ struct FakeBusState {
     bool yieldAfterSelect{false};
     unsigned readCalls{0};
     int failReadCall{-1}, shortReadCall{-1};
+    unsigned transferCalls{0};
+    int failTransferCall{-1}; // Includes mux selections, TCA and INA transactions.
+    bool failTcaOutputWrite{false}, throwAfterTcaOutputWrite{false};
+    bool clearAlertOnRead{false};
     std::function<uint16_t(unsigned, uint16_t)> transformRead;
     std::vector<uint64_t> clockValues;
     size_t clockIndex{0};
+    uint64_t fixedClock{0};
+
+    void transferLocked() {
+        if (static_cast<int>(++transferCalls) == failTransferCall)
+            throw std::runtime_error("Injected bus transfer failure");
+    }
 
     FakeBusState() {
         for (std::size_t afe = 0; afe < 5; ++afe) {
@@ -74,6 +85,7 @@ public:
         bool shouldYield = false;
         {
             std::lock_guard<std::mutex> lock(state_->mutex);
+            state_->transferLocked();
             state_->selectedAfe = afe;
             state_->events.push_back(
                 Event{Event::Kind::Select, afe, address_, -1, {data}});
@@ -86,17 +98,23 @@ public:
 
     void writeByte(uint8_t registerAddress, uint8_t data) override {
         std::lock_guard<std::mutex> lock(state_->mutex);
+        state_->transferLocked();
         const uint8_t afe = selectedAfeLocked();
         if (address_ != kTcaAddress) {
             throw std::runtime_error("byte write is only valid for the fake TCA9536");
         }
+        if (registerAddress == 1 && state_->failTcaOutputWrite)
+            throw std::runtime_error("Injected TCA output write failure");
         state_->tca[afe][registerAddress] = data;
         state_->events.push_back(
             Event{Event::Kind::Write, afe, address_, registerAddress, {data}});
+        if (registerAddress == 1 && state_->throwAfterTcaOutputWrite)
+            throw std::runtime_error("Injected uncertain TCA output write result");
     }
 
     void writeBytes(uint8_t registerAddress, const std::vector<uint8_t>& data) override {
         std::lock_guard<std::mutex> lock(state_->mutex);
+        state_->transferLocked();
         const uint8_t afe = selectedAfeLocked();
         if (!isIna() || data.size() != 2) {
             throw std::runtime_error("word write is only valid for a fake INA232");
@@ -114,6 +132,7 @@ public:
 
     void readByte(uint8_t registerAddress, uint8_t& data) override {
         std::lock_guard<std::mutex> lock(state_->mutex);
+        state_->transferLocked();
         const uint8_t afe = selectedAfeLocked();
         if (address_ != kTcaAddress) {
             throw std::runtime_error("byte read is only valid for the fake TCA9536");
@@ -128,6 +147,7 @@ public:
         std::vector<uint8_t>& data,
         std::size_t numBytes) override {
         std::lock_guard<std::mutex> lock(state_->mutex);
+        state_->transferLocked();
         const uint8_t afe = selectedAfeLocked();
         if (!isIna() || numBytes != 2) {
             throw std::runtime_error("word read is only valid for a fake INA232");
@@ -144,6 +164,8 @@ public:
             value ^= 0x0800u;
         }
         if (state_->transformRead) value = state_->transformRead(call, value);
+        if (registerAddress == 0x06 && state_->clearAlertOnRead)
+            inaRegistersLocked(afe)[registerAddress] &= ~0x0018u;
         std::vector<uint8_t> received = {
             static_cast<uint8_t>((value >> 8) & 0xFF),
             static_cast<uint8_t>(value & 0xFF)
@@ -200,6 +222,7 @@ Rig makeRig() {
         "fake-i2c", std::move(factory), [](std::chrono::milliseconds) {}, [state] {
             std::lock_guard<std::mutex> lock(state->mutex);
             if (!state->clockValues.empty()) return state->clockValues.at(state->clockIndex++);
+            if (state->fixedClock) return state->fixedClock;
             return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
         });
@@ -775,6 +798,480 @@ void testConcurrentCalibrationSnapshotsStayWhole() {
             check(log[i].afe == log[start].afe, "another block interleaved inside a snapshot");
 }
 
+using MezzDriver = I2CMezzDrivers::HDMezzDriver;
+using MonitorQuality = MezzDriver::MonitorQuality;
+
+Rig makeMonitorRig(uint8_t afe = 0) {
+    auto rig = makeRig();
+    rig.state->varyDynamicStatusBits = false;
+    rig.state->clearAlertOnRead = true;
+    rig.state->fixedClock = 1'000'000'000ULL;
+    enableAndConfigure(rig, afe);
+    rig.driver->setPowerRequests(afe, true, true);
+    rig.state->ina5V[afe][0x02] = 3125; // 5 V
+    rig.state->ina3V3[afe][0x02] = 2000; // 3.2 V, legacy CE rail
+    rig.state->ina5V[afe][0x04] = 0xFF00; // -256 signed current codes
+    rig.state->ina3V3[afe][0x04] = 1000;
+    rig.state->ina5V[afe][0x03] = 123;
+    rig.state->ina3V3[afe][0x03] = 456;
+    clearEvents(rig.state);
+    return rig;
+}
+
+void checkNoNumericalSample(const MezzDriver::MonitoringSnapshot& sample) {
+    check(sample.quality != MonitorQuality::Good && !sample.activeConfigurationVerified &&
+          !sample.powerRequestsOffConfirmed, "non-GOOD sample retained a valid power/configuration claim");
+    for (const auto& rail : sample.rails)
+        check(std::isnan(rail.voltage) && std::isnan(rail.current) && std::isnan(rail.power) &&
+              !rail.powerRequested, "partial or previous numerical sample was retained");
+}
+
+void checkNoDownstreamWrites(const Rig& rig) {
+    for (const auto& event : events(rig.state))
+        check(event.kind != Event::Kind::Write, "observation/error invented a control write");
+}
+
+void testMonitoringUnavailableAndCacheOnly() {
+    auto rig = makeRig();
+    for (uint8_t afe = 0; afe < 5; ++afe) {
+        const auto initial = rig.driver->monitoringSnapshot(afe);
+        check(initial.quality == MonitorQuality::Unavailable && initial.driverStateAvailable &&
+              !initial.enabled && !initial.configured && initial.afeBlock == afe &&
+              !initial.alerts[0].available && !initial.alerts[1].available &&
+              initial.lastGoodNs == 0 && initial.sampleAttempt == 0,
+              "initial cache invented driver, alert or measurement observations");
+        checkNoNumericalSample(initial);
+        checkNoNumericalSample(rig.driver->pollMonitoring(afe));
+        rig.driver->clearCachedAlerts(afe);
+    }
+    for (uint8_t afe : {5, 255}) {
+        expectThrows([&] { rig.driver->pollMonitoring(afe); }, "poll accepted invalid block");
+        expectThrows([&] { rig.driver->monitoringSnapshot(afe); }, "cache accepted invalid block");
+        expectThrows([&] { rig.driver->clearCachedAlerts(afe); }, "clear accepted invalid block");
+    }
+    check(events(rig.state).empty(), "disabled/invalid/cache-only operations accessed bus");
+    rig.driver->enableAfeBlock(0, true);
+    clearEvents(rig.state);
+    const auto unconfigured = rig.driver->pollMonitoring(0);
+    check(unconfigured.enabled && !unconfigured.configured && unconfigured.sampleAttempt == 0,
+          "unconfigured block attempted measurement");
+    checkNoNumericalSample(unconfigured);
+    check(events(rig.state).empty(), "unconfigured monitor accessed bus");
+}
+
+void testMonitoringWholeSampleUnitsAndPresence() {
+    auto rig = makeMonitorRig(3);
+    auto sample = rig.driver->pollMonitoring(3);
+    check(sample.quality == MonitorQuality::Good && sample.afeBlock == 3 &&
+          sample.enabled && sample.configured && sample.driverStateAvailable &&
+          sample.activeConfigurationVerified && sample.sampleAttempt == 1 &&
+          sample.lastGoodNs == sample.observedNs && sample.observedNs >= sample.acquisitionStartedNs &&
+          sample.acquisitionStartedNs != 0 && sample.stateObservedNs == sample.observedNs,
+          "complete snapshot metadata missing");
+    checkNear(sample.rails[0].voltage, 5.0, 1e-12, "5V voltage units");
+    checkNear(sample.rails[1].voltage, 3.2, 1e-12, "CE voltage units");
+    checkNear(sample.rails[0].current, -256 * rig.driver->getCurrentLsb(3, "5V") * 1000, 1e-12,
+              "signed current / mA units");
+    checkNear(sample.rails[1].current, 1000 * rig.driver->getCurrentLsb(3, "3V3") * 1000, 1e-12,
+              "positive current / mA units");
+    checkNear(sample.rails[0].power, 123 * 32 * rig.driver->getCurrentLsb(3, "5V") * 1000, 1e-12,
+              "5V power / mW units");
+    checkNear(sample.rails[1].power, 456 * 32 * rig.driver->getCurrentLsb(3, "3V3") * 1000, 1e-12,
+              "CE power / mW units");
+    check(sample.rails[0].powerRequested && sample.rails[1].powerRequested &&
+          !sample.protectiveActionAttempted && !sample.powerRequestsOffConfirmed,
+          "TCA output request readback mismatch");
+    for (const auto& alert : sample.alerts)
+        check(alert.available && !alert.latched && alert.maskEnableRaw == 0x8001 &&
+              alert.observedNs == sample.observedNs, "fresh alert history missing");
+    const auto log = events(rig.state);
+    check(log.size() == 54, "complete poll must contain 27 mux-selected reads");
+    verifyEachTransferFollowsSelection(log);
+    checkNoDownstreamWrites(rig);
+    clearEvents(rig.state);
+    sample.rails[0].voltage = -999; // Returned snapshot cannot mutate the stored generation.
+    ++rig.state->fixedClock;
+    for (int i = 0; i < 20; ++i) {
+        const auto cached = rig.driver->monitoringSnapshot(3);
+        check(cached.quality == MonitorQuality::Good && cached.sampleAttempt == 1 &&
+              cached.stateObservedNs == rig.state->fixedClock && cached.observedNs == sample.observedNs,
+              "cache read refreshed hardware time or lost the snapshot");
+        checkNear(cached.rails[0].voltage, 5, 1e-12, "cache alias");
+    }
+    check(events(rig.state).empty(), "cache read touched clearing status or other hardware");
+    rig.driver->setPowerRequests(3, false, false);
+    for (auto* registers : {&rig.state->ina5V[3], &rig.state->ina3V3[3]})
+        for (int reg : {2, 3, 4}) (*registers)[reg] = 0;
+    sample = rig.driver->pollMonitoring(3);
+    check(sample.quality == MonitorQuality::Good && sample.powerRequestsOffConfirmed,
+          "valid zero/false observations treated as missing");
+    for (const auto& rail : sample.rails)
+        check(rail.voltage == 0 && rail.current == 0 && rail.power == 0 && !rail.powerRequested,
+              "zero/false conversion wrong");
+}
+
+void testEveryMonitoringTransferFailureAndRecovery() {
+    // Includes both config fences, six measurements, clearing status and final TCA read.
+    for (bool shortRead : {false, true}) {
+        const int count = shortRead ? 24 : 54;
+        for (int fail = 1; fail <= count; ++fail) {
+            auto rig = makeMonitorRig();
+            const auto good = rig.driver->pollMonitoring(0);
+            check(good.quality == MonitorQuality::Good, "fixture incomplete");
+            clearEvents(rig.state);
+            rig.state->readCalls = rig.state->transferCalls = 0;
+            if (shortRead) rig.state->shortReadCall = fail;
+            else rig.state->failTransferCall = fail;
+            const auto bad = rig.driver->pollMonitoring(0);
+            check(bad.quality == MonitorQuality::Error && bad.observedNs == 0 &&
+                  bad.sampleAttempt == 2 && bad.lastGoodNs == good.observedNs &&
+                  bad.configured && bad.enabled, "failed poll published partial/old GOOD or disabled protection polling");
+            checkNoNumericalSample(bad);
+            checkNoNumericalSample(rig.driver->monitoringSnapshot(0));
+            checkNoDownstreamWrites(rig);
+            check((rig.state->tca[0][1] & 3u) == 3u, "bus failure invented a new trip policy");
+            rig.state->failTransferCall = rig.state->shortReadCall = -1;
+            const auto recovered = rig.driver->pollMonitoring(0);
+            check(recovered.quality == MonitorQuality::Good && recovered.sampleAttempt == 3,
+                  "complete subsequent poll did not recover");
+        }
+    }
+}
+
+void testMonitoringConfigurationFences() {
+    // Every bit of identity/configuration/calibration/limit changes on either rail.
+    for (bool secondRail : {false, true}) {
+        for (int reg : {0x3E, 0, 5, 7}) {
+            for (unsigned bit = 0; bit < 16; ++bit) {
+                auto rig = makeMonitorRig();
+                auto& registers = secondRail ? rig.state->ina3V3[0] : rig.state->ina5V[0];
+                registers[reg] ^= 1u << bit;
+                const auto invalid = rig.driver->pollMonitoring(0);
+                check(invalid.quality == MonitorQuality::Invalid && invalid.configured,
+                      "mismatched readback permitted scaled data or disabled protective poll");
+                checkNoNumericalSample(invalid);
+                checkNoDownstreamWrites(rig);
+            }
+        }
+    }
+    for (unsigned bit = 0; bit < 4; ++bit) {
+        auto rig = makeMonitorRig();
+        rig.state->tca[0][3] ^= 1u << bit;
+        check(rig.driver->pollMonitoring(0).quality == MonitorQuality::Invalid,
+              "wrong TCA directions admitted");
+        checkNoDownstreamWrites(rig);
+    }
+    for (unsigned changedCall : {15u, 16u, 17u, 18u, 19u, 20u, 21u, 22u}) {
+        auto rig = makeMonitorRig();
+        rig.state->readCalls = 0;
+        rig.state->transformRead = [changedCall](unsigned call, uint16_t value) {
+            return static_cast<uint16_t>(call == changedCall ? value ^ 1u : value);
+        };
+        check(rig.driver->pollMonitoring(0).quality == MonitorQuality::Invalid,
+              "changed late fence admitted");
+        checkNoDownstreamWrites(rig);
+    }
+}
+
+void testMonitoringMaskAndErrorFlags() {
+    for (bool secondRail : {false, true}) {
+        for (unsigned bit = 0; bit < 16; ++bit) {
+            if (bit == 3 || bit == 4) continue; // CVRF and AFF are valid dynamic flags.
+            auto rig = makeMonitorRig();
+            (secondRail ? rig.state->ina3V3[0] : rig.state->ina5V[0])[6] ^= 1u << bit;
+            check(rig.driver->pollMonitoring(0).quality == MonitorQuality::Invalid,
+                  "wrong mask/control/reserved or MemError/OVF admitted");
+            checkNoDownstreamWrites(rig);
+        }
+    }
+    auto rig = makeMonitorRig();
+    rig.state->ina5V[0][6] |= 8; rig.state->ina3V3[0][6] |= 8;
+    check(rig.driver->pollMonitoring(0).quality == MonitorQuality::Good,
+          "conversion-ready flag treated as measurement invalid");
+    checkNoDownstreamWrites(rig);
+}
+
+void testMonitoringClockAndStaleness() {
+    for (const auto& times : std::vector<std::vector<uint64_t>>{
+            {0, 110, 120, 130}, {100, 0, 120, 130}, {100, 110, 0, 130},
+            {100, 90, 120, 130}, {100, 120, 110, 130}, {100, 110, 140, 130},
+            {100, 110, 120, 99}, {100, 110, 120, 0},
+            {100, 110, 120, 100 + MezzDriver::kMaxMonitorAcquisitionNs + 1}, {100}}) {
+        auto rig = makeMonitorRig();
+        rig.state->clockValues = times;
+        const auto invalid = rig.driver->pollMonitoring(0);
+        check(invalid.quality == MonitorQuality::Invalid && invalid.observedNs == 0,
+              "invalid, missing, thrown or excessive clock accepted");
+        checkNoNumericalSample(invalid);
+        checkNoDownstreamWrites(rig);
+    }
+    auto rig = makeMonitorRig();
+    rig.state->clockValues = {100, 110, 120, 100 + MezzDriver::kMaxMonitorAcquisitionNs};
+    const auto good = rig.driver->pollMonitoring(0);
+    check(good.quality == MonitorQuality::Good, "inclusive acquisition boundary rejected");
+    rig.state->clockValues.clear();
+    rig.state->fixedClock = good.observedNs + MezzDriver::kMaxMonitorAgeNs;
+    clearEvents(rig.state);
+    check(rig.driver->monitoringSnapshot(0).quality == MonitorQuality::Good,
+          "inclusive freshness boundary rejected");
+    ++rig.state->fixedClock;
+    const auto stale = rig.driver->monitoringSnapshot(0);
+    check(stale.quality == MonitorQuality::Stale && stale.observedNs == good.observedNs &&
+          stale.lastGoodNs == good.observedNs && stale.alerts[0].observedNs == 110 &&
+          stale.alerts[1].observedNs == 120, "staleness erased or refreshed historical timestamps");
+    checkNoNumericalSample(stale);
+    rig.state->fixedClock = good.observedNs - 1;
+    check(rig.driver->monitoringSnapshot(0).quality == MonitorQuality::Invalid,
+          "backward snapshot clock admitted");
+    rig.state->clockValues = {0}; rig.state->clockIndex = 0;
+    check(rig.driver->monitoringSnapshot(0).quality == MonitorQuality::Invalid,
+          "missing snapshot clock admitted");
+    check(events(rig.state).empty(), "freshness checks touched hardware");
+}
+
+void testMonitoringAlertRetentionAndExplicitClear() {
+    auto rig = makeMonitorRig();
+    rig.state->ina5V[0][6] |= 0x10u;
+    const auto tripped = rig.driver->pollMonitoring(0);
+    check(tripped.quality == MonitorQuality::Good && tripped.alerts[0].latched &&
+          !tripped.alerts[1].latched && tripped.protectiveActionAttempted &&
+          tripped.powerRequestsOffConfirmed && !tripped.rails[0].powerRequested &&
+          !tripped.rails[1].powerRequested, "fresh AFF did not retain evidence and remove both requests");
+    check((rig.state->ina5V[0][6] & 0x10u) == 0, "fixture did not clear hardware AFF on read");
+    clearEvents(rig.state);
+    ++rig.state->fixedClock;
+    const auto retained = rig.driver->pollMonitoring(0);
+    check(retained.quality == MonitorQuality::Unavailable && retained.alerts[0].latched &&
+          retained.alerts[0].observedNs == tripped.alerts[0].observedNs &&
+          retained.alerts[0].maskEnableRaw == tripped.alerts[0].maskEnableRaw &&
+          retained.alerts[1].observedNs > tripped.alerts[1].observedNs,
+          "retained latch was cleared or advertised as fresh status");
+    checkNoNumericalSample(retained);
+    for (const auto& event : events(rig.state))
+        check(!(event.kind == Event::Kind::Read && event.address == kIna5VAddress && event.registerAddress == 6),
+              "latched rail status was re-read contrary to existing policy");
+    // Invalid measurement configuration must not be downgraded to merely retained history.
+    rig.state->ina5V[0][5] ^= 1;
+    check(rig.driver->pollMonitoring(0).quality == MonitorQuality::Invalid,
+          "retained alert hid invalid calibration");
+    rig.state->ina5V[0][5] ^= 1;
+    clearEvents(rig.state);
+    rig.driver->clearCachedAlerts(0);
+    const auto cleared = rig.driver->monitoringSnapshot(0);
+    check(!cleared.alerts[0].available && !cleared.alerts[1].available,
+          "explicit software clear retained history");
+    checkNoNumericalSample(cleared);
+    check(events(rig.state).empty(), "software clear read hardware or re-enabled requests");
+    const auto recovered = rig.driver->pollMonitoring(0);
+    check(recovered.quality == MonitorQuality::Good && !recovered.alerts[0].latched &&
+          recovered.powerRequestsOffConfirmed, "post-clear sample failed or re-energized a rail");
+}
+
+void testMonitoringAlertSurvivesProtectiveFailure() {
+    for (bool uncertainWrite : {false, true}) {
+        auto rig = makeMonitorRig();
+        rig.state->ina5V[0][6] |= 0x10u;
+        rig.state->ina3V3[0][6] |= 0x10u;
+        rig.state->failTcaOutputWrite = !uncertainWrite;
+        rig.state->throwAfterTcaOutputWrite = uncertainWrite;
+        const auto failed = rig.driver->pollMonitoring(0);
+        check(failed.quality == MonitorQuality::Error && failed.alerts[0].latched &&
+              failed.alerts[1].latched && failed.protectiveActionAttempted &&
+              failed.alerts[0].available && failed.alerts[1].available,
+              "failed power removal erased an alert or prevented the other rail's alert read");
+        checkNoNumericalSample(failed);
+        check((rig.state->ina5V[0][6] & 0x10u) == 0 && (rig.state->ina3V3[0][6] & 0x10u) == 0,
+              "test did not consume clearing hardware alerts");
+        rig.state->failTcaOutputWrite = rig.state->throwAfterTcaOutputWrite = false;
+        const auto retry = rig.driver->pollMonitoring(0);
+        check(retry.alerts[0].latched && retry.alerts[1].latched && retry.protectiveActionAttempted &&
+              (rig.state->tca[0][1] & 3u) == 0, "retained latch failed to retry request removal");
+    }
+    auto rig = makeMonitorRig();
+    rig.state->ina5V[0][6] |= 0x10u;
+    rig.state->failTcaOutputWrite = true;
+    expectThrows([&] { rig.driver->checkAlertStatus(0, "5V"); }, "explicit alert read hid failed removal");
+    const auto retained = rig.driver->monitoringSnapshot(0);
+    check(retained.alerts[0].latched && retained.alerts[0].maskEnableRaw == 0x8011,
+          "explicit clearing read lost evidence on write failure");
+    expectThrows([&] { rig.driver->enableAfeBlock(0, false); }, "disable ignored failed safe-off");
+    check(rig.driver->monitoringSnapshot(0).alerts[0].latched,
+          "failed disable cleared alert history");
+    rig.state->failTcaOutputWrite = false;
+    rig.driver->enableAfeBlock(0, false);
+    const auto disabled = rig.driver->monitoringSnapshot(0);
+    check(!disabled.enabled && !disabled.configured && !disabled.alerts[0].available,
+          "successful disable failed to clear history");
+    checkNoNumericalSample(disabled);
+}
+
+void testMonitoringFailuresDoNotSuppressProtectivePoll() {
+    // Earlier measurement and first-rail status failures must not hide the CE alert.
+    for (int failCall : {1, 10, 15, 23}) {
+        auto rig = makeMonitorRig();
+        rig.state->ina3V3[0][6] |= 0x10;
+        rig.state->readCalls = 0; rig.state->failReadCall = failCall;
+        const auto failed = rig.driver->pollMonitoring(0);
+        check(failed.quality == MonitorQuality::Error && failed.alerts[1].latched &&
+              failed.protectiveActionAttempted && (rig.state->tca[0][1] & 3u) == 0,
+              "failed acquisition suppressed existing protective alert service");
+        checkNoNumericalSample(failed);
+    }
+    auto rig = makeMonitorRig();
+    rig.state->clockValues = {0, 0, 0, 0};
+    rig.state->ina5V[0][6] |= 0x10;
+    const auto badTime = rig.driver->pollMonitoring(0);
+    check(badTime.quality == MonitorQuality::Invalid && badTime.alerts[0].latched &&
+          (rig.state->tca[0][1] & 3u) == 0, "missing timestamps suppressed protective power removal");
+}
+
+void testMonitoringControlInvalidationAndFailures() {
+    const std::vector<std::function<void(MezzDriver&)>> controls = {
+        [](auto& d) { d.enableAfeBlock(0, false); },
+        [](auto& d) { d.configureHdMezzAfeBlock(0); },
+        [](auto& d) { d.configureHdMezzAfeBlock(0, {0.036, 0.3, 0.2, 0.2, 0.1, 0.04}); },
+        [](auto& d) { d.setPowerRequests(0, false, false); },
+        [](auto& d) { d.powerOn_HDMezzAfeBlock(0, false, "5V"); },
+        [](auto& d) { d.powerOn_HDMezzAfeBlock(0, false, "3V3"); },
+        [](auto& d) { d.setRShunt(0, 0.040, "5V"); },
+        [](auto& d) { d.setRShunt(0, 0.28, "3V3"); },
+        [](auto& d) { d.setMaxCurrentScale(0, 0.21, "5V"); },
+        [](auto& d) { d.setMaxCurrentScale(0, 0.21, "3V3"); },
+        [](auto& d) { d.setMaxCurrentShutdown(0, 0.11, "5V"); },
+        [](auto& d) { d.setMaxCurrentShutdown(0, 0.04, "3V3"); },
+        [](auto& d) { d.checkAlertStatus(0, "5V"); }
+    };
+    for (const auto& control : controls) {
+        for (bool fail : {false, true}) {
+            auto rig = makeMonitorRig();
+            const auto good = rig.driver->pollMonitoring(0);
+            rig.state->transferCalls = 0;
+            if (fail) rig.state->failTransferCall = 1;
+            if (fail) expectThrows([&] { control(*rig.driver); }, "control ignored injected bus failure");
+            else control(*rig.driver);
+            const auto invalidated = rig.driver->monitoringSnapshot(0);
+            checkNoNumericalSample(invalidated);
+            check(invalidated.lastGoodNs == good.observedNs && invalidated.sampleAttempt == 1 &&
+                  invalidated.observedNs == 0, "control erased history or left old sample time current");
+        }
+    }
+    auto rig = makeMonitorRig();
+    const auto good = rig.driver->pollMonitoring(0);
+    clearEvents(rig.state);
+    rig.driver->enableAfeBlock(0, true); // Idempotent no-op preserves the snapshot.
+    expectThrows([&] { rig.driver->setRShunt(0, -1, "5V"); }, "invalid shunt accepted");
+    expectThrows([&] { rig.driver->setMaxCurrentScale(0, -1, "5V"); }, "invalid scale accepted");
+    expectThrows([&] { rig.driver->setMaxCurrentShutdown(0, -1, "3V3"); }, "invalid threshold accepted");
+    expectThrows([&] { rig.driver->setPowerRequests(9, false, false); }, "invalid block accepted");
+    expectThrows([&] { rig.driver->powerOn_HDMezzAfeBlock(0, true, "unknown"); }, "invalid rail accepted");
+    expectThrows([&] { rig.driver->configureHdMezzAfeBlock(0, {-1, 0.3, 0.2, 0.2, 0.1, 0.04}); },
+                 "invalid aggregate accepted");
+    check(rig.driver->monitoringSnapshot(0).quality == MonitorQuality::Good &&
+          rig.driver->monitoringSnapshot(0).sampleAttempt == good.sampleAttempt && events(rig.state).empty(),
+          "rejected input or no-op invalidated sample or accessed bus");
+}
+
+void testMonitoringCalibrationReadbackInvalidation() {
+    for (int failure = 0; failure <= 3; ++failure) {
+        auto rig = makeMonitorRig();
+        rig.driver->pollMonitoring(0);
+        rig.state->readCalls = 0;
+        if (failure == 1) rig.state->ina5V[0][5] ^= 1;
+        if (failure == 2) rig.state->failReadCall = 1;
+        if (failure == 3) rig.state->ina3V3[0][0x3E] ^= 1;
+        clearEvents(rig.state);
+        const auto actual = rig.driver->readBlockConfiguration(0);
+        const auto cached = rig.driver->monitoringSnapshot(0);
+        if (!failure) check(cached.quality == MonitorQuality::Good, "matching calibration invalidated cache");
+        else checkNoNumericalSample(cached);
+        if (failure == 1)
+            check(actual.quality == MezzDriver::ReadbackQuality::Good &&
+                  actual.observedShuntCal != actual.requestedShuntCal && cached.quality == MonitorQuality::Invalid,
+                  "GOOD raw mismatch masqueraded as valid scaled monitoring data");
+        check(cached.configured && (rig.state->tca[0][1] & 3u) == 3u,
+              "calibration observation changed protective monitoring selection or power");
+        verifyCalibrationReadOnly(events(rig.state));
+    }
+}
+
+void testMonitoringConcurrentWholeCyclesAndControls() {
+    auto rig = makeMonitorRig();
+    enableAndConfigure(rig, 1);
+    rig.state->ina5V[1][2] = 1000;
+    rig.state->ina3V3[1][2] = 500;
+    rig.state->yieldAfterSelect = true;
+    clearEvents(rig.state);
+    std::atomic<bool> coherent{true};
+    const auto poll = [&](uint8_t afe, double first, double second) {
+        try {
+            for (int n = 0; n < 80; ++n) {
+                const auto sample = rig.driver->pollMonitoring(afe);
+                if (sample.quality != MonitorQuality::Good || sample.afeBlock != afe ||
+                    sample.rails[0].voltage != first || sample.rails[1].voltage != second ||
+                    sample.sampleAttempt != static_cast<uint64_t>(n + 1)) coherent = false;
+            }
+        } catch (...) { coherent = false; }
+    };
+    std::thread first(poll, 0, 5.0, 3.2), second(poll, 1, 1.6, 0.8);
+    std::thread reader([&] {
+        for (int n = 0; n < 160; ++n) {
+            for (uint8_t afe : {0, 1}) {
+                const auto sample = rig.driver->monitoringSnapshot(afe);
+                if (sample.quality == MonitorQuality::Good &&
+                    (sample.rails[0].voltage != (afe ? 1.6 : 5.0) ||
+                     sample.rails[1].voltage != (afe ? 0.8 : 3.2))) coherent = false;
+            }
+        }
+    });
+    first.join(); second.join(); reader.join();
+    check(coherent, "concurrent cache/poll mixed blocks or partial sample generations");
+    const auto log = events(rig.state);
+    check(log.size() == 160 * 54, "unexpected concurrent bus traffic");
+    verifyEachTransferFollowsSelection(log);
+    for (size_t start = 0; start < log.size(); start += 54)
+        for (size_t i = start; i < start + 54; ++i)
+            check(log[i].afe == log[start].afe, "another poll interleaved within one cycle");
+
+    // Hold one acquisition mid-cycle; a waiting control must invalidate AFTER publication.
+    std::mutex barrierMutex;
+    std::condition_variable cv;
+    bool paused = false, release = false;
+    rig.state->readCalls = 0;
+    rig.state->transformRead = [&](unsigned call, uint16_t value) {
+        if (call == 1) {
+            std::unique_lock<std::mutex> lock(barrierMutex);
+            paused = true; cv.notify_all();
+            cv.wait(lock, [&] { return release; });
+        }
+        return value;
+    };
+    std::thread acquisition([&] { rig.driver->pollMonitoring(0); });
+    {
+        std::unique_lock<std::mutex> lock(barrierMutex);
+        cv.wait(lock, [&] { return paused; });
+    }
+    std::atomic<bool> controlStarted{false}, controlCompleted{false};
+    std::thread control([&] {
+        controlStarted = true;
+        rig.driver->setPowerRequests(0, false, false);
+        controlCompleted = true;
+    });
+    while (!controlStarted) std::this_thread::yield();
+    const bool completedEarly = controlCompleted;
+    {
+        std::lock_guard<std::mutex> lock(barrierMutex);
+        release = true; cv.notify_all();
+    }
+    acquisition.join(); control.join();
+    check(!completedEarly && controlCompleted, "control escaped the whole-cycle driver lock");
+    checkNoNumericalSample(rig.driver->monitoringSnapshot(0));
+    check(rig.driver->monitoringSnapshot(1).quality == MonitorQuality::Good,
+          "control for one block invalidated another block's sample");
+    rig.state->transformRead = {};
+    check(rig.driver->pollMonitoring(0).powerRequestsOffConfirmed,
+          "post-control cycle did not observe requests off");
+}
+
 }  // namespace
 
 int main() {
@@ -799,6 +1296,18 @@ int main() {
     run("calibration identity/stability/reserved-bit rejection", testCalibrationIdentityStabilityAndReservedBit);
     run("calibration acquisition timing boundaries", testCalibrationAcquisitionTiming);
     run("concurrent calibration snapshots are whole", testConcurrentCalibrationSnapshotsStayWhole);
+    run("monitor unavailable states and cache-only access", testMonitoringUnavailableAndCacheOnly);
+    run("monitor whole sample, units and valid zero/false", testMonitoringWholeSampleUnitsAndPresence);
+    run("all monitor transfer failures, short reads and recovery", testEveryMonitoringTransferFailureAndRecovery);
+    run("monitor configuration/calibration/limit/identity fences", testMonitoringConfigurationFences);
+    run("monitor mask configuration and memory/overflow flags", testMonitoringMaskAndErrorFlags);
+    run("monitor clock validity and stale-cache boundaries", testMonitoringClockAndStaleness);
+    run("monitor retained alert timestamps and explicit clear", testMonitoringAlertRetentionAndExplicitClear);
+    run("monitor alerts survive failed and uncertain protective writes", testMonitoringAlertSurvivesProtectiveFailure);
+    run("monitor failures do not suppress protective alert polling", testMonitoringFailuresDoNotSuppressProtectivePoll);
+    run("monitor invalidation before controls, including failures", testMonitoringControlInvalidationAndFailures);
+    run("monitor invalidation on inconsistent calibration readback", testMonitoringCalibrationReadbackInvalidation);
+    run("monitor concurrent whole cycles, cache readers and controls", testMonitoringConcurrentWholeCyclesAndControls);
 
     if (failures != 0) {
         std::cerr << failures << " HD mezzanine test(s) failed\n";
