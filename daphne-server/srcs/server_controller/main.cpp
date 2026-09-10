@@ -13,6 +13,7 @@
 #include "CLI/CLI.hpp"
 #include "Daphne.hpp"
 #include "server_controller/devmem_mmio.hpp"
+#include "server_controller/board_identity.hpp"
 #include "server_controller/gateware.hpp"
 #include "server_controller/handlers.hpp"
 #include "server_controller/monitoring.hpp"
@@ -28,6 +29,8 @@ int main(int argc, char* argv[]) {
   bool no_mezzanines = false;
   int monitor_period_ms = 200;
   daphne_sc::TemperatureAlarmPolicy temperature_policy;
+  std::string identity_file;
+  std::shared_ptr<const daphne_sc::LoadedBoardIdentity> board_identity;
 
   daphne_sc::RouterServerOptions server_opts;
 
@@ -43,6 +46,9 @@ int main(int argc, char* argv[]) {
       ->envname("DAPHNE_NO_MEZZANINES");
   app.add_option("--monitor-period-ms", monitor_period_ms, "Monitoring period in milliseconds")
       ->default_val(monitor_period_ms);
+  app.add_option("--identity-file", identity_file,
+                 "Private binary identity assignments; monitoring only, never apply network/analog settings")
+      ->envname("DAPHNE_IDENTITY_FILE");
   app.add_option("--temperature-warning-c", temperature_policy.warning_c,
                  "Provisional warning threshold in Celsius; monitoring only")
       ->default_val(temperature_policy.warning_c)->envname("DAPHNE_TEMP_WARNING_C");
@@ -73,6 +79,8 @@ int main(int argc, char* argv[]) {
   std::optional<uint32_t> expected_gateware_build_id;
   try {
     daphne_sc::validate_temperature_alarm_policy(temperature_policy);
+    if (!identity_file.empty()) board_identity = std::make_shared<const daphne_sc::LoadedBoardIdentity>(
+        daphne_sc::load_identity_artifact(identity_file));
     gateware_mode = daphne_sc::parse_gateware_mode(gateware_mode_value);
     if (!expected_gateware_build_id_value.empty()) {
       expected_gateware_build_id =
@@ -142,7 +150,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Monitoring period: " << monitor_period_ms << " ms\n";
   }
 
-  const auto handlers = daphne_sc::make_v2_handlers(gateware_mode, full_stream_mmio, identity, temperature_policy);
+  const auto handlers = daphne_sc::make_v2_handlers(gateware_mode, full_stream_mmio, identity, temperature_policy, board_identity);
   daphne_sc::run_router_server(context, bind_endpoint, daphne, handlers, server_opts);
 
   for (auto& t : monitor_threads) {

@@ -2155,7 +2155,8 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     GatewareMode mode,
     std::shared_ptr<Mmio32> full_stream_mmio,
     std::optional<GatewareIdentity> admitted_identity,
-    TemperatureAlarmPolicy temperature_policy) {
+    TemperatureAlarmPolicy temperature_policy,
+    std::shared_ptr<const LoadedBoardIdentity> board_identity) {
   using daphne::MessageTypeV2;
   validate_temperature_alarm_policy(temperature_policy);
 
@@ -2274,7 +2275,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     out = serialize_or_empty(resp);
   };
 
-  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode, admitted_identity, temperature_policy](const std::string& in, std::string& out, Daphne& d) {
+  handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode, admitted_identity, temperature_policy, board_identity](const std::string& in, std::string& out, Daphne& d) {
     daphne::ReadSystemStatusRequest req;
     daphne::SystemStatusSnapshot resp;
     add_register_capabilities(resp, mode);
@@ -2282,6 +2283,10 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
       if (!req.ParseFromString(in)) throw std::invalid_argument("Bad ReadSystemStatusRequest payload");
       if (req.level() != 0 || req.include_i2c_scan() || req.include_xmutil())
         throw std::invalid_argument("Only level=0 without I2C scans or xmutil probes is supported");
+      const auto network = board_identity ? read_management_network(board_identity->artifact.binding()) :
+          daphne::ManagementNetworkObservation{};
+      *resp.mutable_board_identity() = make_board_identity_status(
+          board_identity.get(), network, req.include_identity_details(), monotonic_time_ns());
       ReadOnlyMmio identity_mmio(kGatewareIdentityMagicAddress, 16);
       const auto identity = probe_gateware_identity(identity_mmio);
       try {

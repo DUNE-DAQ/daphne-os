@@ -84,5 +84,9 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("SFPDiagnostics", true,
       "Opt-in ReadSystemStatus.include_sfp_diagnostics: six schematic routes on PL I2C 9c000000, mux 0x72, A0/A2 EEPROM only. "
       "Checksums, calibration/status and mux restoration; no TX/module-control/reset writes. Failed I2C is not evidence of absence or a wiring diagnosis");
+  add("DatabaseIdentityAssignments", true,
+      "Optional private startup artifact supplies source-referenced assignments, not FPGA readback. "
+      "Management controller/MAC/IPv4 are compared with a protected host baseline; private values require include_identity_details. "
+      "No implicit network/analog writes, physical-link inference or assignment authentication");
 }
 }

@@ -138,7 +138,20 @@ add_library(daphne_configuration
 )
 target_include_directories(daphne_configuration PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
 target_link_libraries(daphne_configuration PUBLIC daphne_proto daphne_gateware)
+add_library(daphne_identity
+  srcs/server_controller/board_identity.cpp
+  srcs/server_controller/board_identity_linux.cpp
+)
+target_include_directories(daphne_identity PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_link_libraries(daphne_identity PUBLIC daphne_configuration)
 if(BUILD_TESTING)
+  add_executable(identity_probe tests/identity_probe.cpp)
+  target_link_libraries(identity_probe PRIVATE daphne_identity)
+  # Opt-in local network read only; not an automatic hardware test.
+  add_executable(board_identity_tests tests/board_identity_tests.cpp)
+  target_link_libraries(board_identity_tests PRIVATE daphne_identity)
+  add_test(NAME board_identity_unit COMMAND board_identity_tests)
+  set_tests_properties(board_identity_unit PROPERTIES LABELS unit)
   add_executable(current_mux_tests tests/current_mux_tests.cpp)
   target_link_libraries(current_mux_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME current_mux_unit COMMAND current_mux_tests)
@@ -331,6 +344,7 @@ target_link_libraries(daphneServer PRIVATE
   daphne_proto
   daphne_telemetry_protocol
   daphne_configuration
+  daphne_identity
   cppzmq
   ${DAPHNE_ZMQ_TARGET}
   CLI11::CLI11
