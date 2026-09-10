@@ -1,7 +1,7 @@
 # Server build and protobuf identity
 
-Candidate **eecff61**, native-software qualified, **not deployed**. DAPHNE-015
-still runs **bffea24** with self-trigger firmware **3f17f1b / ABI 2.0**.
+Server **eecff61**, deployed and live-qualified on DAPHNE-015 with unchanged
+self-trigger firmware **3f17f1b / ABI 2.0**.
 Implementation `4a20887`; independent client/tests `eecff61`.
 
 ## What it reports
@@ -47,7 +47,7 @@ fixtures confirm that source edits and new commits refresh the compiled result.
 Run `software_build_probe` on the matching architecture: it prints only compiled
 metadata as protobuf hex in JSON and does not initialize the runtime or hardware.
 
-After a separately qualified candidate installation, with matching Python
+With the deployed server, matching Python
 bindings and an approved SSH forward:
 
 ```bash
@@ -62,10 +62,10 @@ Default: two software-only bookkeeping requests, exact source/schema comparison,
 same process/boot, advancing heartbeat and clean-source requirement. Optional
 `--include-system-status` adds ordinary hardware-status collection and compares
 both metadata paths. No identity-details opt-in, setters or service changes.
-This client deliberately rejects the currently deployed bffea24's missing field.
+This client deliberately rejects the historical bffea24's missing field.
 Fingerprint checks are not authentication; retain approved transport controls.
 
-## Qualification
+## Standalone native qualification before deployment
 
 - Clean detached source: `eecff616ea6841732e9422c7af6afaa2b06c4ce9`;
   server tree `90192962c5a293bc885b72cec90f45a27236d285`.
@@ -93,8 +93,41 @@ dependency path; the first ARM build had a build-machine RUNPATH. Corrected
 clean builds and final ELF inspection preceded native qualification. The first
 Ninja fixture lacked Ninja; a task-local tool supplied it for the passing run.
 
-Still pending: guarded installation, actual candidate RPC/full zero-BIAS
-regression, complete runtime packaging, image pin and ONL-home handoff. Versions
-for the other services, a semantic schema compatibility policy, newer routed
+## Live qualification and handoff
+
+Only the stopped server binary was replaced. The normal runtime restart reloaded
+the same installed firmware. Both 153-exchange aggregate runs passed, bracketing
+bookkeeping maintenance: both AFE orders, all five alignments and all 40 channels.
+All 48 bookkeeping replies retained matching metadata, including 32 during
+Configure; heartbeat progressed, invalid requests were rejected before writes,
+and direct-write invalidation/canonical-hash restoration passed.
+
+The independent three-exchange build client passed through both RPC paths.
+Six further suites passed: v0.5 (17 exchanges), ADC (93; 80 CRC acquisitions),
+SFP (5), regulators (7), FPGA health (4) and identity/link status (5).
+Final FE is offset 2200/x1, trim 0, VGAIN 1700, BIAS/BIASCTRL zero; generator
+enable 1 and current selectors 0/0 were checked after full Configure.
+Protected/private files, firmware and dependencies match. Server PID 28860,
+instance `35692266d8f84438b0a9471ae5db3ce8`, zero automatic restarts.
+Root remains writable with 23,592,960 bytes available; no cleanup/resizing.
+Health remains **11 PASS / 1 external-timing FAIL / 3 UNKNOWN**, not overall OK.
+
+The first staging attempt lacked permission to create its new /run directory;
+it failed before service changes. A supplemental metadata-check wrapper used a
+C++ serialization method name in Python and failed on its initial read, before
+Configure. Both were corrected without changing the server or weakening guards;
+failed records are retained. Previous executable remains in RAM at
+`/run/daphne-candidate-eecff61/previous-server`.
+
+Live evidence: `software-build.zd1nH7Oj/live-abi20.sL5T0IL6`; qualification SHA-256
+`e59f9d2696e7196fd6e791c25bbc1d5a6e58f4a9b0441138e40d08e12df84d7b`.
+The complete runtime passes native packaged-library loader/CLI smoke, actual
+staging and **126 packaging tests**. Image pin `3052e65` names eecff61; its
+0/1/2 minor capabilities do not qualify newer firmware or an image.
+The owner-only ONL handoff is `daphne015-server-runtime-eecff61`; see
+[contents, source filtering and checksums](qualified-server-runtime.md).
+
+Other service versions, semantic schema compatibility policy, newer routed
 firmware, full-stream/image qualification and the broader
-[hardware/database gaps](server-v05-completion-plan.md) remain open.
+[hardware/database gaps](server-v05-completion-plan.md) remain open. Cooper's
+latest connection attempt timed out at the FNAL bridge; no synthesis job started.

@@ -1,6 +1,44 @@
 # Qualified server runtime
 
-Current server: **bffea24**, deployed on DAPHNE-015 with full live self-trigger
+Current server: **eecff61**, deployed with full self-trigger ABI 2.0 regression;
+see [server/schema identity qualification](software-build-verification.md).
+
+On `np04-onl-004`:
+
+```bash
+cd "$HOME/daphne015-server-runtime-eecff61"
+sha256sum --check --strict SHA256SUMS
+```
+
+Owner-only directory, **22 payload files** plus the checksum manifest. Runtime
+archive SHA-256:
+`a0d8f6cc6fdda60b46e2dedf7bc95eb1d565a9a8e82b7a5d343f24a65f48bbea`.
+Handoff `SHA256SUMS` digest:
+`e41bc5087db7d4fb4688fbb89dd95d1d1d7b449f8766e5540d2b9a2dc0d41def`.
+The bundle supplies the exact server/Hermes/private libraries, matching Python
+bindings, native/live/busy-Configure evidence and privacy-filtered source exports.
+No private network/identity/service/FE configuration or new OS/firmware image.
+
+Server source base **eecff61**, OS integration base **3052e65** (pin and tests).
+File-by-file source audit: 1,197 / 1,363 unchanged regular files, 19 / 22 redacted
+text files, one omitted serialized request per export; all 13 changed Python/
+shell examples per export pass syntax checks. Production server/build and .proto
+files are unchanged. These modified exports exclude uncommitted work and are
+not exact Git snapshots or a general secret-audit guarantee. Rebuilding without
+Git leaves compiled source revision unavailable, not falsely labelled canonical.
+Read `README.md`, source metadata and both redaction manifests before reuse.
+
+Verified: 28 host/28 actual ARM suites, 162 Python tests per binding, live metadata
+through both RPC paths and 32 observations during Configure, full zero-BIAS/
+all-channel and six-suite regression. Native packaged-library loader/CLI smoke,
+actual staging and **126 packaging tests** pass. The image pin names eecff61;
+ABI 0/1/2 minor support is not routed-firmware/full-stream/image qualification.
+Firmware remains 3f17f1b; CERN settings are unchanged. Final health is still
+11 PASS / 1 external-timing FAIL / 3 UNKNOWN. Earlier handoffs are retained.
+
+## Previous handoff: bffea24
+
+Previous server: **bffea24**, deployed on DAPHNE-015 with full live self-trigger
 ABI 2.0 regression; see [management-link qualification](management-link-verification.md).
 The matching image pin and complete userspace runtime retain ABI 0/1/2 minor
 capabilities, without claiming newer firmware or image qualification.
