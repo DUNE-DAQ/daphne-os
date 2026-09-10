@@ -45,6 +45,7 @@ int main() {
             auto result = read_timing_status(mmio);
             require(result.ready() == (control == 4 && locks == 3 && fsm == 8 && valid && !reset));
             require(result.endpoint_control_raw() == mmio.words[2]);
+            require(result.has_endpoint_address() && result.endpoint_address() == 0x1234);
             require(result.fsm_state() == fsm);
             require(result.observation_quality() == daphne::MEASUREMENT_GOOD);
             require(result.live_timestamp_quality() == daphne::MEASUREMENT_UNAVAILABLE);

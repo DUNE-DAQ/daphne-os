@@ -20,6 +20,7 @@ daphne::EndpointStatus read_timing_status(Mmio32& mmio) {
     status.set_endpoint_clock_control_raw(words[0]);
     status.set_endpoint_clock_status_raw(words[1]);
     status.set_endpoint_control_raw(words[2]);
+    status.set_endpoint_address(words[2] & 0xffff);
     status.set_endpoint_status_raw(words[3]);
     status.set_endpoint_clock_selected((words[0] & 4) != 0);
     status.set_mmcm0_reset((words[0] & 1) != 0);

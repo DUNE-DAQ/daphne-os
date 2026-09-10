@@ -184,6 +184,7 @@ message ReadSystemStatusRequest {
   bool   include_xmutil          = 3; // may run xmutil/listapps on the target
   bool   include_sfp_diagnostics = 4; // may touch SFP mux/I2C pages
   bool   include_ps_values       = 5; // include generic PS-exposed values
+  bool   include_identity_details = 6; // Explicit opt-in to private assignment/network values.
 }
 
 message StatusValue {
@@ -364,6 +365,115 @@ message EndpointStatus {
   MeasurementQuality live_timestamp_quality = 19;
   uint64 observed_host_unix_ns              = 20; // unverified host wall clock
   uint64 observed_monotonic_ns              = 21;
+  optional uint32 endpoint_address          = 22; // ep_ctrl_reg[15:0], observed control value, NOT a DB assignment.
+}
+
+// Identity assignments are database/configuration evidence, NEVER hardware
+// readback, authorization credentials, or implicit instructions to configure
+// network/clock/analog hardware. Missing values retain explicit wire presence.
+message IdentitySourceFile {
+  string file = 1;
+  string sha256 = 2;
+  uint64 bytes = 3;
+}
+message IdentityValueSource {
+  string file = 1;
+  string sha256 = 2;
+  string object_class = 3;
+  string object_id = 4;
+  string attribute = 5;
+}
+message AssignedIdentityNumber {
+  optional uint32 value = 1;
+  IdentityValueSource source = 2;
+  string unavailable_reason = 3;
+}
+message AssignedIdentityText {
+  optional string value = 1;
+  IdentityValueSource source = 2;
+  string unavailable_reason = 3;
+}
+message AssignedIdentityAddresses {
+  repeated string values = 1;
+  IdentityValueSource source = 2;
+  string unavailable_reason = 3;
+}
+message HermesIdentityAssignment {
+  string connection_object_id = 1;
+  string sender_object_id = 2;
+  string interface_object_id = 3;
+  repeated string stream_object_ids = 4;
+  repeated string geo_object_ids = 5;
+  AssignedIdentityText control_host = 6;
+  AssignedIdentityText mac_address = 7;
+  AssignedIdentityAddresses ip_addresses = 8;
+  // No mapping is inferred from stream IDs or connector/interface names.
+  AssignedIdentityNumber hermes_link_id = 9;
+  AssignedIdentityText physical_connector = 10;
+}
+message DatabaseIdentityAssignments {
+  string application_object_id = 1;
+  string board_object_id = 2;
+  repeated IdentitySourceFile sources = 3;
+  string source_revision_sha256 = 4; // Hash of canonical source manifest, not a signature.
+  AssignedIdentityNumber crate_id = 5;
+  AssignedIdentityNumber slot_id = 6;
+  AssignedIdentityNumber detector_id = 7;
+  AssignedIdentityNumber timing_endpoint_address = 8;
+  AssignedIdentityText management_address = 9; // Literal assigned hostname/IP, never silently DNS-rewritten.
+  AssignedIdentityText management_mac_address = 10;
+  repeated HermesIdentityAssignment hermes_interfaces = 11;
+  repeated string limitations = 12;
+}
+message ManagementIdentityBinding {
+  string interface_name = 1;
+  string controller_node = 2;
+  string expected_mac_address = 3;
+  repeated string expected_ipv4_cidrs = 4;
+  // Existing protected host configuration baseline, NOT database assignments.
+  IdentitySourceFile approved_link_file = 5;
+  IdentitySourceFile approved_network_file = 6;
+}
+message BoardIdentityAssignmentFile {
+  uint32 format_version = 1;
+  DatabaseIdentityAssignments assignments = 2;
+  ManagementIdentityBinding binding = 3;
+}
+enum IdentityBindingState {
+  IDENTITY_BINDING_UNAVAILABLE = 0;
+  IDENTITY_BINDING_MATCH = 1;
+  IDENTITY_BINDING_MISMATCH = 2;
+  IDENTITY_BINDING_ERROR = 3;
+}
+message ManagementNetworkObservation {
+  MeasurementQuality quality = 1;
+  string message = 2;
+  string interface_name = 3;
+  optional bool present = 4;
+  optional string mac_address = 5;
+  repeated string ipv4_cidrs = 6;
+  optional uint32 interface_index = 7;
+  optional uint32 flags_raw = 8;
+  optional bool interface_up = 9;
+  optional bool running_flag = 10; // Linux IFF_RUNNING, not an end-to-end link-health claim.
+  string controller_node = 11;
+  uint64 acquisition_started_monotonic_ns = 12;
+  uint64 observed_monotonic_ns = 13;
+  uint64 observed_host_unix_ns = 14; // Host clock, not verified UTC.
+}
+message BoardIdentityStatus {
+  bool assignment_configured = 1;
+  string assignment_artifact_sha256 = 2;
+  string source_revision_sha256 = 3;
+  IdentityBindingState binding_state = 4;
+  string message = 5;
+  bool details_included = 6;
+  // Fields 7..9 only with include_identity_details. Opt-in is NOT authentication;
+  // use the approved access-controlled transport for private protocol data.
+  DatabaseIdentityAssignments assignments = 7;
+  ManagementIdentityBinding binding = 8;
+  ManagementNetworkObservation management = 9;
+  uint64 observed_monotonic_ns = 10;
 }
 
 message GatewareIdentityStatus {
@@ -416,6 +526,7 @@ message SystemStatusSnapshot {
   repeated ServiceStatus services = 21;
   string server_instance_id = 22; // systemd InvocationID, only when MainPID is this process; NOT authentication
   ServerState server_state = 23;
+  BoardIdentityStatus board_identity = 24;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }
