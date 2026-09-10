@@ -3,6 +3,9 @@
 Source implementation only. No new image, FPGA application or network settings
 have been installed on DAPHNE-015.
 
+Source revisions: firmware build binding `a5f93a2`, staging fixes through
+`0281c82`; OS staging/refresh `c08eb05`.
+
 Previously, staging wrote `identity_abi_minor=0` and changed only the runtime
 profile's app name. That would incorrectly label a new ABI 2.1 payload and make
 the live admission check reject it.
