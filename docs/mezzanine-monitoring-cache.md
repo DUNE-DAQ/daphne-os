@@ -1,5 +1,9 @@
 # Mezzanine monitoring cache: driver step
 
+Historical driver-step evidence follows. Subsequent [candidate 79f6e5d](mezzanine-status-verification.md)
+connects this cache to the monitor/RPC/client and passes actual ARM fixtures; it
+is still not deployed. The counts and boundaries below remain specific to 6514092.
+
 Source **6514092** adds the cache to `HDMezzDriver`. **Not deployed and not yet
 connected to the background monitor/status RPC/client.** DAPHNE-015, the image
 pin and the ONL runtime remain **fb82e0a**. No mezzanines are fitted.
@@ -76,13 +80,11 @@ cmake --build "$BUILD_DIR" --target hdmezz_driver_tests
 ctest --test-dir "$BUILD_DIR" -R '^hdmezz_driver_unit$' --output-on-failure
 ```
 
-## Next small commit
+## Follow-up integration
 
-Wire background polling and status/clear handlers to this cache; remove the
-independent atomics. Add compatible response quality/time/presence metadata and
-client validation/rendering that never displays unavailable defaults as measured
-zero. Keep alert history separate from current sample validity. Then qualify
-the combined candidate, including native ARM fixtures and no-mezzanine live
-responses, before any server-only deployment. Populated-hardware/metrology and
-the remaining firmware/database requirements remain open. Workbook I203/I204
-and I207–I214 are still **partial**, not closed by an internal helper.
+Server 97831dc and client 79f6e5d now connect this driver, remove independent
+atomics and add compatible quality/time/presence and client validation. Combined
+native fixtures pass; live no-mezzanine responses/regression and deployment remain
+pending. I207–I214 are now source-implemented by that integration, not by the
+original internal helper alone. I203/I204, populated-hardware/metrology and the
+remaining firmware/database requirements remain open.

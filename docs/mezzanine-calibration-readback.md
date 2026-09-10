@@ -100,16 +100,14 @@ installed old server, this new readback is not available.
 
 ## Next gate
 
-The subsequent [driver cache step, 6514092](mezzanine-monitoring-cache.md), adds
-coherent acquisition/invalidation and retained alert evidence. It is not yet
-wired to status RPCs or deployed; the native evidence above covers **de420e0 only**.
+The subsequent [driver cache step, 6514092](mezzanine-monitoring-cache.md), and
+[integrated candidate 79f6e5d](mezzanine-status-verification.md) now replace the
+independent atomics with a quality/timed snapshot and retained alert history.
+Calibration mismatch invalidates scaled monitoring without altering raw readback
+or inventing a shutdown policy. Combined native fixtures and client tests pass;
+the historical native evidence above still covers **de420e0 only**.
 
-Replace the independent measurement atomics with one quality/timed cache;
-invalidate failed, stale, disabled and unconfigured samples while retaining
-alert evidence and the existing protective behavior. Fresh calibration mismatch
-must not be mistaken for proof that cached current scaling remains valid.
-I203/I204 remain partial: the new flags are process bookkeeping, not a complete
-qualified block/protection-state observation. Finish that work and its client
-tests before the next server-only deployment. Populated-hardware readback,
-metrology, firmware/full-stream and the remaining register/database requirements
-remain open. Current deployment and bundle pins are intentionally unchanged.
+Live candidate responses/regression and deployment/runtime/ONL qualification
+remain pending. I203/I204 still do not prove complete physical block/protection
+state. Populated-hardware readback/metrology, firmware/full-stream and remaining
+register/database requirements stay open. Current deployment and pins are unchanged.

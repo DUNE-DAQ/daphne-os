@@ -5,12 +5,10 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Source snapshot: **6514092**, adding a coherent mezzanine driver cache, not
-yet wired to the status RPC/client or deployed. See the [driver step and
-qualification boundary](mezzanine-monitoring-cache.md). Its predecessor
-de420e0 passes 34 host/34 actual ARM suites and 222 Python tests per binding;
-that [calibration proof](mezzanine-calibration-readback.md) does not qualify the
-new driver code on actual ARM hardware.
+Source snapshot: **79f6e5d**, connecting the coherent mezzanine cache to the
+background monitor, status/clear RPCs and client. **34 host/34 actual ARM suites
+and 240 Python tests per binding pass.** It is not deployed or live-RPC qualified;
+no mezzanines are fitted. See [candidate scope and evidence](mezzanine-status-verification.md).
 
 Installed server: **fb82e0a**, correcting Configure's implicit
 SC-enable write. 33 host/33 actual ARM suites, 216 Python tests per binding and
@@ -24,8 +22,8 @@ completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
-| Implemented | 92 | Concrete producer/export provides the observation within its stated scope |
-| Partial | 92 | Related code exists, but semantics, readback, quality, completeness or retained reporting are missing |
+| Implemented | 100 | Concrete producer/export provides the observation within its stated scope |
+| Partial | 84 | Related code exists, but semantics, readback, quality, completeness or retained reporting are missing |
 | Missing | 54 | No corresponding server observation; a schema field/internal helper is not enough |
 | Contract pending | 13 | Authority, authenticated identity, lease/safety or boot-recovery policy must be established |
 
@@ -54,17 +52,18 @@ calibration or overall FPGA-health qualification is inferred.
   probes and full live RPC regression pass. Runtime/native loader and image pin
   and 35-file ONL handoff/five exported clients pass. See
   [verification and scope](afe-reset-health-verification.md).
-- **I207–I214, mezzanine samples:** independent cached atomics have no coherent
-  quality/time; monitor exceptions can leave old values visible. No mezzanines
-  are fitted on this bench, so physical qualification remains unavailable.
-  Driver cache 6514092 is tested separately; monitor/RPC/client wiring is pending.
+- **I207–I214, mezzanine samples:** candidate 79f6e5d uses one quality/timed
+  snapshot, explicit value presence and independent alert history. Failed/stale
+  polls cannot return old numbers as valid, and failed protective writes do not
+  erase the observed alert. Native/wire/CLI tests pass; live candidate RPC,
+  actual Qt event-loop and fitted-hardware/metrology qualification remain open.
 - **I225/I226, mezzanine calibration:** candidate de420e0 replaces the RPC's
   cached-code substitution with identity-bracketed stable register-0x05 readback,
   quality/times and separate requested codes. Native failure/mismatch/concurrency
   and protocol tests pass. It is not deployed or qualified on fitted hardware.
-- **I203/I204, mezzanine state:** new response flags expose software access
-  selection and last programming result. They remain partial, not proof of
-  physical presence or fresh protection-configuration validity.
+- **I203/I204, mezzanine state:** coherent software flags/time and a GOOD cycle's
+  checked configuration words are now reported. They remain partial, not proof
+  of physical population, mux state or complete physical protection/DPS validity.
 - **I029–I040, command audit:** the existing record covers Configure, not every
   accepted/rejected mutation. ZMQ routing identity is not authentication.
 - **I249–I257, fans, and I159–I173, I2C inventory:** schema/internal helpers exist,
@@ -90,11 +89,10 @@ The producer backlog remains:
    deployed 4e74f10, full regression, runtime/native loader, image pin and ONL
    clients pass. Physical transitions and full-stream remain separate gaps;
    proceed with the missing producers below without changing SC policy.
-2. Wire **mezzanine cache quality/time** from driver step 6514092 into the monitor,
-   RPC and client while preserving alert evidence and existing protective behavior.
-   Calibration provenance is native-tested in de420e0, not yet deployed. Qualify
-   the combined source before deployment; physical readback/metrology needs
-   populated hardware.
+2. **Mezzanine cache/monitor/RPC/client integration is native-tested** in 79f6e5d.
+   Next qualify live no-mezzanine responses and full SC-preserving server-only
+   regression, then package the exact runtime/client for ONL. Physical readback,
+   protection and metrology need populated hardware; no deployment/pin advance yet.
 3. Add **read-only fan command/raw tach** observations after checking the exact
    deployed RTL and board wiring. RPM, presence and stall claims need validated
    pulse/scaling/population and an approved minimum-speed policy; no PWM writes.

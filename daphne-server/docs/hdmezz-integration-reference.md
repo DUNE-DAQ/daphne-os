@@ -2,7 +2,10 @@
 
 ## Purpose and scope
 
-This document defines the implemented HD mezzanine communication contract in `daphneZMQ`. It is intended for another application that must control or monitor the HD mezzanine through `daphneServer` without depending on the existing Python UI.
+This document describes the daphne-os server contract inherited from `daphneZMQ`.
+The current candidate **79f6e5d** adds qualified cache responses; it is native-tested,
+not deployed. See [current verification and limits](../../docs/mezzanine-status-verification.md).
+Historical populated-bench results below do not describe DAPHNE-015, which has no mezzanines fitted.
 
 It covers:
 
@@ -116,7 +119,9 @@ bit 0 = requested 5V state
 bit 1 = requested CE state
 ```
 
-The API reports requested GPIO state, not an independent proof that electrical power is present. Use measured voltage to determine whether a rail is electrically active.
+The API reports TCA output requests, not proof that electrical power is present.
+Voltage is a separate observation and must have GOOD quality before use; physical
+rail/protection conclusions also require validated hardware and measurement paths.
 
 A request to turn either rail on is rejected unless the block is both enabled and configured. Requests that turn both rails off are allowed for an enabled block even when it is not configured.
 
@@ -139,9 +144,9 @@ Important transitions:
 - enabling never turns rails on;
 - configuration always turns both rail requests off first;
 - configuration must be repeated before power-on after a disable/re-enable cycle;
-- failed configuration leaves the block unconfigured and both requests off;
+- failed configuration leaves the block unconfigured; failed bus access can leave physical/request state uncertain;
 - failed transactional configuration restores the previous software configuration values;
-- reading a detected INA232 alert immediately removes both rail requests.
+- reading a detected INA232 alert immediately attempts removal of both rail requests; the alert is retained even if that operation fails.
 
 ## INA232 configuration
 
@@ -214,7 +219,11 @@ Current is explicitly decoded as signed 16-bit. Small negative current readings 
 
 `readHDMezzStatus` returns values cached by the monitoring thread; it does not perform a synchronous hardware read. Monitoring is enabled by default with a 200 ms period and can be changed using the server's `--monitor-period-ms` option. Applications should allow at least one or two monitor periods after a state change before evaluating telemetry.
 
-The current status response contains no timestamp or stale-data flag. A consuming application should timestamp receipt locally and treat repeated RPC failures as stale telemetry.
+Candidate 79f6e5d adds sample quality, monotonic acquisition/cache times, last-good
+time and attempt count. GOOD requires a complete checked cycle within 100 ms and
+cache age at most five seconds. Missing/failed/invalid/stale measurements are absent,
+not zero. Alert history remains separate and its hardware-read time is not refreshed
+by cache queries. The client also bounds transit age and expires its displayed sample.
 
 ## ZeroMQ transport
 
@@ -321,7 +330,9 @@ max_current_3V3_shutdown # CE
 
 Units are ohms and amperes. Configuration is transactional at the driver boundary: both candidate rail configurations are validated before I2C mutation; hardware is forced safe-off; both INA232 devices are programmed and verified; software configuration is committed only on success. On failure, previous software values are restored and the block remains unconfigured.
 
-Configuration always clears both rail requests. The client must explicitly request power again after a successful configuration.
+Successful configuration verifies both TCA rail requests off. Failed transfers
+can leave hardware state uncertain. The client must explicitly request power
+again after a successful configuration.
 
 ### Read configuration
 
@@ -329,7 +340,13 @@ The response returns configured input values plus:
 
 - derived maximum power in W;
 - current LSB in A/LSB;
-- integer INA232 shunt calibration value.
+- requested calibration codes, distinct from identity-bracketed actual register-0x05 readback;
+- calibration readback quality/time and requested-settings availability.
+
+Actual codes require GOOD readback quality. A GOOD raw pair can differ from the
+requested codes; that mismatch invalidates scaled monitoring, not the raw readback.
+The other configuration values are requested/derived software settings, not
+independent proof of physical protection or calibration.
 
 The legacy `*3V3` response fields describe CE.
 
@@ -359,11 +376,17 @@ The response contains:
 - measured power in mW;
 - latched server alert flags for 5V and CE.
 
-Because the values are cached, a successful response means the server returned its state; it does not by itself prove that the most recent monitor pass succeeded.
+With the candidate schema, success means a GOOD complete, fresh checked snapshot.
+Fields 4..11 are optional and present only then. Alert fields 12/13 are optional
+historical latches, paired with `alert_history_5V/3V3`, and may remain present on
+failure. Original field numbers/types are unchanged. Use `check_monitoring_status`
+to validate provenance; an old server/schema is legacy-unqualified, not GOOD.
 
 ### Clear alert flags
 
-This command clears the server's cached alert booleans. It does not override the driver's safety behavior and must not be used to re-enable power automatically. If the hardware condition persists, monitoring may latch the alert again.
+This command clears the driver's software alert history and invalidates the
+measurement cache. It reads no hardware and never re-enables power. If the
+hardware condition persists, monitoring may latch the alert again.
 
 ## Required operating sequence
 
@@ -401,6 +424,7 @@ import time
 import zmq
 from srcs.protobuf import daphneV3_high_level_confs_pb2 as high
 from srcs.protobuf import daphneV3_low_level_confs_pb2 as low
+from scripts.hdmezz_status import check_monitoring_status
 
 ctx = zmq.Context.instance()
 sock = ctx.socket(zmq.DEALER)
@@ -408,7 +432,7 @@ sock.setsockopt(zmq.IDENTITY, b"my-hdmezz-controller")
 sock.setsockopt(zmq.LINGER, 0)
 sock.setsockopt(zmq.SNDTIMEO, 5000)
 sock.setsockopt(zmq.RCVTIMEO, 5000)
-sock.connect("tcp://193.206.157.36:9876")
+sock.connect("tcp://127.0.0.1:19876") # Operator-provided SSH forward.
 
 next_msg_id = time.time_ns() & ((1 << 63) - 1)
 request = low.cmd_readHDMezzStatus(id=0, afeBlock=4)
@@ -423,20 +447,25 @@ envelope = high.ControlEnvelopeV2(
     route="mezz/0",
     timestamp_ns=time.time_ns(),
 )
+started = time.monotonic_ns()
 sock.send(envelope.SerializeToString())
 
 reply_envelope = high.ControlEnvelopeV2()
 reply_envelope.ParseFromString(sock.recv())
+elapsed = time.monotonic_ns() - started
+assert reply_envelope.version == 2 and reply_envelope.dir == high.DIR_RESPONSE
 assert reply_envelope.type == high.MT2_READ_HDMEZZ_STATUS_RESP
-assert not reply_envelope.correl_id or reply_envelope.correl_id == envelope.msg_id
+assert reply_envelope.correl_id == envelope.msg_id and not reply_envelope.transport_error
 
 reply = low.cmd_readHDMezzStatus_response()
 reply.ParseFromString(reply_envelope.payload)
-if not reply.success:
-    raise RuntimeError(reply.message)
-
-print("5V", reply.measured_voltage5V, "V")
-print("CE", reply.measured_voltage3V3, "V")
+report = check_monitoring_status(reply, low, expected_afe=4, roundtrip_ns=elapsed)
+if report["available"]:
+    print("5V", report["values"]["measured_voltage5V"], "V")
+    print("CE", report["values"]["measured_voltage3V3"], "V")
+else:
+    print("Measurements unavailable:", report["quality"])
+print("Historical alerts:", report["alerts"])
 ```
 
 A production implementation should check protobuf parse success, envelope version/direction, response type, correlation ID, command success, and timeouts on every request.
@@ -447,10 +476,10 @@ Enable and configure AFE 4:
 
 ```bash
 python client/hdmezz_control_v2.py set-block-enable \
-  --ip 193.206.157.36 --port 9876 --afe 4 --enable 1
+  --ip 127.0.0.1 --port 9876 --afe 4 --enable 1
 
 python client/hdmezz_control_v2.py configure-block \
-  --ip 193.206.157.36 --port 9876 --afe 4 \
+  --ip 127.0.0.1 --port 9876 --afe 4 \
   --max-current-ce-shutdown 0.05
 ```
 
@@ -458,7 +487,7 @@ Set both requests off:
 
 ```bash
 python client/hdmezz_control_v2.py set-power-states \
-  --ip 193.206.157.36 --port 9876 --afe 4 \
+  --ip 127.0.0.1 --port 9876 --afe 4 \
   --power-5v 0 --power-ce 0
 ```
 
@@ -466,7 +495,7 @@ Read status:
 
 ```bash
 python client/hdmezz_control_v2.py read-status \
-  --ip 193.206.157.36 --port 9876 --afe 4
+  --ip 127.0.0.1 --port 9876 --afe 4
 ```
 
 The old CLI names containing `3v3` remain aliases, but new applications should use CE terminology.
@@ -488,21 +517,23 @@ An application should handle these cases explicitly:
 | Condition | Expected behavior |
 |---|---|
 | Block index outside `0..4` | Request fails |
-| HD driver initialization failed | Request fails with driver unavailable |
-| Enable probe/identity mismatch | Block remains disabled, rails off |
+| HD driver initialization failed | Status is unavailable; no fabricated measurements/driver flags |
+| Enable probe/identity mismatch | Selection remains disabled; verified request-off initialization preceded the probe |
 | Configure before enable | Request fails |
 | Power-on before configuration | Request fails |
 | Invalid configuration | No I2C mutation; request fails |
-| INA/TCA write-readback mismatch | Rails remain off; block unconfigured |
-| Alert observed | Both rail requests removed; alert cached |
-| Monitoring I2C error | Error logged; other blocks continue |
+| INA/TCA write-readback mismatch | Operation fails; measurement cache invalidated; request/physical state may be uncertain |
+| Alert observed | Both requests are commanded off; history survives failed removal; no physical-off claim |
+| Monitoring I2C error | Error quality; no old/partial measurements; independent alert service and other blocks continue |
 | Client timeout | State is uncertain; read status/config before retrying |
 
 For a timed-out mutating request, do not blindly toggle the opposite state. Reconnect if necessary, read status/configuration, and reconcile from observed server state.
 
-## Validation status
+## Historical populated-bench validation
 
-Completed validation includes:
+The original daphneZMQ validation reported the following. It is not the current
+DAPHNE-015 qualification; use the [candidate report](../../docs/mezzanine-status-verification.md)
+for exact commits, tests and outstanding live gates.
 
 - dependency-injected fake I2C bus unit tests;
 - mux encoding and select-before-transfer ordering;
@@ -536,7 +567,7 @@ Pending validation:
 - controlled over-current/alert injection;
 - long-duration multi-block soak testing;
 - automated Linux syscall-level test of the raw `I2C_RDWR` transport;
-- stale-telemetry indication and reconnect handling at the UI/application layer.
+- actual GUI event-loop/visual qualification and deployment; candidate cache/CLI and GUI logic tests now cover stale and unavailable values.
 
 ## Read-only hardware smoke test
 
