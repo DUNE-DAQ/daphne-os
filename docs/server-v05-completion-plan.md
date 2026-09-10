@@ -35,6 +35,12 @@ Evidence found so far:
   placement records plus a Hermes network-interface assignment. No timing
   endpoint assignment was found there yet. Separate VST JSON files inspected
   identify board 61, not 15; do not apply their settings to DAPHNE-015.
+- [Hardware-database identity import](hardware-database-identity-import.md),
+  commit `0c9d1b7`, fills timing/MAC assignments from an explicitly selected,
+  hash-pinned authorized v1 export that matches the preserved network baseline.
+  All 137 Python tests and synthetic native C++ artifact checks pass. The tool
+  is saved on ONL; no approved DAPHNE-015 export or new assignment is installed.
+  The matching CERN release schema itself has no such board attributes.
 - [ADC and SFP schematic details](server-remaining-hardware-evidence.md): U6
   has five differential DA/DB pairs, not the legacy default ten single-ended
   selections. All six SFP I2C routes are drawn; the installed-board wiring caveat

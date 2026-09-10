@@ -5,7 +5,7 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `3556811`, including
+Current DAPHNE-015 server: `3f636f4`, with [native/live regression and handoff](protocol-error-server-verification.md), including
 [live host-resource observations](host-resource-verification.md),
 [onboard regulator telemetry](onboard-regulator-verification.md),
 [sampled FPGA health evidence](server-fpga-health.md),
@@ -65,7 +65,7 @@ preserved history. Relevant prior work:
 | I058/I059/I061, legacy identity offsets | Explicit unsupported crate/slot/detector readback; expose common ABI identity instead | Do not read self-trigger controls under old identity names |
 | Database-assigned placement and network identity | Private startup artifact supplies explicit crate/slot/detector, management address and one Hermes MAC/IP assignment with source hashes; separate live management controller/MAC/IPv4 comparison | Deployed and live-tested; assignments are not FPGA readback. Timing/management-MAC assignment and physical Hermes mapping remain unavailable, not guessed |
 | Timing endpoint address | Optional `EndpointStatus.endpoint_address` from actual control-register bits 15:0, including explicit zero | Observed control value, not an approved timing assignment or readiness guarantee |
-| I277/I281 (Timing Interface tab), decoder/error counter | Explicit unsupported capabilities with reasons | No connected decoder or working PS error export. Separate firmware source branches now have tested passive RX error-event/counter components, but production counter binding, coherent PS readout and qualification remain pending; see server-v05-completion-plan.md |
+| I277/I281 (Timing Interface tab), decoder/error counter | Explicit unsupported capabilities on live ABI 2.0 | ABI 2.2 parser-history binding, coherent PS export and matching server/client are source-tested; actual firmware synthesis/routing and live readout remain pending. No command decoder or optical 0x76 bridge is claimed; see protocol-error-server-verification.md |
 | Low-level AFE writes | Reject narrowing and readback mismatch; return the board AFE index | Readback does not prove analog signal-chain behavior |
 | Low-level AFE register read | Fresh SPI read with explicit hardware-readback flag and monotonic acquisition time, not the command cache | SPI reads themselves require controller writes; they are opt-in in the read-only QA client |
 | Python counter client | Timeout/failure gives a nonzero exit and no fabricated zero-counter table | Unit-tested against a silent local TCP listener |
@@ -123,6 +123,12 @@ remain unqualified. See that report for the final offset and zero-bias settings.
 
 ## Protocol compatibility
 
+The [hardware-database identity importer](hardware-database-identity-import.md)
+now prepares timing/MAC assignments from an explicitly selected, hash-pinned,
+authorized v1 export. It does not change network settings or fill absent source
+values with guesses. DAPHNE-015 still needs an approved export; only synthetic
+artifact compatibility is qualified for those two added assignments.
+
 `53b6566` intentionally changes zero-BIAS semantics without changing the wire
 schema: a present AFE entry with zero/default `v_bias` now sends code zero,
 instead of retaining the previous code. No BIAS command is planned for an
@@ -167,10 +173,9 @@ ctest --test-dir build/server-host-tests --output-on-failure -L unit
 python3 -m unittest discover -s tests/petalinux
 ```
 
-Six C++ test executables cover telemetry, configuration/AFE protocol, counter
-reads, timing, gateware mode and HD mezzanine driver logic. Timing tests include
-2,048 combinations. The PetaLinux suite has 79 tests. Hardware tests are not
-enabled by these commands.
+The current suite has 26 hardware-free C++ executables; the PetaLinux tooling
+suite has 122 tests. Earlier six-suite results below retain their historical
+scope. Hardware tests are not enabled by these commands.
 
 See the wiki's [server/client build guide](https://github.com/DUNE-DAQ/daphne-os/wiki/Building-daphne-server-and-clients)
 for the ARM64 cross-build and Python environment. Build and install are separate:

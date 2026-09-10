@@ -33,6 +33,10 @@ contents. `SystemStatus.success` does not imply a matching identity binding.
 
 ## Prepare the private artifact
 
+Follow-up `0c9d1b7` adds an optional [hardware-database import](hardware-database-identity-import.md)
+for approved timing and management-MAC assignments. It reuses the existing wire
+format and preserves the network baseline; no new real assignment is installed.
+
 First use [the review extractor](oks-identity-review.md) on ONL. Preserve the
 same three input files and copies of the already approved `10-ff0b.link` and
 `20-ff0b.network`; do not edit or apply them. In a Python environment with the
