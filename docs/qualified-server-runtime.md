@@ -55,19 +55,27 @@ Evidence hashes are not authenticated signatures.
 
 The updated handoff directory is `daphne015-server-runtime-3556811` in the
 operator's home on `np04-onl-004`, owner-only. It contains the archive, metadata,
-checksums, packaging/native-check scripts, native smoke result and clean source
-snapshots. Read its `README.md` and `SOURCE-METADATA.txt` before reuse.
+checksums, packaging/native-check scripts, native smoke result and privacy-filtered
+source exports. Read its `README.md`, `SOURCE-METADATA.txt` and per-export
+redaction manifests before reuse.
 
-The exact server-source snapshot is from `3556811`. The newer OS integration
-snapshot includes the matching image contract and documentation, plus the
-probe-only TextFormat fix `b4e50b8`; that test change does not relabel the
-deployed binary's build source. Both snapshots exclude unrelated uncommitted work.
-Neither includes the external build toolchain or Git database.
+The server-source export starts from `3556811`. The newer OS integration export
+includes the matching image contract and documentation, plus the probe-only
+TextFormat fix `b4e50b8`. Known private MAC/IPv4 literals in legacy client examples,
+remote scripts and documentation are replaced with explicit placeholders; the
+serialized seed request is omitted. Production server/build sources are unchanged.
+These are **modified source exports**, not byte-identical Git snapshots or a
+relabeling of the deployed binary's build source. Manifests retain original and
+exported hashes for each changed/omitted file. Uncommitted user work, the external
+toolchain and Git database are excluded. The check targets known board address
+literals, not all possible secrets.
 
 The previous `daphne015-server-runtime-13bc725` handoff is retained unchanged.
 Its runtime SHA-256 is
 `a09d74ccaa9c0a3ce00818b93e73f7f7b7e2bd51d975610bcd3cd03a15613e1a`;
-it supplies the previous server but lacks host-resource observations.
+it supplies the previous server but lacks host-resource observations. Its older
+source snapshot was not privacy-filtered; do not redistribute that snapshot
+as address-free. The runtime tarball and source snapshot are separate artifacts.
 The current image contract intentionally rejects that older source pin.
 
 ## Inspect and stage
