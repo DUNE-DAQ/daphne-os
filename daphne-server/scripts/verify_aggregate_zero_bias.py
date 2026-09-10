@@ -4,7 +4,9 @@
 No low-level bias-write workaround and no nonzero bias values. Applies the
 reference FE profile twice, in different AFE orders, then checks alignment,
 fresh AFE registers, bias command caches and all 40 spybuffer channels.
-Leaves offset=2200/x1, trim=0, VGAIN=1700; existing enable policy is retained.
+Leaves offset=2200/x1, trim=0, VGAIN=1700. Requires the pinned corrected server;
+checks fresh BiasEnable samples before/after Configure and after capture without
+toggling enable. Equal endpoint samples do not prove absence of short glitches.
 Successful command/cache checks do NOT constitute analog voltage readback.
 """
 
@@ -17,6 +19,9 @@ import sys
 import time
 
 from verify_offset_gain_spybuffer import summarize, usable_capture, zero_bias_profile
+from afe_global import check_afe_global, require
+from software_build import check_build
+from verify_server_bookkeeping import check_state
 
 
 def make_zero_bias_request(order):
@@ -35,10 +40,52 @@ def check_bias_acknowledgements(message, order):
     return observed
 
 
+def check_bias_control_acknowledgement(message):
+    matches = re.findall(
+        r"^Bias Control command sent\. BIASCTRL code: (\d+)\. Returned command-register value: (\d+)\. "
+        r"BiasEnable not written \(SC-owned\); no physical voltage readback\.$", message, re.MULTILINE)
+    require(len(matches) == 1 and matches[0][0] == "0", "Missing or nonzero SC-owned BIASCTRL acknowledgement")
+    require("and Enable:" not in message, "Legacy implicit-enable acknowledgement")
+
+
+def check_bias_enable_preserved(before, after, configured, high):
+    """Compare admitted samples across a successful Configure, never write enable."""
+    for sample in (before, after):
+        require(sample.HasField("server_state") and sample.HasField("server_build"))
+        check_state(sample.server_state)
+        require(sample.server_state.server_build == sample.server_build)
+        check_build(sample.server_build, high, require_clean=True)
+    a, b = before.server_state, after.server_state
+    require(not a.configuration_in_progress and not b.configuration_in_progress,
+            "Configure still in progress at a boundary sample")
+    require(a.instance_id == b.instance_id and a.boot_id == b.boot_id and before.server_build == after.server_build,
+            "Server process, boot or build changed across Configure")
+    require(all(getattr(before.gateware_identity, key) == getattr(after.gateware_identity, key)
+                for key in ("magic", "abi", "variant", "build_id")), "Gateware changed across Configure")
+    prior = check_afe_global(before, high, a.observed_monotonic_ns)
+    current = check_afe_global(after, high, b.observed_monotonic_ns)
+    require(configured.success and configured.HasField("execution") and configured.applied_configuration_valid and
+            configured.execution.outcome == high.CONFIGURATION_SUCCEEDED and configured.execution.hardware_started and
+            configured.execution.attempt_sequence > a.last_configuration_result.attempt_sequence and
+            b.last_configuration_result == configured.execution and b.applied_configuration_valid and
+            b.applied_configuration_hash == configured.applied_configuration_hash,
+            "Missing successful applied Configure evidence")
+    require(a.observed_monotonic_ns <= configured.execution.started_monotonic_ns <=
+            configured.execution.completed_monotonic_ns < current["acquisition_started_monotonic_ns"],
+            "AFE samples do not bracket this Configure")
+    require(prior["bias_enabled"] == current["bias_enabled"], "BiasEnable changed across Configure")
+    return {"bias_enabled_before": prior["bias_enabled"], "bias_enabled_after": current["bias_enabled"],
+            "before_observed_monotonic_ns": prior["observed_monotonic_ns"],
+            "after_observed_monotonic_ns": current["observed_monotonic_ns"],
+            "scope": "equal fresh register samples; no enable command sent by this client; not a physical glitch test"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--proto-dir", type=Path, required=True)
+    parser.add_argument("--server-source", type=Path, required=True)
+    parser.add_argument("--expected-server-commit", required=True)
     parser.add_argument("--expected-build-id", type=lambda value: int(value, 0), required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--apply-zero-bias-configuration", action="store_true", required=True)
@@ -64,10 +111,6 @@ def main():
     socket.connect(args.endpoint)
     sequence = 0
 
-    def require(ok, message):
-        if not ok:
-            raise RuntimeError(message)
-
     def call(kind, request, response_class):
         nonlocal sequence
         sequence += 1
@@ -82,18 +125,32 @@ def main():
         require(response.success, response.message)
         return response
 
-    try:
+    def status_sample():
         status = call(high.MT2_READ_SYSTEM_STATUS_REQ, high.ReadSystemStatusRequest(), high.SystemStatusSnapshot)
+        require(status.HasField("server_build") and status.HasField("server_state"))
+        check_build(status.server_build, high, expected_commit=args.expected_server_commit,
+                    require_clean=True, source_root=args.server_source)
+        require(status.server_state.server_build == status.server_build)
+        check_state(status.server_state)
+        check_afe_global(status, high, status.server_state.observed_monotonic_ns)
         identity = status.gateware_identity
         require(identity.magic == 0x44415048 and identity.abi == 0x20000 and identity.variant == 1
                 and identity.build_id == args.expected_build_id, "Unexpected self-trigger firmware; no Configure sent")
+        return status
+
+    try:
         for order in ([0, 1, 2, 3, 4], [4, 1, 3, 0, 2]):
+            before = status_sample()
             entry = {"request": make_zero_bias_request(order)}
             report["runs"].append(entry)
             configured = call(high.MT2_CONFIGURE_FE_REQ,
                               ParseDict(entry["request"], high.ConfigureRequest()), high.ConfigureResponse)
+            require(configured.execution.task_id == 22 and configured.execution.request_msg_id == sequence,
+                    "Configure execution record does not match this request")
             entry["configure_response"] = configured.message
             entry["aggregate_bias_acknowledgements"] = check_bias_acknowledgements(configured.message, order)
+            check_bias_control_acknowledgement(configured.message)
+            entry["bias_enable_after_configure"] = check_bias_enable_preserved(before, status_sample(), configured, high)
             require(configured.message.count("Offset DAC gain: x1") == 40, "Missing offset gain acknowledgement")
             aligned = call(high.MT2_ALIGN_AFE_REQ, low.cmd_alignAFEs(), low.cmd_alignAFEs_response)
             entry["alignment_response"] = aligned.message
@@ -140,6 +197,7 @@ def main():
                     frames[ch].append(values)
             entry["captures"] = {ch: summarize(values) for ch, values in frames.items()}
             require(all(usable_capture(value) for value in entry["captures"].values()), "Clipped or stale captures")
+            entry["bias_enable_after_capture"] = check_bias_enable_preserved(before, status_sample(), configured, high)
             entry["success"] = True
             print(f"PASS AFE order {order}: five aggregate zero writes, alignment, registers and 40 channels", flush=True)
     except Exception as error:
