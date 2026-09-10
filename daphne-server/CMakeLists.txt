@@ -118,6 +118,8 @@ target_include_directories(daphne_proto PUBLIC
 target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
 
 add_library(daphne_telemetry_protocol
+  srcs/server_controller/sfp_monitor.cpp
+  srcs/server_controller/sfp_linux.cpp
   srcs/server_controller/ams_temperature.cpp
   srcs/server_controller/carrier_temperature.cpp
   srcs/server_controller/temperature_alarm.cpp
@@ -141,6 +143,13 @@ if(BUILD_TESTING)
   target_link_libraries(current_mux_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME current_mux_unit COMMAND current_mux_tests)
   set_tests_properties(current_mux_unit PROPERTIES LABELS unit)
+  add_executable(sfp_monitor_tests tests/sfp_monitor_tests.cpp)
+  target_link_libraries(sfp_monitor_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME sfp_monitor_unit COMMAND sfp_monitor_tests)
+  set_tests_properties(sfp_monitor_unit PROPERTIES LABELS unit)
+  add_executable(sfp_probe tests/sfp_probe.cpp)
+  target_link_libraries(sfp_probe PRIVATE daphne_telemetry_protocol)
+  # Never an automatic hardware test; operator must explicitly opt in.
   add_executable(temperature_alarm_tests tests/temperature_alarm_tests.cpp)
   target_link_libraries(temperature_alarm_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME temperature_alarm_unit COMMAND temperature_alarm_tests)

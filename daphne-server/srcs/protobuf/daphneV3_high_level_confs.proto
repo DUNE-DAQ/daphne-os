@@ -206,6 +206,29 @@ message I2CPortStatus {
   string message                   = 7;
 }
 
+message SFPDiagnosticValue {
+  string name = 1;
+  string units = 2;
+  uint32 raw_code = 3;
+  optional double value = 4;
+  MeasurementQuality quality = 5;
+  optional double high_alarm = 6;
+  optional double low_alarm = 7;
+  optional double high_warning = 8;
+  optional double low_warning = 9;
+  optional bool high_alarm_flag = 10;
+  optional bool low_alarm_flag = 11;
+  optional bool high_warning_flag = 12;
+  optional bool low_warning_flag = 13;
+  MeasurementQuality threshold_quality = 14;
+  string detail = 15;
+}
+enum SFPCalibration {
+  SFP_CALIBRATION_UNSPECIFIED = 0;
+  SFP_CALIBRATION_INTERNAL = 1;
+  SFP_CALIBRATION_EXTERNAL = 2;
+  SFP_CALIBRATION_UNSUPPORTED = 3;
+}
 message SFPMonitor {
   string name             = 1;  // e.g. GTH0, GTH1, GTH2, GTH3, TMG, GTR
   uint32 bus              = 2;
@@ -213,25 +236,53 @@ message SFPMonitor {
   uint32 mux_channel      = 4;
   uint32 a0_address       = 5;
   uint32 a2_address       = 6;
-  bool   present          = 7;
-  bool   loss_of_signal   = 8;
-  bool   tx_disabled      = 9;
-  bool   tx_fault         = 10;
-  bool   data_ready       = 11;
+  optional bool present          = 7; // Only inferred true from verified EEPROM; failed I2C is unknown, not absent.
+  optional bool loss_of_signal   = 8;
+  optional bool tx_disabled      = 9;
+  optional bool tx_fault         = 10;
+  optional bool data_ready       = 11;
   string vendor           = 12;
   string part             = 13;
   string revision         = 14;
   string serial           = 15;
   string date_code        = 16;
-  double temperature_c    = 17;
-  double vcc_v            = 18;
-  double tx_bias_ma       = 19;
-  double tx_power_mw      = 20;
-  double rx_power_mw      = 21;
-  uint32 status_a2_0x6e   = 22;
-  uint32 status_a2_0x6f   = 23;
+  optional double temperature_c    = 17;
+  optional double vcc_v            = 18;
+  optional double tx_bias_ma       = 19;
+  optional double tx_power_mw      = 20;
+  optional double rx_power_mw      = 21;
+  optional uint32 status_a2_0x6e   = 22;
+  optional uint32 status_a2_0x6f   = 23;
   repeated StatusValue diagnostics = 24;
   string message          = 25;
+  MeasurementQuality identity_quality = 26;
+  MeasurementQuality diagnostic_quality = 27;
+  string source = 28;
+  uint64 observed_monotonic_ns = 29;
+  uint64 observed_host_unix_ns = 30;
+  optional bool mux_restored = 31;
+  optional bool base_checksum_valid = 32;
+  optional bool extended_checksum_valid = 33;
+  optional bool diagnostic_checksum_valid = 34;
+  optional uint32 diagnostic_type = 35;
+  optional uint32 enhanced_options = 36;
+  optional uint32 standard_revision = 37;
+  SFPCalibration calibration = 38;
+  optional bool rx_power_is_oma = 39;
+  bytes a0_raw = 40; // Bytes 0..95, bounded inventory; no vendor-private pages.
+  bytes a2_static_raw = 41; // Bytes 0..95, retained even on failed validation.
+  bytes a2_monitor_raw = 42; // Bytes 96..111; sequential host acquisition, not common-time latch.
+  uint64 acquisition_started_monotonic_ns = 43;
+  repeated SFPDiagnosticValue quantities = 44;
+  optional uint32 alarm_flags = 45;
+  optional uint32 warning_flags = 46;
+  optional uint32 alarm_flags_second = 47;
+  optional uint32 warning_flags_second = 48;
+  uint64 flags_second_monotonic_ns = 49;
+  uint64 flags_observed_monotonic_ns = 50;
+  TemperatureAlarm temperature_alarm = 51; // Host observation-only policy, not module factory flags.
+  uint64 diagnostics_observed_monotonic_ns = 52; // Host receipt of monitored values, before optional flag confirmation.
+  optional uint32 previous_mux_route = 53;
 }
 
 message FanStatus {
