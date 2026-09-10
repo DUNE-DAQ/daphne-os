@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "version": "0.6",
+  "worksheets": 29,
+  "server_rows": 251,
+  "resolved_implementation": 102,
+  "open_implementation": 149,
+  "original_v05_unchanged": true,
+  "non_server_cell_values_preserved": true,
+  "workbook_sha256": "0b82083b0136fd7969469611b9435b3cdbe910c4d289af760b57fcdf2247f108",
+  "source_commit": "a23e5a9d1078dd8601c0964a45aa8a924d30121e"
+}

@@ -5,7 +5,13 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Source snapshot: **79f6e5d**, connecting the coherent mezzanine cache to the
+Current source/deployment: **a23e5a9**, adding read-only fan PWM/tach reporting.
+35 clean host/35 actual ARM suites, 246 Python tests per binding and live fan,
+all-channel/collector/SC-preservation checks pass. The [v0.6 workbook and release
+notes](releases/v0.6/README.md) separate resolved implementation from remaining
+qualification. The original v0.5 workbook is unchanged.
+
+Historical source snapshot: **79f6e5d**, connecting the coherent mezzanine cache to the
 background monitor, status/clear RPCs and client. **34 host/34 actual ARM suites
 and 240 Python tests per binding pass.** Installed server **79f6e5d** now passes
 live no-mezzanine RPC/CLI and full SC-preserving zero-BIAS/all-channel regression.
@@ -19,9 +25,9 @@ Previous handoffs remain unchanged. This audit is not a full-workbook completion
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
-| Implemented | 100 | Concrete producer/export provides the observation within its stated scope |
-| Partial | 84 | Related code exists, but semantics, readback, quality, completeness or retained reporting are missing |
-| Missing | 54 | No corresponding server observation; a schema field/internal helper is not enough |
+| Implemented | 102 | Concrete producer/export provides the observation within its stated scope |
+| Partial | 85 | Related code exists, but semantics, readback, quality, completeness or retained reporting are missing |
+| Missing | 51 | No corresponding server observation; a schema field/internal helper is not enough |
 | Contract pending | 13 | Authority, authenticated identity, lease/safety or boot-recovery policy must be established |
 
 **Implemented does not mean hardware-qualified everywhere.** Every row retains
@@ -32,6 +38,10 @@ calibration or overall FPGA-health qualification is inferred.
 
 ## Important findings
 
+- **I250/I251 fan register reporting:** deployed `a23e5a9` provides applied shared
+  PWM command and raw tach words. I257 remains partial (host time is not FPGA
+  sample time); physical presence/RPM/stall/control-mode fields remain unavailable.
+  See [fan qualification](fan-register-telemetry.md).
 - **SC003/I288 ownership:** deployed 79f6e5d retains fb82e0a's correction, leaving BiasEnable untouched by
   aggregate Configure and fingerprints that no enable command was issued.
   Live preservation is verified at enable1; the other state is synthetic-only.

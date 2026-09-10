@@ -1,0 +1,8 @@
+{
+  "success": true,
+  "directory": "/nfs/home/marroyav/daphne015-server-v0.6-a23e5a9",
+  "verified_files": 13,
+  "manifest_sha256": "80b367cb10f665a93fe1e9d7727945861463091aa13c38c76fa66b0ac4eda36c",
+  "permissions": "owner-only",
+  "existing_bundles_unchanged": true
+}

@@ -1,0 +1,9 @@
+{
+  "success": true,
+  "runtime_sha256": "0f3cacfa39d2e3cd3d868d07ad89aef9a2b4e659af1f16e636de8e1e8faaa711",
+  "server_commit": "a23e5a9d1078dd8601c0964a45aa8a924d30121e",
+  "binary_sha256": "2a29638ab2878d8d903977fe7df61689113adf39da0bfc31c28676c2f717eb8f",
+  "dependency_regular_files_unchanged": 4,
+  "library_aliases": 4,
+  "qualification": "Exact native/live-qualified bytes; no new full image or firmware synthesis"
+}

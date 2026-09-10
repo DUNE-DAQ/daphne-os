@@ -1,5 +1,10 @@
 # Remaining v0.5 server implementation
 
+Current checkpoint: **a23e5a9 deployed**, with fan register reporting and
+SC-preserving all-channel regression. The [v0.6 workbook](releases/v0.6/README.md)
+clears 102 scoped server implementation issues and retains 149 open rows plus
+qualification limits. Detailed older qualifications below remain historical.
+
 Active scope requested after server 56b390f. This checklist is not a declaration
 of completion; retain every item until implementation and relevant verification
 are evidenced. Preserve CERN MAC/IP, installed network settings, zero BIAS and

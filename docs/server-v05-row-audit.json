@@ -4,9 +4,9 @@
   "workbook_filename": "DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx",
   "workbook_sha256": "7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8",
   "source_export_sha256": "393eac4e1a61513c76230f889670ce4a7841e3968272df33e829866461db2fe1",
-  "reviewed_os_commit": "79f6e5d94ea23260a624d3b8b752d15ea475bda8",
-  "server_commit": "79f6e5d94ea23260a624d3b8b752d15ea475bda8",
-  "server_subtree": "27c600141e529177e8bc7a1f7a080688a1c88de4",
+  "reviewed_os_commit": "a23e5a9d1078dd8601c0964a45aa8a924d30121e",
+  "server_commit": "a23e5a9d1078dd8601c0964a45aa8a924d30121e",
+  "server_subtree": "7b0ccd88a89c8e702217cd3f2ce0ae0598e9fcc5",
   "row_count": 251,
   "source_semantics_sha256": "6c404e29337ac147638a8693511b2fceac9c0f42be17054544b617329b8802ec",
   "snapshot_only": true,
@@ -18,16 +18,17 @@
     "contract-pending": "Implementation requires an unresolved authority, authenticated identity, safety/lease or boot-recovery policy; do not invent that policy."
   },
   "expected_counts": {
-    "implemented": 100,
-    "partial": 84,
-    "missing": 54,
-    "contract-pending": 13
+    "contract-pending": 13,
+    "partial": 85,
+    "missing": 51,
+    "implemented": 102
   },
   "global_limits": [
+    "Deployed a23e5a9 adds admitted read-only fan PWM/tach observations to qualified 79f6e5d. 35 host/35 actual ARM suites and 246 Python tests per binding pass; two native fan probes and deployed fan RPC pass. Firmware/runtime/Hermes, protected CERN settings and SC enable remain unchanged. Fan physical status and the full objective are not complete. Earlier runtime/ONL records below remain historical and must not be relabelled.",
     "Deployed 79f6e5d wires the coherent mezzanine cache into background monitoring, status/clear handlers and the client: 34 clean host/34 actual ARM suites and 240 Python tests per binding pass. Live no-mezzanine checks each pass 24 exchanges before Configure and after full regression; absent data remain typed unavailable and the CLI exits 2. Full SC-preserving zero-BIAS/all-channel and collector regressions pass. No firmware/runtime/Hermes, network or SC enable change. Exact runtime/native loader, image pin cb8958c and 46-file ONL handoff are verified; six exported clients pass 42 read-only exchanges. Prior fb82e0a and 4e74f10 handoff hashes are unchanged. Populated-mezzanine and actual Qt event-loop/visual qualification remain open.",
     "Original fb82e0a qualification removes Configure's implicit SC-enable write and updates fingerprint evidence to v2. Clean 33 host/33 actual ARM suites, 216 Python tests per binding and full live SC-preservation/zero-BIAS regression pass. Guarded server-only maintenance kept firmware/runtime/Hermes and enable1 unchanged. Exact runtime/native loader, image pin 1039f46, 140 packaging tests and 41-file ONL handoff/five exported clients pass. Dedicated/authenticated SC-request handling remains pending.",
     "Human source/evidence audit, not consortium approval. The checker validates completeness/provenance/references, not semantic correctness.",
-"Historical fb82e0a runtime/pin/41-file ONL handoff evidence is retained; the installed server is now 79f6e5d, native/live-qualified on self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. The exact new runtime/native loader, image pin cb8958c, 142 packaging tests and 46-file ONL handoff are verified. Six matching ONL clients pass 42 read-only exchanges without changing the qualified process/boot/FE hash or SC state. The earlier fb82e0a exported ONL clients passed 18 read-only exchanges including an unchanged process/boot/valid-FE-hash bracket; this is not a new-handoff qualification. Prior 4e74f10 handoff hashes are unchanged. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
+    "Historical fb82e0a runtime/pin/41-file ONL handoff evidence is retained; the installed server is now 79f6e5d, native/live-qualified on self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. The exact new runtime/native loader, image pin cb8958c, 142 packaging tests and 46-file ONL handoff are verified. Six matching ONL clients pass 42 read-only exchanges without changing the qualified process/boot/FE hash or SC state. The earlier fb82e0a exported ONL clients passed 18 read-only exchanges including an unchanged process/boot/valid-FE-hash bracket; this is not a new-handoff qualification. Prior 4e74f10 handoff hashes are unchanged. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
     "Original 4e74f10 AFE-reset qualification: 33 host/33 actual ARM suites, 208 Python tests per binding and native/live probes passed. Deployed 79f6e5d retains the 16 checks: 12 PASS, one external-timing FAIL and three UNKNOWN. Normal Configure reset pulses are retained; no held-reset fault injection, pin measurement or overall healthy-board claim.",
     "Hardware/missing-assignment conditions remain open even on implemented rows; inspect evidence-group limits and per-row remaining work.",
     "No mezzanines are fitted. Source-ledger checks are read-only; referenced live maintenance tests do issue zero-BIAS/BIASCTRL Configure and normal AFE reset/power commands. This follow-up sent no SC-enable commands and made no firmware reload, fan/regulator/EEPROM writes or network/time changes.",
@@ -316,13 +317,22 @@
     "fans": {
       "source_refs": [
         "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto",
-        "daphne-server/srcs/server_controller/handlers.cpp"
+        "daphne-server/srcs/server_controller/fan_monitor.hpp",
+        "daphne-server/srcs/server_controller/fan_monitor.cpp",
+        "daphne-server/srcs/server_controller/fpga_status.hpp",
+        "daphne-server/srcs/server_controller/fpga_status.cpp",
+        "daphne-server/scripts/fan_status.py",
+        "daphne-server/scripts/verify_fan_status.py",
+        "daphne-server/CMakeLists.txt"
       ],
       "evidence_refs": [
-        "docs/server-v05-register-coverage.md"
+        "docs/fan-register-telemetry.md",
+        "daphne-server/tests/fan_monitor_tests.cpp",
+        "daphne-server/tests/fpga_status_tests.cpp",
+        "daphne-server/tests/test_fan_status.py"
       ],
-      "evidence_scope": "source-review; no populated FanStatus",
-      "limit": "No server fan collector. Review exact deployed firmware register/scaling and physical fan population; no PWM writes for diagnosis."
+      "evidence_scope": "35 clean host/35 actual ARM suites; 246 Python tests per binding; two native read-only probes and deployed fan RPC on self-trigger ABI2.0",
+      "limit": "Only applied shared PWM code and raw tach register reporting are qualified. Physical population, RPM, stall policy, source sample time and full-stream/new-firmware hardware remain open."
     },
     "afe": {
       "source_refs": [
@@ -461,20 +471,28 @@
     }
   },
   "reviewed_code_sha256": {
-    "daphne-server/scripts/verify_aggregate_zero_bias.py": "61fb200664adc21dd0a03f8c0344bcbb43d5a48548bda034f36dcd2c84538454",
-    "daphne-server/CMakeLists.txt": "d0eeb3ad8b2e2b6c94ded9bdb387d05f4bfd0e2ca41983fc4a507e7e93388159",
+    "daphne-server/CMakeLists.txt": "11164399bc1f466a1477a0a50eb52bec5171e102a4196be5edd8f79db0c9103c",
+    "daphne-server/client/hdmezz_control_v2.py": "41f1534a3c8b1c7b406e7072a754493ae7d6aa20ac397725bdbdd5d054558b62",
     "daphne-server/scripts/afe_global.py": "4a59f4f761b6f47af0da3c0e599e37d871c7de5f62fcc3c6b5ee19403fa7b2cd",
+    "daphne-server/scripts/fan_status.py": "0697598a7bb9900a961ed6483ce397b2c450e05d89f07c3ec69dc9230a3a75c3",
+    "daphne-server/scripts/hdmezz_configuration.py": "76c67c520ebd3be70e3299c9ce91af6c3b7f357e68c91c02cf3e42b5e2c3419c",
+    "daphne-server/scripts/hdmezz_status.py": "d7e2ca53c7248f8ca5cfbdd56e16f215340789caf58ebb4a4d0f1b264c90ed6b",
     "daphne-server/scripts/prepare_identity_assignment.py": "069c1c48e6f6cb38db2e3a959914c7d72ce1a993262e6ab4337a41a22615f9ab",
     "daphne-server/scripts/verify_afe_global.py": "b366203124fcbb0ef5ba1f1c4fbe39060c15076339134d8f010fc5a390284355",
+    "daphne-server/scripts/verify_aggregate_zero_bias.py": "61fb200664adc21dd0a03f8c0344bcbb43d5a48548bda034f36dcd2c84538454",
+    "daphne-server/scripts/verify_fan_status.py": "e4c9bdb7a6c4adcf85c58a71d83179d7a41cc92e330ae92e5fc2b3bd917359d9",
     "daphne-server/scripts/verify_fpga_health.py": "ab9118f51c0802b428307e24432031af81096c6730ed7e237149edadbaa328d4",
     "daphne-server/srcs/Afe.cpp": "c2accbeefb3cb3e194961ba518c73de6206fbaaf8ed794bb63dc9125d87f9991",
     "daphne-server/srcs/BoardI2C.cpp": "360932a64042142206ffb4168ee4aaa75b1d4fba0822cba07c9590e29db96ef3",
     "daphne-server/srcs/BoardSPI.cpp": "9492e0f2aeabe178930a6cd5cf9d6d5ba6a4c1bd16a925928aeb798f1866e1a0",
     "daphne-server/srcs/Dac.cpp": "7b8642310d34c1e24d0f929c244a975458d3d4a21a4eaaeab8f297c2e9ee55a9",
     "daphne-server/srcs/Daphne.cpp": "9f47cbb540d641f980a712ad241c2bf00675c411d98a3f6b00420570fa94afd4",
+    "daphne-server/srcs/Daphne.hpp": "4739d8c156fdfb50a282e6203836fc9b0f365bbac97c12c2ed3541f491ccdb3f",
     "daphne-server/srcs/DaphneI2CDrivers.cpp": "63b31787b306031b56daaa5677b3bfbb5efa67a13806a753d84ab3be97f05d77",
+    "daphne-server/srcs/DaphneI2CDrivers.hpp": "a3dfc78d08c61e15cb57c7272f37e21121314da540ea702fd6ed03dab170683a",
     "daphne-server/srcs/FpgaRegDict.cpp": "b0ec928a8fe1298beb314186971fe9f60f8d1ce153150b7533c8267b7e59432d",
-    "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto": "ab385057f0367c42fe98c54c1b3f327363f7f8626aa4e55593812f28ae839e9a",
+    "daphne-server/srcs/HDMezzMonitoring.cpp": "868e55156a2b314deb3f805c7eb85d22f380aa96db19285a7a82920754adb881",
+    "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto": "3e5802f3b171c5d94aa6a02e032b01184fbca1aff47738ef33b6b81f99ec5177",
     "daphne-server/srcs/protobuf/daphneV3_low_level_confs.proto": "850b9c4e58396230c665dc8d999e9dafd276b2f0a318f0bb9d28ceec36db3daf",
     "daphne-server/srcs/server_controller/afe_global.cpp": "cb562806152084718bb4fadfa2a50c0f5c3b40b46c49de18bef0f854fe60a92d",
     "daphne-server/srcs/server_controller/afe_global.hpp": "06814d4d08fcdd26fb9f26283b69e90b043d73f964cc77f810b0e9ea804e869d",
@@ -487,12 +505,16 @@
     "daphne-server/srcs/server_controller/configuration_fingerprint.cpp": "a7595dd79d33716b3e29ef31a8dfbc56907129a2f536459362aed9902e047087",
     "daphne-server/srcs/server_controller/current_monitor.cpp": "3b6fcd5934f2e3139c335ff37339e7cc6a08b8ae1cdfbe35b86b326a84fcaba4",
     "daphne-server/srcs/server_controller/current_monitor_protocol.cpp": "009437eeb88d02cb8b55255901bf5e0f704f5a74700e7ec9fe402ef50f3dc134",
+    "daphne-server/srcs/server_controller/fan_monitor.cpp": "cc14e7dd182f7aff304b9c61ceddecd7c3ea78c0b0984262ef783ac4aee3724a",
+    "daphne-server/srcs/server_controller/fan_monitor.hpp": "36fbb30210ace23d11f9613d51685324ea6114ab4d31a744375102825deb2665",
     "daphne-server/srcs/server_controller/fpga_health.cpp": "92de0015dd52356ebad751161fbe695b02c6600c916aef932c1e4f45780f63f4",
     "daphne-server/srcs/server_controller/fpga_programming_linux.cpp": "f854e40a6d81d29d772e88b609a343daa2510ff62558e6b3c56d55d3752f6343",
-    "daphne-server/srcs/server_controller/fpga_status.cpp": "c451e1dceb6e6292b8093e0b5d921799f58f7906692f14bfc6fc6f0758d47dde",
-    "daphne-server/srcs/server_controller/fpga_status.hpp": "3508335b771729ba5a8eab6c1471736ffc2c3079f4a68150c0d759b8c47178ff",
+    "daphne-server/srcs/server_controller/fpga_status.cpp": "34edfe3e2181f874c1469d831f15c5c36bfe4b204ae81a477f4870b25741d2d6",
+    "daphne-server/srcs/server_controller/fpga_status.hpp": "c28199d2eaef2b2aa9c25ffcf17157d10e2c69de9b90698ec315af681de096ad",
     "daphne-server/srcs/server_controller/gateware.cpp": "12e98f0a68f91cbe57a88c6fc5b4b2d1082211e1e97a1a538029d9e926b0cccb",
     "daphne-server/srcs/server_controller/handlers.cpp": "52d2a36cd36889fd8d27b47cd6ceb94cec6bc6e9f6f636d317abbe0b9e515fab",
+    "daphne-server/srcs/server_controller/hdmezz_protocol.cpp": "bda02590c3058267bf898ce73194c2a1bacab04669570942e671663fb952c736",
+    "daphne-server/srcs/server_controller/hdmezz_protocol.hpp": "ee5580c06d1be18b65fa18003ceca6927495953f0b9aa7907483074783b4631a",
     "daphne-server/srcs/server_controller/host_clock.cpp": "24cf324b17b0a2f01091334249e930e3f35f5df17842e16bf66b2be59ea52c6f",
     "daphne-server/srcs/server_controller/host_resources.cpp": "6ebe9218587a13e814929928956fbaf30074b9d56b48fa20cb7d996de9c036c7",
     "daphne-server/srcs/server_controller/host_software.cpp": "f6d8a3109efb4401efd240a5f523bc799b7e16dce893aa01c424d1b6323a2940",
@@ -516,15 +538,7 @@
     "daphne-server/srcs/server_controller/temperature_alarm.cpp": "e95bac0d4dbb9e33fd6b52c4f0fff58d970b4e224b543c2b41898734107b0cb7",
     "daphne-server/srcs/server_controller/timesync.cpp": "a65e2d70261ae463405e9a1a2557a94cadea535ccd928f824153a0c9e6d8770f",
     "daphne-server/srcs/server_controller/timesync_linux.cpp": "e0b84338c50e69be7d7dbcfed326605a16bca5db2f8cc61622d434234ceb323d",
-    "daphne-server/srcs/server_controller/timing_status.cpp": "125534f04fe7601ca9d261aae95ead4ad0ff8dffbb53072482de451592a423d8",
-    "daphne-server/client/hdmezz_control_v2.py": "41f1534a3c8b1c7b406e7072a754493ae7d6aa20ac397725bdbdd5d054558b62",
-    "daphne-server/scripts/hdmezz_configuration.py": "76c67c520ebd3be70e3299c9ce91af6c3b7f357e68c91c02cf3e42b5e2c3419c",
-    "daphne-server/srcs/DaphneI2CDrivers.hpp": "a3dfc78d08c61e15cb57c7272f37e21121314da540ea702fd6ed03dab170683a",
-    "daphne-server/srcs/server_controller/hdmezz_protocol.cpp": "bda02590c3058267bf898ce73194c2a1bacab04669570942e671663fb952c736",
-    "daphne-server/srcs/server_controller/hdmezz_protocol.hpp": "ee5580c06d1be18b65fa18003ceca6927495953f0b9aa7907483074783b4631a",
-    "daphne-server/srcs/HDMezzMonitoring.cpp": "868e55156a2b314deb3f805c7eb85d22f380aa96db19285a7a82920754adb881",
-    "daphne-server/scripts/hdmezz_status.py": "d7e2ca53c7248f8ca5cfbdd56e16f215340789caf58ebb4a4d0f1b264c90ed6b",
-    "daphne-server/srcs/Daphne.hpp": "4739d8c156fdfb50a282e6203836fc9b0f365bbac97c12c2ed3541f491ccdb3f"
+    "daphne-server/srcs/server_controller/timing_status.cpp": "125534f04fe7601ca9d261aae95ead4ad0ff8dffbb53072482de451592a423d8"
   },
   "deployed_server_commit": "79f6e5d94ea23260a624d3b8b752d15ea475bda8"
 }
