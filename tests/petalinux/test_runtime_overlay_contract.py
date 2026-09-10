@@ -56,14 +56,13 @@ class RuntimeOverlayContractTests(unittest.TestCase):
             "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0",
         })
 
-    def use_abi22_candidate_contract(self):
-        # Actual release pin is deliberately unchanged; this models future
-        # explicit restaging with the implemented candidate, not an image build.
+    def use_previous_abi21_contract(self):
+        # Preserve the previous release's refusal independently of the new pin.
         self.values.update({
-            "DAPHNE_SERVER_REQUIRED_GIT_COMMIT": "3f636f4acf3f795e96d1e20e89936c6a861ac58a",
-            "DAPHNE_SERVER_RUNTIME_GIT_COMMIT": "3f636f4acf3f795e96d1e20e89936c6a861ac58a",
-            "DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS": "0 1 2",
-            "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0 1 2",
+            "DAPHNE_SERVER_REQUIRED_GIT_COMMIT": "3556811fbe5bf01b7c66c862a8a6e1821a4f6246",
+            "DAPHNE_SERVER_RUNTIME_GIT_COMMIT": "3556811fbe5bf01b7c66c862a8a6e1821a4f6246",
+            "DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS": "0 1",
+            "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0 1",
         })
 
     def test_recipe_requires_overlay_version_and_registers_guard(self):
@@ -110,7 +109,7 @@ class RuntimeOverlayContractTests(unittest.TestCase):
 
     def test_unknown_or_malformed_overlay_minor_is_never_legacy(self):
         for prefix in ("DAPHNE_SELF_TRIGGER", "DAPHNE_FULL_STREAM"):
-            for minor in ("", "2", "01", "0 1", "65535", "-1"):
+            for minor in ("", "3", "01", "0 1", "65535", "-1"):
                 with self.subTest(prefix=prefix, minor=minor):
                     self.values[prefix + "_ABI_MINOR"] = minor
                     with self.assertRaisesRegex(Refused, "does not support"):
@@ -134,7 +133,8 @@ class RuntimeOverlayContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(Refused, "minor capabilities"):
                     self.check()
 
-    def test_current_release_pin_rejects_either_abi22_overlay(self):
+    def test_previous_abi21_release_pin_rejects_either_abi22_overlay(self):
+        self.use_previous_abi21_contract()
         for prefix in ("DAPHNE_SELF_TRIGGER", "DAPHNE_FULL_STREAM"):
             self.values[prefix + "_ABI_MINOR"] = "2"
             self.values[prefix + "_IDENTITY_SEALED"] = "1"
@@ -142,8 +142,10 @@ class RuntimeOverlayContractTests(unittest.TestCase):
                 self.check()
             self.values[prefix + "_ABI_MINOR"] = "0"
 
-    def test_new_explicit_contract_accepts_all_nine_overlay_combinations(self):
-        self.use_abi22_candidate_contract()
+    def test_current_release_contract_accepts_all_nine_overlay_combinations(self):
+        self.assertEqual(self.values["DAPHNE_SERVER_REQUIRED_GIT_COMMIT"],
+                         "3f636f4acf3f795e96d1e20e89936c6a861ac58a")
+        self.assertEqual(self.values["DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS"], "0 1 2")
         for left in ("0", "1", "2"):
             for right in ("0", "1", "2"):
                 for prefix, minor in (("DAPHNE_SELF_TRIGGER", left), ("DAPHNE_FULL_STREAM", right)):
@@ -156,7 +158,6 @@ class RuntimeOverlayContractTests(unittest.TestCase):
                 self.check()
 
     def test_abi22_also_requires_sealed_identity_for_either_mode(self):
-        self.use_abi22_candidate_contract()
         for prefix in ("DAPHNE_SELF_TRIGGER", "DAPHNE_FULL_STREAM"):
             self.values[prefix + "_ABI_MINOR"] = "2"
             for sealed in (None, "", "0", "2"):

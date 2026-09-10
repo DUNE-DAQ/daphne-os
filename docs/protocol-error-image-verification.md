@@ -26,10 +26,11 @@ flash DAPHNE-015 or replace its running server.
   still require the matching source/archive/execution record, and check both
   overlays. Tool support does not widen the release contract automatically.
 
-The **actual image runtime pin remains `3556811`, minors `0 1`**. Therefore an
-ABI 2.2 overlay is still rejected with that old runtime, including when the
-other overlay is legacy. New-contract tests explicitly substitute candidate
-`3f636f4` in isolated fixtures; they do not make a release or qualify a bundle.
+The **actual image runtime pin is now `3f636f4`, minors `0 1 2`**, following
+[native and live ABI 2.0 server qualification](protocol-error-server-verification.md)
+and the complete archive's packaged-library smoke. Old `3556811` runtime
+metadata is rejected by this new pin; its original ABI 2.0/2.1 contract still
+rejects either ABI 2.2 overlay. Compatibility is not firmware qualification.
 
 ## Evidence
 
@@ -38,6 +39,13 @@ Coverage includes all nine self-trigger/full-stream minor pairs, both-mode
 exact loader identity checks, each missing bit of the 170-bit report, wrong
 headers/widths/parents, non-finite or failing timing, hashes, missing/unsealed
 metadata, stale runtime capabilities and failure-state preservation.
+
+The reviewed pin update passes **122 tests**, including actual-contract
+nine-pair coverage and explicit rejection of the previously qualified runtime.
+The real archive `1af9600acbfb8e557bedde23bde93e13270ccf7b5439d8a4b9f6803e335d0497`
+also stages with unchanged metadata/bytes and native execution provenance.
+Its staged declarations pass the actual recipe decision with all nine synthetic
+overlay pairs. Logs: `os-reviewed-pin-all.txt` and `actual-runtime-staging.txt`.
 
 The tests invoke the staging scripts, actual checksum tools and recipe guard/
 URI expressions. FPGA artifacts and some device-tree tools are synthetic;
@@ -60,9 +68,8 @@ bash -n scripts/petalinux/stage_overlay_into_project.sh \
 
 ## Remaining handoff
 
-[The new ARM candidate passes software tests](protocol-error-server-verification.md),
-but still needs running-server regression and its complete private-safe runtime
-archive/native loader check before the reviewed release pin changes. Then
-stage actual qualified firmware outputs, build the complete image and verify
+[The new server passes native software and live ABI 2.0 tests](protocol-error-server-verification.md).
+Complete its ONL/wiki handoff, then stage actual qualified firmware outputs,
+build the complete image and verify
 both modes/sources on hardware. The Cooper route remains unavailable; no
 synthesis job or new flash is claimed. Preserve approved MAC/IP and zero bias.

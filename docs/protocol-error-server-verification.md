@@ -150,10 +150,10 @@ Known private MAC/IPv4 literal checks pass; this is not a general secret audit.
 
 ## Still required
 
-Complete the runtime handoff and image pairing. [ABI 2.2 OS staging/guards](protocol-error-image-verification.md)
-are now implemented with 121 clean-checkout tests; these use synthetic artifacts,
-not a PetaLinux image build. The image contract remains pinned to qualified server
-`3556811`, minors `0 1`; do not widen it merely to pass a build.
+Complete the runtime handoff. [ABI 2.2 OS staging/guards](protocol-error-image-verification.md)
+now pass 122 tests with the reviewed `3f636f4` pin, minors `0 1 2`.
+The actual complete archive stages and passes the recipe decision for all nine
+synthetic overlay-minor pairs. This is not a PetaLinux image build.
 Then qualify supported-tool firmware builds, routed paths, both modes/sources
 and live zero-bias readout/regression. The current Cooper probe still times out
 at the FNAL bridge; **no synthesis job was launched**. The application deployment

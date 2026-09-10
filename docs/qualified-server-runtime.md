@@ -1,6 +1,14 @@
-# Qualified server runtime: 3556811
+# Qualified server runtime
 
-This userspace archive contains the exact server now running on DAPHNE-015.
+Current server: **3f636f4**, deployed on DAPHNE-015 with full live self-trigger
+ABI 2.0 regression; [qualification and current image contract](protocol-error-server-verification.md).
+Its complete runtime SHA-256 is
+`1af9600acbfb8e557bedde23bde93e13270ccf7b5439d8a4b9f6803e335d0497`;
+native packaged-library smoke and 122 packaging tests pass. ONL handoff pending.
+
+## Previous handoff: 3556811
+
+The historical userspace archive below contains the previous qualified server.
 It is **not a new OS/firmware image**. No private identity, MAC/IP, network,
 analogue or service configuration is included.
 
@@ -13,7 +21,7 @@ analogue or service configuration is included.
   `727b9187ec239f65d7e93740553be89acba606ef11a8a67ff2f068b8c64fa993`.
 - Runtime archive SHA-256:
   `38f9a18f716e32b2c3d48b37ee2c1b6d65953ee411a45e56e26387f6a56a0b56`.
-- Image contract: server `3556811`, supported ABI minors **0 and 1**.
+- Its matching historical image contract: server `3556811`, ABI minors **0 and 1**.
   Pin update `e01af89`; source capability is not firmware qualification.
 - Hermes and Protobuf/UTF-8/ZeroMQ libraries: exact hash-verified copies of
   the installed board bytes. These legacy binary dependencies were not rebuilt.
