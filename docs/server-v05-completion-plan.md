@@ -111,5 +111,7 @@ private identity and approved network settings are preserved; no automatic
 server restarts occurred. See [live qualification](native-timestamp-verification.md#live-self-trigger-abi-20-qualification).
 The [complete runtime archive and updated source/minor contract](qualified-server-runtime.md)
 are now prepared, with explicit native execution provenance and no private
-configuration. Current firmware still cannot supply ABI 2.1 snapshot evidence;
+configuration. The handoff is saved in the ONL home directory and the complete
+archive passes a native-board loader check using its packaged libraries.
+Current firmware still cannot supply ABI 2.1 snapshot evidence;
 full-stream live qualification and the full PetaLinux image build remain pending.

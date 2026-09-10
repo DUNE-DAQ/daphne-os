@@ -48,6 +48,22 @@ hardware tests, and a complete PetaLinux image build. Current health remains
 11 PASS / 1 external-timing FAIL / 3 UNKNOWN; no overall healthy-board claim.
 Metadata and evidence hashes are not authenticated signatures.
 
+The complete archive also passed a fresh native-board loader/CLI smoke with
+its own extracted private libraries. Service instances/PIDs/restarts, boot,
+installed binaries/libraries, private identity and protected settings matched
+before and after. The first attempt stopped before executable launch because
+the board lacks `timeout`; the passing script uses Python's subprocess timeout
+and BusyBox-compatible checksum options. No server or firmware was restarted.
+
+## ONL handoff
+
+Saved on `np04-onl-004` in the operator's home directory as
+`daphne015-server-runtime-13bc725`, with owner-only directory permissions.
+It contains the runtime, metadata, checksum manifest, prepared packaging/smoke
+scripts, smoke result and a clean OS source archive at `af3ae0f`. That snapshot's
+server subtree is identical to `13bc725`; unrelated uncommitted work is excluded.
+This is a userspace handoff, not a replacement whole-board flashing bundle.
+
 ## Inspect and stage
 
 Keep the runtime tarball, `BUILD-METADATA.txt` and `SHA256SUMS` together.
