@@ -39,14 +39,17 @@ Onboard U6 ADS1261 now has an identified kernel-owned SPI path, with all 40
 carrier-mux channels read twice successfully. See the
 [raw-readout qualification](ads1261-readout-verification.md). Current calibration
 and known-stimulus analog mapping remain open; do not claim measured amperes.
-Next bind the onboard sheet-11/12 regulators, currently hardcoded to absent
-`/dev/i2c-2`, by verified PL-controller identity. Review initialization writes
-before retargeting either driver. No mezzanines are fitted on DAPHNE-015, but
-these onboard devices are not thereby absent. Do not use broad scans, infer
-physical absence from Linux clients, or change CERN MAC/IP and clock/bias
-policy. Observation-only temperature alarms are implemented with provisional
-high thresholds; protection qualification and additional sensor coverage remain
-separate work.
+The onboard sheet-11/12 regulators now use verified PL-controller identity and
+mandatory PEC, with opt-in voltage/source-current/module-temperature/status
+reporting. The inherited constructor was checked: no regulator initialization
+writes. See [qualification](onboard-regulator-verification.md).
+Investigate the documented `0x80` manufacturer-status PEC read failure without
+non-PEC fallback or fault clearing; establish whether this module variant
+actually supplies VIN before adding a field. U42/U33's pre-existing CML flags
+remain visible. Do not guess their cause, calibrate twice or clear them to make
+a test pass. Installed-board revision, metrology and rail protection qualification
+remain open. No mezzanines are fitted, but onboard devices are not thereby absent.
+Preserve CERN MAC/IP, clock/bias policy and existing generator/protection enables.
 
 ## Qualify unattended boot redundancy for underground deployment
 

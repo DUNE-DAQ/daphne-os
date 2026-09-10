@@ -5,7 +5,8 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `8a53161`, including
+Current DAPHNE-015 server: `a729c2b`, including
+[onboard regulator telemetry](onboard-regulator-verification.md),
 [sampled FPGA health evidence](server-fpga-health.md),
 [database identity assignments and live management readback](board-identity-verification.md),
 [opt-in SFP inventory and diagnostics](sfp-diagnostics-verification.md),
@@ -51,6 +52,7 @@ preserved history. Relevant prior work:
 | I316/I317, raw/calibrated current | Identified kernel-owned ADS1261, explicit physical channel 0..39, differential mux mapping/restoration, CRC/status checks and signed raw/nominal volts; calibrated amperes explicitly unavailable | All 40 raw paths read twice on zero-BIAS DAPHNE-015. No mezzanines; current calibration, analog mapping and full-stream live qualification remain open |
 | I227–I248, SFP inventory/diagnostics | Six physical routes, checked EEPROM/DOM, optional identity/status/measurements, module calibration/thresholds/flags, OUI/rate/wavelength, host acquisition times and mux restoration | GTH0/TMG/GTR identified; GTH1/GTH2/GTH3 presence unknown. I231 provides raw rate bits, not proven wiring. I238 is explicitly MBd signaling rate, not payload Mbps. Hermes LinkId association and suspected wiring fault remain unresolved |
 | I200–I202, named temperatures | Three AMS die sensors plus identified carrier U9 MCP9808; Celsius, quality and host observation times | Four readings deployed and tested. Not all possible sensors or ADC conversion timestamps |
+| Onboard regulator telemetry / additional temperature coverage | Opt-in four PJT004 rail voltages/source currents/module temperatures; fixed schematic mapping, stable PL bus, mandatory PEC, bracketed identity/mode, raw calibration/status and host alarms | Deployed and live readout tested. U42/U33 retain pre-existing CML flags. Manufacturer-specific status and VIN unqualified; no regulator control, load-voltage/metrology or overall rail-health claim |
 | Temperature-alarm follow-up | Active startup thresholds and Good/Warning/High/Critical/Missing/Invalid/Stale evaluation on each temperature | Deployed with provisional 85/95/105 C thresholds; boundary/fault tests synthetic. Monitoring only, not protection or safe ratings |
 | M009, GeneralInfo temperature | Bound to identified carrier U9; additive source/time metadata; failures NaN with quality | Real carrier readout tested; not calibrated ambient temperature |
 | Service observations / proposed SV017 instance | Eight allow-listed systemd unit observations, available PID/restart/exit data; same-PID invocation ID and uptime | Deployed; service state is not hardware readiness, heartbeat or authentication. Configured app name is not live xmutil inventory |
