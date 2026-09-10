@@ -1,11 +1,10 @@
 # Host clock: source and standalone ARM qualification
 
-**Not deployed.** Server collector `d143c0d`, client/checker `ebf3988`.
-DAPHNE-015 still runs `eecff61` with firmware `3f17f1b` / self-trigger ABI 2.0.
-The complete runtime archive, image pin and ONL home handoff are unchanged.
-The follow-up [timesync service collector](timesync-verification.md), candidate
-`702155b`, now passes clean builds and standalone ARM service checks. This page
-retains the earlier host-clock qualification's exact source and evidence.
+**Now deployed through `702155b`**, together with the
+[timesync service collector and live regression](timesync-verification.md).
+DAPHNE-015 retains firmware `3f17f1b` / self-trigger ABI 2.0. Complete runtime
+and image pin pass; refreshed ONL handoff remains pending. This page retains the
+earlier standalone qualification's exact source (`d143c0d` / `ebf3988`) and evidence.
 
 ## What is reported
 
@@ -19,7 +18,7 @@ independent bookkeeping remains free of new system calls or subprocesses.
 | I087 `Host.UnixTimeNs` | Signed Unix nanoseconds from the same `CLOCK_REALTIME` sample | No separate reads or rounding through floating point |
 | I090 `Host.BootTime` | Bracketed realtime midpoint minus `CLOCK_BOOTTIME` | Estimate including suspended time, not a persisted boot event; changes when wall time is corrected |
 | I098 synchronization evidence | Kernel `adjtimex` return state and raw status bits | Supporting observation, not proof of a current accepted NTP exchange or a complete timesync-service contract |
-| I099/I100 peer offset/time source | Added separately in the [timesync candidate](timesync-verification.md), not deployed | Historical sample and selected peer, not verified current offset from an approved source; kernel adjustment offset is not substituted |
+| I099/I100 peer offset/time source | Added separately in the [deployed timesync collector](timesync-verification.md) | Historical sample and selected peer, not verified current offset from an approved source; kernel adjustment offset is not substituted |
 
 Legacy `ps_local_time` and `ps_local_unix_ns` are aliases of that exact clock
 observation. Each new group carries quality, fixed source and monotonic
@@ -115,8 +114,8 @@ python daphne-server/scripts/verify_host_clock.py \
 
 Use the approved SSH transport. The CLI performs one bookkeeping read followed
 by two default system-status reads, checks source/schema and stable process/boot
-identity, and only prints whitelisted clock data. The deployed `eecff61` does
-not have this field and is expected to fail that new check. Candidate RPC/live
-regression, complete runtime/pin/ONL handoff and new-firmware/full-stream/image
-qualification remain pending. The timesync follow-up supplies service/history
-observations, but approved-source and fresh physical NTP evidence remain open.
+identity, and only prints whitelisted clock data. The former `eecff61` lacks
+this field; deployed `702155b` passes the new check and live regression.
+The timesync follow-up records complete runtime/pin qualification. Refreshed ONL
+handoff, approved-source/fresh physical NTP evidence and new-firmware/full-stream/
+image qualification remain open.

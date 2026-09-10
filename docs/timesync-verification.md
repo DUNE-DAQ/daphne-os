@@ -1,8 +1,10 @@
-# Timesync service: source and standalone ARM qualification
+# Timesync service: implemented and live-qualified
 
-**Not deployed.** Collector `dcd6bc6`, client/checker `702155b`.
-DAPHNE-015 still runs server `eecff61`, firmware `3f17f1b`, self-trigger ABI 2.0.
-No clock correction, NTP configuration change or service restart was performed.
+**Deployed as `702155b`.** Collector `dcd6bc6`, client/checker `702155b`.
+DAPHNE-015 retains firmware `3f17f1b`, self-trigger ABI 2.0. Native/live regression,
+complete runtime loader checks and matching image pin `d54f967` pass.
+No clock correction or NTP service/configuration change was performed.
+The refreshed ONL home/source/client handoff and wiki publication remain pending.
 
 ## What the fields mean
 
@@ -90,10 +92,10 @@ python daphne-server/scripts/verify_host_clock.py \
 ```
 
 Omit the final option to accept correctly reported service unavailability.
-Neither mode requires or proves synchronized UTC. Installed `eecff61` lacks
-these fields and is expected to fail this new verifier.
+Neither mode requires or proves synchronized UTC. The previous `eecff61` lacks
+these fields; the newly deployed `702155b` passes this verifier.
 
-## Evidence and remaining gates
+## Source and standalone ARM evidence
 
 Clean candidate source `702155b8068823118fd7dbecd2f4a982ec031785`, server subtree
 `78625e81be99c8eee4c826bc682226d40745b426`:
@@ -127,7 +129,50 @@ Evidence: `server-v05-fixes-20260909/timesync.16nLdZFs`, especially
 `native-audit-{host,arm}-bindings.json`. Owner-only native test payload:
 `/tmp/daphne-timesync-native.XXCeQymN`. It is not a deploy bundle.
 
-Next: candidate live RPC/zero-BIAS regression, complete runtime and image pin,
-ONL handoff/wiki update. Approved time-source identity and fresh physical NTP
-samples remain unverified; no time or network configuration change is implied.
-New firmware, full-stream and full-image qualification remain separate gates.
+## Live deployment and runtime
+
+Only the stopped server executable was replaced. The normal runtime restart
+reloaded the same installed FPGA; full zero-BIAS Configure preceded alignment
+and captures. MAC/IP, DHCP, SSH, identity files, libraries and NTP settings were
+preserved. The previous executable remains in RAM; no image backup, partition
+change or cleanup was performed.
+
+- Both AFE orders pass aggregate BIAS/BIASCTRL zero, five-AFE alignment, fresh
+  register reads and all 40 spybuffer channels. The complete test passes again
+  after the other checks. Canonical FE hash remains
+  `c858989d7e847a98146c39ad50ec1f053c67acc78ea3c268d6a880341ad8d503`.
+- Bookkeeping is responsive on all 48 maintenance observations, including 32
+  during Configure; rejection and direct-write invalidation checks pass.
+  Maximum measured round trip: 289 ms. No automatic server restarts.
+- All six existing suites pass: v0.5/register telemetry, 80 physical-channel
+  ADC acquisitions, six-route SFP collection, regulators, FPGA health and
+  identity/management-link reporting. These do not establish analog calibration.
+- Live clock CLI and default/opt-in/default timesync requests pass with matching
+  source/schema and stable configuration/process identity. Private peer values
+  remain only in memory, never in evidence output. The service still reports
+  zero processed NTP packets; offset and age remain unavailable, kernel unsynced.
+- Complete runtime archive loads all three private dependencies from its own
+  extracted payload and `libsystemd` from the existing OS. Packaged `--help`
+  passes on the actual ARM board without starting another hardware server.
+- Matching image pin, all 127 packaging tests and actual archive staging pass,
+  including the recipe's decisions for nine synthetic overlay-minor pairs.
+  This is not a BitBake or complete image-build qualification.
+
+Runtime archive SHA-256:
+`b2b05463c2944d4c94dd6e77accdd47c192cbbff575e8adbac80d57adb1099bd`.
+Live qualification SHA-256:
+`63bacb2563d6d245a14618c40b199acac7b7fe412f3db2127933d32a18f5b8a3`.
+Evidence: `timesync.16nLdZFs/live-abi20.y1YrFtvK`; complete local payload under
+`timesync.16nLdZFs/runtime-702155b`. Native runtime test files remain in
+`/tmp/daphne-runtime-702155b.XXfrhkz0`. The native smoke did not change services.
+
+Command-error evidence is retained: journal reading required sudo; a mistyped
+verifier filename was corrected. The metadata CLI's successful two-read default
+was followed by its explicit three-read system-status comparison. No server
+guard or hardware test was weakened for these command corrections.
+
+Health remains **11 PASS / 1 external-timing FAIL / 3 UNKNOWN**, not overall OK.
+Next: refreshed ONL home/source/client handoff and wiki. Approved time-source
+identity and fresh physical NTP samples remain unverified; no time or network
+configuration change is implied. New firmware, full-stream, Hermes delivery,
+analog metrology and full-image qualification remain separate gates.
