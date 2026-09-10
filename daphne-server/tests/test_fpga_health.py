@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import daphneV3_high_level_confs_pb2 as h
 from verify_fpga_health import check_status
 from verify_board_identity import same_gateware_image
+from test_native_timestamp import native_fixture
 
 
 class FpgaHealthTests(unittest.TestCase):
@@ -90,6 +91,27 @@ class FpgaHealthTests(unittest.TestCase):
         self.assertTrue(same_gateware_image(first, second))
         second.build_id += 1
         self.assertFalse(same_gateware_image(first, second))
+
+    def test_abi21_bench_progress_and_exact_admission(self):
+        s = self.fixture()
+        native = native_fixture()
+        s.gateware_identity.abi = 0x20001
+        s.endpoint.live_timestamp.CopyFrom(native.endpoint.live_timestamp)
+        s.endpoint.live_timestamp_quality = h.MEASUREMENT_GOOD
+        for check in s.fpga_health.checks:
+            if check.name == "live_timestamp_progress":
+                check.state = h.HEALTH_CHECK_PASS
+        report = check_status(s, h, 0x3f17f1b, 1, require_bench=True, expected_abi=0x20001)
+        self.assertEqual(report["checks"]["live_timestamp_progress"], "HEALTH_CHECK_PASS")
+        self.assertEqual(report["state"], "FPGA_HEALTH_NOT_READY")
+        self.assertNotIn("secret-test-only", str(report))
+        with self.assertRaises(RuntimeError):
+            self.check(s)  # Default qualification stays at exact ABI 2.0.
+        for check in s.fpga_health.checks:
+            if check.name == "live_timestamp_progress":
+                check.state = h.HEALTH_CHECK_UNKNOWN
+        with self.assertRaises(RuntimeError):
+            check_status(s, h, 0x3f17f1b, 1, expected_abi=0x20001)
 
 
 if __name__ == "__main__":

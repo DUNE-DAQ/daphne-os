@@ -2,13 +2,15 @@
 """Read-only qualification of FPGA-health reporting, not a declaration of health.
 
 Requests private network details for comparison but outputs only named check
-results, public FPGA words and observation times. No hardware writes or scans.
+results, public FPGA words and observation times. No hardware writes or scans;
+ABI 2.1 reads trigger diagnostic timestamp captures, not acquisition changes.
 """
 import argparse
 import json
 import math
 from pathlib import Path
 import sys
+from native_timestamp import check_progress
 
 
 def require(ok, reason):
@@ -16,7 +18,7 @@ def require(ok, reason):
         raise RuntimeError(reason)
 
 
-def check_status(s, h, expected_build, variant, require_bench=False):
+def check_status(s, h, expected_build, variant, require_bench=False, expected_abi=0x20000):
     require(s.success and s.HasField("fpga_health") and s.HasField("fpga_programming"),
             "Missing/failed FPGA status collection")
     health, p, i, ep = s.fpga_health, s.fpga_programming, s.gateware_identity, s.endpoint
@@ -27,7 +29,8 @@ def check_status(s, h, expected_build, variant, require_bench=False):
     def fresh(quality, observed):
         return quality == h.MEASUREMENT_GOOD and 0 < observed <= now and now - observed <= 5_000_000_000
 
-    require((i.magic, i.abi, i.variant, i.build_id) == (0x44415048, 0x20000, variant, expected_build)
+    require(expected_abi in (0x20000, 0x20001) and
+            (i.magic, i.abi, i.variant, i.build_id) == (0x44415048, expected_abi, variant, expected_build)
             and i.quality == h.MEASUREMENT_GOOD and i.HasField("matches_admitted_profile")
             and i.matches_admitted_profile, "Unexpected gateware/admission")
     require(0 < i.acquisition_started_monotonic_ns <= ep.observed_monotonic_ns
@@ -42,6 +45,8 @@ def check_status(s, h, expected_build, variant, require_bench=False):
     timing_ready = bool(control & 4 and locks & 3 == 3 and not control & 3
                         and not endpoint_control & 0x10000 and state & 15 == 8 and state & 16)
     require(ep.ready == timing_ready, "Timing-ready summary disagrees with raw registers")
+    require(not ep.last_timing_timestamp and not ep.last_timing_timestamp_observed_ns,
+            "Legacy timestamp fields must remain unset")
     unknown, passed, failed = h.HEALTH_CHECK_UNKNOWN, h.HEALTH_CHECK_PASS, h.HEALTH_CHECK_FAIL
 
     def outcome(available, ok):
@@ -76,7 +81,7 @@ def check_status(s, h, expected_build, variant, require_bench=False):
         "management_identity": outcome(fresh(h.MEASUREMENT_GOOD, binding.observed_monotonic_ns)
                                        and binding.binding_state in (h.IDENTITY_BINDING_MATCH, h.IDENTITY_BINDING_MISMATCH),
                                        binding.binding_state == h.IDENTITY_BINDING_MATCH),
-        "live_timestamp_progress": unknown, "hermes_data_path": unknown, "external_reset_epoch": unknown,
+        "live_timestamp_progress": check_progress(s, h, now), "hermes_data_path": unknown, "external_reset_epoch": unknown,
     }
     require(len(health.checks) == len(expected) and {c.name for c in health.checks} == set(expected),
             "Missing/duplicate/unexpected health checks")
@@ -88,10 +93,11 @@ def check_status(s, h, expected_build, variant, require_bench=False):
     if require_bench:
         require(expected["external_timing_ready"] == failed and all(
             value == (failed if name == "external_timing_ready" else unknown if name in
-                      ("live_timestamp_progress", "hermes_data_path", "external_reset_epoch") else passed)
+                      ("hermes_data_path", "external_reset_epoch") or
+                      (name == "live_timestamp_progress" and expected_abi == 0x20000) else passed)
             for name, value in expected.items()), "Board differs from expected qualified local-clock bench profile")
     return {"state": h.FpgaHealthState.Name(overall), "configuration_stat": f"0x{raw:08x}",
-            "build_id": f"0x{i.build_id:08x}", "observed_monotonic_ns": now,
+            "build_id": f"0x{i.build_id:08x}", "abi": f"0x{i.abi:08x}", "observed_monotonic_ns": now,
             "checks": {name: h.HealthCheckState.Name(value) for name, value in expected.items()}}
 
 
@@ -100,6 +106,8 @@ def main():
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--proto-dir", type=Path, required=True)
     parser.add_argument("--expected-build-id", type=lambda value: int(value, 0), required=True)
+    parser.add_argument("--expected-abi", type=lambda value: int(value, 0), choices=(0x20000, 0x20001), default=0x20000,
+                        help="Exact platform ABI word; default 0x20000 preserves deployed qualification")
     parser.add_argument("--mode", choices=("self-trigger", "full-stream"), required=True)
     parser.add_argument("--require-bench-profile", action="store_true")
     args = parser.parse_args()
@@ -133,7 +141,7 @@ def main():
             status = call(h.MT2_READ_SYSTEM_STATUS_REQ, h.ReadSystemStatusRequest(include_identity_details=True), h.SystemStatusSnapshot)
             require(not status.sfps, "Unexpected SFP collection")
             report["runs"].append(check_status(status, h, args.expected_build_id,
-                1 if args.mode == "self-trigger" else 2, args.require_bench_profile))
+                1 if args.mode == "self-trigger" else 2, args.require_bench_profile, args.expected_abi))
         after = call(h.MT2_READ_SERVER_STATE_REQ, h.ReadServerStateRequest(), h.ServerState)
         require(before.success and after.success and before.instance_id == after.instance_id and before.boot_id == after.boot_id
                 and before.applied_configuration_hash == after.applied_configuration_hash

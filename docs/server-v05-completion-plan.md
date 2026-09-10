@@ -14,7 +14,7 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 | Temperature alarms | Configurable high initial thresholds, Good/Warning/High/Critical/Missing/Invalid/Stale distinction, boundary/stale tests; observation only, no new shutdown policy | Implemented; 14 native/ARM suites and live normal-temperature/all-channel checks passed. High/fault cases synthetic, not physical trips |
 | SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Implemented/deployed; 18 native/ARM suites and 53 Python tests pass. GTH0/TMG/GTR identified; 14 diagnostic values per acquisition. Three unanswered cages and installed PCB/wiring caveat remain unresolved; factory RX warnings retained |
 | FPGA health | Actual loaded/admitted FPGA identity, configuration state, clocks/reset/timing, transport/link observations and clear degraded/unknown reasons; no service-active shortcut | Sampled programming STAT and 15-check assessment deployed/tested; see server-fpga-health.md. Coherent live timestamp, Hermes delivery and external-reset epoch remain unknown; no overall health/run-permit claim |
-| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp snapshot RTL/ABI 2.1 and physical-check scripts committed on firmware branch fix/health-timestamp-abi21. Local tests pass; no synthesis or deployment yet. Server/OS ABI integration, routed qualification and decoder/error exports remain pending |
+| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp RTL/ABI 2.1 and physical-check scripts committed on firmware branch fix/health-timestamp-abi21. Server/OS admission, snapshot collector, protocol, health and client source tests now pass. No synthesis/deployment yet; bundle ABI staging, routed/live qualification and decoder/error exports remain pending |
 | Qualification and handoff | Native/ARM tests, negative/stale/concurrency cases, live zero-BIAS/all-channel regression, both-ABI scope recorded, protocol clients/docs/wiki and ONL bundle | Pending |
 
 Evidence found so far:
@@ -68,8 +68,13 @@ the qualified synthesis/routing toolchain and hardware regression.
 
 The configured route to Cooper still times out at the FNAL bridge; no synthesis
 job is running. DAPHNE-015 remains on server `a729c2b` and firmware `3f17f1b`;
-this work did not connect to or change the board. The server and OS release
-admission currently accept ABI 2.0 exactly. Add/test explicit 2.1 compatibility,
-snapshot collection and protocol/client checks before deploying new firmware;
-do not bypass the identity/admission checks. The firmware repository's
-`docs/native-timestamp-snapshot.md` defines the complete transaction and gates.
+this work did not connect to or change the board. The deployed server accepts
+ABI 2.0 exactly. New source admission `7139e28` explicitly admits known ABI 2.1
+while requiring exact installed-profile agreement. The collector `a8adaec`,
+health integration `ef2ffe9` and independent client checks pass 24 native C++
+suites and 102 Python tests; ARM cross-build also passes. See
+[source verification and remaining gates](native-timestamp-verification.md).
+Bundle profile staging still hardcodes minor 0 and needs provenance-backed
+support before packaging ABI 2.1. Do not relabel old artifacts or bypass
+identity checks. Firmware `docs/native-timestamp-snapshot.md` defines the
+complete transaction and physical qualification gates.

@@ -15,10 +15,13 @@ hardware-latched timestamps or verified UTC.
 The checklist covers kernel programming, configuration error/startup flags,
 fabric/timing locks, timing resets, admitted image identity, external endpoint
 readiness, complete executed FE configuration evidence, PL die temperature, and
-management interface/baseline observations. Three requirements remain UNKNOWN:
-live timestamp progress, Hermes data-path operation, and external reset epoch.
-SFP diagnostics or successful oneshot services cannot satisfy those requirements.
-Thus current ABI-2 cannot earn an overall OBSERVED_OK result.
+management interface/baseline observations. On deployed ABI 2.0, three
+requirements remain UNKNOWN: live timestamp progress, Hermes data-path
+operation, and external reset epoch. The new [ABI 2.1 timestamp support](native-timestamp-verification.md)
+can assess native progress; it is source-tested but not deployed. Hermes and
+reset epoch remain UNKNOWN in either ABI. SFP diagnostics or successful
+oneshot services cannot satisfy those requirements. Neither ABI can currently
+earn an overall OBSERVED_OK result.
 
 ## Why two different Linux statuses matter
 
@@ -116,3 +119,8 @@ python daphne-server/scripts/verify_fpga_health.py \
 Exit zero means **reporting verified**, not "FPGA fully healthy." The bench
 option requires exactly the qualified local-clock profile above. Do not use it
 as a production external-timing requirement or authorization check.
+
+The client defaults to exact ABI `0x20000`; a qualified ABI 2.1 deployment must
+explicitly use `--expected-abi 0x20001` and its actual build ID. Its bench profile
+additionally requires native local-counter progress. See the timestamp guide
+for source-only verification and remaining deployment gates.
