@@ -4,9 +4,9 @@
   "workbook_filename": "DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx",
   "workbook_sha256": "7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8",
   "source_export_sha256": "393eac4e1a61513c76230f889670ce4a7841e3968272df33e829866461db2fe1",
-  "reviewed_os_commit": "abef83190d2121a1c4bfc94a9f7e42bbeee62808",
-  "server_commit": "75972de44150fb164886522ea79592a2cc638a1e",
-  "server_subtree": "0f19aab5c8d66ca779f8cd4e1048193127e60818",
+  "reviewed_os_commit": "78504f11dec0ebc5971bd0bbc9ba8b3f76ca89cd",
+  "server_commit": "78504f11dec0ebc5971bd0bbc9ba8b3f76ca89cd",
+  "server_subtree": "fff4ef1dfb300cae6ce76e16b06e5d76774dfc05",
   "row_count": 251,
   "source_semantics_sha256": "6c404e29337ac147638a8693511b2fceac9c0f42be17054544b617329b8802ec",
   "snapshot_only": true,
@@ -18,14 +18,14 @@
     "contract-pending": "Implementation requires an unresolved authority, authenticated identity, safety/lease or boot-recovery policy; do not invent that policy."
   },
   "expected_counts": {
-    "implemented": 84,
-    "partial": 95,
-    "missing": 59,
+    "implemented": 90,
+    "partial": 92,
+    "missing": 56,
     "contract-pending": 13
   },
   "global_limits": [
     "Human source/evidence audit, not consortium approval. The checker validates completeness/provenance/references, not semantic correctness.",
-    "Live qualification is DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
+    "Installed server 75972de remains live-qualified on DAPHNE-015 self-trigger firmware 3f17f1b ABI2.0 with BIAS=0 and BIASCTRL=0. Source snapshot 78504f1 adds native-probe-qualified AFE observations but is not deployed/RPC-qualified. No full-stream or newly routed ABI2.1/2.2 hardware qualification.",
     "Hardware/missing-assignment conditions remain open even on implemented rows; inspect evidence-group limits and per-row remaining work.",
     "No mezzanines are fitted. No new firmware, fan/bias/power writes, EEPROM changes, network/time changes or configuration mutations were performed for this audit.",
     "Crate/slot/detector, timing assignment and Hermes identity requirements also exist outside the Server Platform sheet; this sheet is not the complete user objective.",
@@ -306,13 +306,30 @@
       "source_refs": [
         "daphne-server/srcs/Afe.cpp",
         "daphne-server/srcs/Daphne.cpp",
-        "daphne-server/srcs/server_controller/handlers.cpp"
+        "daphne-server/srcs/server_controller/handlers.cpp",
+        "daphne-server/CMakeLists.txt",
+        "daphne-server/srcs/Dac.cpp",
+        "daphne-server/srcs/FpgaRegDict.cpp",
+        "daphne-server/srcs/server_controller/afe_global.cpp",
+        "daphne-server/srcs/server_controller/afe_global.hpp",
+        "daphne-server/srcs/server_controller/fpga_status.hpp",
+        "daphne-server/srcs/server_controller/readonly_mmio.cpp",
+        "daphne-server/srcs/server_controller/readonly_mmio.hpp",
+        "daphne-server/scripts/afe_global.py",
+        "daphne-server/scripts/verify_afe_global.py",
+        "daphne-server/srcs/server_controller/fpga_status.cpp",
+        "daphne-server/srcs/server_controller/timing_status.cpp",
+        "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto"
       ],
       "evidence_refs": [
-        "docs/server-v05-register-coverage.md"
+        "docs/afe-global-readback-verification.md",
+        "daphne-server/tests/afe_global_tests.cpp",
+        "daphne-server/tests/afe_global_probe.cpp",
+        "daphne-server/tests/fpga_status_tests.cpp",
+        "daphne-server/tests/test_afe_global.py"
       ],
-      "evidence_scope": "source-review; zero-BIAS command/guard evidence only",
-      "limit": "Setter responses or command dictionaries are not fresh read-only AFE global register observations."
+      "evidence_scope": "clean host/AArch64 compile; 33 host/33 native units; 203 Python tests per binding; two read-only native ABI2.0 collector probes; installed server unchanged",
+      "limit": "SC owns requested BiasEnable state; observation is FPGA register readback, not BIASCTRL DAC cache, physical power/bias voltage or busy history. Candidate server RPC/full regression, active transitions and full-stream/new-firmware qualification remain pending. No write-policy change."
     },
     "bias_loop": {
       "source_refs": [
@@ -416,14 +433,21 @@
     }
   },
   "reviewed_code_sha256": {
+    "daphne-server/CMakeLists.txt": "44acf36f390c1ab9d72dc63029fd1b77a350db7b5a5320a0dd4a2dfc420663b8",
+    "daphne-server/scripts/afe_global.py": "05f2beda9267df34311b949250fc8df9c51dd959327267d0cb57487c4de6f23d",
     "daphne-server/scripts/prepare_identity_assignment.py": "069c1c48e6f6cb38db2e3a959914c7d72ce1a993262e6ab4337a41a22615f9ab",
+    "daphne-server/scripts/verify_afe_global.py": "b366203124fcbb0ef5ba1f1c4fbe39060c15076339134d8f010fc5a390284355",
     "daphne-server/srcs/Afe.cpp": "c2accbeefb3cb3e194961ba518c73de6206fbaaf8ed794bb63dc9125d87f9991",
     "daphne-server/srcs/BoardI2C.cpp": "360932a64042142206ffb4168ee4aaa75b1d4fba0822cba07c9590e29db96ef3",
     "daphne-server/srcs/BoardSPI.cpp": "9492e0f2aeabe178930a6cd5cf9d6d5ba6a4c1bd16a925928aeb798f1866e1a0",
+    "daphne-server/srcs/Dac.cpp": "7b8642310d34c1e24d0f929c244a975458d3d4a21a4eaaeab8f297c2e9ee55a9",
     "daphne-server/srcs/Daphne.cpp": "87fb5404824d3f8069d8ae8ae8c45ed6064fb2a651c45d02a2181da14ed9fb76",
     "daphne-server/srcs/DaphneI2CDrivers.cpp": "c8b61e9ab470335dfc2ac71fa4ebab067f5f387c244177da233c437370425069",
-    "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto": "50f5bb37e8046c5494a63099bb6377ff967cd1bdd4a0742802a6cb34854e697e",
+    "daphne-server/srcs/FpgaRegDict.cpp": "b0ec928a8fe1298beb314186971fe9f60f8d1ce153150b7533c8267b7e59432d",
+    "daphne-server/srcs/protobuf/daphneV3_high_level_confs.proto": "ab385057f0367c42fe98c54c1b3f327363f7f8626aa4e55593812f28ae839e9a",
     "daphne-server/srcs/protobuf/daphneV3_low_level_confs.proto": "a5e32b9233db16bde401375dfd535d9d4543c9e5c0873dbfcb5ed87376e24af1",
+    "daphne-server/srcs/server_controller/afe_global.cpp": "cb562806152084718bb4fadfa2a50c0f5c3b40b46c49de18bef0f854fe60a92d",
+    "daphne-server/srcs/server_controller/afe_global.hpp": "06814d4d08fcdd26fb9f26283b69e90b043d73f964cc77f810b0e9ea804e869d",
     "daphne-server/srcs/server_controller/ams_temperature.cpp": "711663b17bc021a02b5972583d1e430228f14d2bbcdb5b92e95b63b488a6c7c8",
     "daphne-server/srcs/server_controller/board_identity.cpp": "008148de4a41bf225dafe69c30d0c375a563e46086b095148111f00038b840f1",
     "daphne-server/srcs/server_controller/board_identity_linux.cpp": "41c72f427072e725d8d32a9ba5e644e572c47b463cb6e5a9916bf54a3136ab6a",
@@ -435,7 +459,8 @@
     "daphne-server/srcs/server_controller/current_monitor_protocol.cpp": "009437eeb88d02cb8b55255901bf5e0f704f5a74700e7ec9fe402ef50f3dc134",
     "daphne-server/srcs/server_controller/fpga_health.cpp": "11b9004a84eb70cd7be9921645fee48f332217ffa562aa7deda37492262d731c",
     "daphne-server/srcs/server_controller/fpga_programming_linux.cpp": "f854e40a6d81d29d772e88b609a343daa2510ff62558e6b3c56d55d3752f6343",
-    "daphne-server/srcs/server_controller/fpga_status.cpp": "1af73e4cc74e5ea9a5ea37ac404250a91b7d48ae27b95b68347090a67538cd2f",
+    "daphne-server/srcs/server_controller/fpga_status.cpp": "c451e1dceb6e6292b8093e0b5d921799f58f7906692f14bfc6fc6f0758d47dde",
+    "daphne-server/srcs/server_controller/fpga_status.hpp": "3508335b771729ba5a8eab6c1471736ffc2c3079f4a68150c0d759b8c47178ff",
     "daphne-server/srcs/server_controller/gateware.cpp": "12e98f0a68f91cbe57a88c6fc5b4b2d1082211e1e97a1a538029d9e926b0cccb",
     "daphne-server/srcs/server_controller/handlers.cpp": "b2a0fba0d71035cc40f00d6e77bb3b40bd8aa2963888c067094965eb13849f53",
     "daphne-server/srcs/server_controller/host_clock.cpp": "24cf324b17b0a2f01091334249e930e3f35f5df17842e16bf66b2be59ea52c6f",
@@ -445,6 +470,8 @@
     "daphne-server/srcs/server_controller/management_link.cpp": "42b6390e0f0396495213f8f55373c34d781931df3d85961b6419158a556a987d",
     "daphne-server/srcs/server_controller/monitoring.cpp": "d320d64ba5852243900d4a5da7f38ac9dfcf01484a10380ce5f0e9901ac6b2f4",
     "daphne-server/srcs/server_controller/protocol_errors.cpp": "b6d808660727520eff04cacbc22cfd6887b58630528961b05fcd8bdbefb55bef",
+    "daphne-server/srcs/server_controller/readonly_mmio.cpp": "9092d8e35aecc8f6992212ecb6a891c722be47414797c226fa58a4a5704cd6c7",
+    "daphne-server/srcs/server_controller/readonly_mmio.hpp": "3da2904bfcfb9227523e4305ba47b61c4414229f7fc21def3d1084f332916815",
     "daphne-server/srcs/server_controller/register_reads.hpp": "cc09b96d3d4702f2c908537ed6a2ac4a9f8e29c35c387749d3b805e13a88d914",
     "daphne-server/srcs/server_controller/regulator_linux.cpp": "6564122328d4e64f687f699cb1a4df716825606e16b58b479e9c19d8ee4846df",
     "daphne-server/srcs/server_controller/regulator_monitor.cpp": "a0278fa3984739fc055c85e095a149dbc27926e2b3ddb5dd6e2ef957fab674f9",
@@ -459,6 +486,7 @@
     "daphne-server/srcs/server_controller/temperature_alarm.cpp": "e95bac0d4dbb9e33fd6b52c4f0fff58d970b4e224b543c2b41898734107b0cb7",
     "daphne-server/srcs/server_controller/timesync.cpp": "a65e2d70261ae463405e9a1a2557a94cadea535ccd928f824153a0c9e6d8770f",
     "daphne-server/srcs/server_controller/timesync_linux.cpp": "e0b84338c50e69be7d7dbcfed326605a16bca5db2f8cc61622d434234ceb323d",
-    "daphne-server/srcs/server_controller/timing_status.cpp": "951f5be8e676075c1d367fb87a4205a25787544bac0d61e004cd59350bac2fd8"
-  }
+    "daphne-server/srcs/server_controller/timing_status.cpp": "125534f04fe7601ca9d261aae95ead4ad0ff8dffbb53072482de451592a423d8"
+  },
+  "deployed_server_commit": "75972de44150fb164886522ea79592a2cc638a1e"
 }

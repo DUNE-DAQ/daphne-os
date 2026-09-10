@@ -5,15 +5,16 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Snapshot: server **75972de**, OS integration **abef831**, DAPHNE-015 running
-self-trigger firmware **3f17f1b / ABI 2.0**. This is an audit, not another
-deployment or a claim that the full workbook is solved.
+Source snapshot: server **78504f1**, including the new AFE readback collector.
+DAPHNE-015 still runs server **75972de** and self-trigger firmware
+**3f17f1b / ABI 2.0**. The candidate's standalone collector passed native tests;
+it has not replaced the server. This audit is not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
-| Implemented | 84 | Concrete producer/export provides the observation within its stated scope |
-| Partial | 95 | Related code exists, but semantics, readback, quality, completeness or retained reporting are missing |
-| Missing | 59 | No corresponding server observation; a schema field/internal helper is not enough |
+| Implemented | 90 | Concrete producer/export provides the observation within its stated scope |
+| Partial | 92 | Related code exists, but semantics, readback, quality, completeness or retained reporting are missing |
+| Missing | 56 | No corresponding server observation; a schema field/internal helper is not enough |
 | Contract pending | 13 | Authority, authenticated identity, lease/safety or boot-recovery policy must be established |
 
 **Implemented does not mean hardware-qualified everywhere.** Every row retains
@@ -24,9 +25,11 @@ calibration or overall FPGA-health qualification is inferred.
 
 ## Important findings
 
-- **I283–I288, AFE global state:** reset/power have setter replies but no fresh
-  read-only observations; busy flags are missing. `readVbiasControl()` returns
-  the command dictionary, not the bias-enable register.
+- **I283–I288, AFE global state:** the candidate now supplies admitted,
+  bracketed read-only register observations with quality/times; two native
+  probes passed. [AFE readback evidence](afe-global-readback-verification.md)
+  separates SC-owned BiasEnable from the cached BIASCTRL DAC setpoint.
+  Candidate server RPC/full regression remains pending.
 - **I207–I214, mezzanine samples:** independent cached atomics have no coherent
   quality/time; monitor exceptions can leave old values visible. No mezzanines
   are fitted on this bench, so physical qualification remains unavailable.
@@ -48,9 +51,9 @@ and deployment evidence are retained, not retroactively upgraded.
 
 ## Next implementation order
 
-1. Add ABI-admitted, bracketed **read-only AFE global state** for I283–I288.
-   Verify the deployed firmware map first; test zero-BIAS state, failures and
-   unchanged configuration. Do not use setter RPCs as monitoring queries.
+1. Deploy and qualify the **AFE global readback candidate** for I283–I288;
+   source mapping, clean builds, native collector and negative tests now pass.
+   Complete server RPC/full regression and handoff without changing SC policy.
 2. Correct **mezzanine cache quality/time and calibration provenance** with
    deterministic tests. Keep no-mezzanine behavior explicitly unavailable;
    hardware readback/metrology needs populated hardware.
@@ -87,7 +90,7 @@ python3 scripts/check_server_v05_audit.py \
 ```
 
 All 251 IDs/meanings/row positions and **all 30 worksheet/export columns** match
-the hash-pinned inputs. The checker verifies 44 reviewed code-file hashes and
+the hash-pinned inputs. The checker verifies 54 reviewed code-file hashes and
 all evidence references; 12 positive/negative tests pass. The source XLSX
 SHA-256 is `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 No extra Python packages are needed. The checker is read-only and does not
