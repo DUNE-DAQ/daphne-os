@@ -1,4 +1,5 @@
 #include "server_controller/fpga_health.hpp"
+#include "server_controller/native_timestamp.hpp"
 #include <cmath>
 
 namespace daphne_sc {
@@ -90,7 +91,26 @@ daphne::FpgaHealthAssessment assess_fpga_health(const daphne::SystemStatusSnapsh
       (binding.binding_state() == daphne::IDENTITY_BINDING_MATCH || binding.binding_state() == daphne::IDENTITY_BINDING_MISMATCH),
       binding.binding_state() == daphne::IDENTITY_BINDING_MATCH,
       "Observed controller/MAC/IPv4 match protected baseline; not assignment authentication or proof of network connectivity", binding.observed_monotonic_ns());
-  add("live_timestamp_progress", false, false, "ABI-2 lacks a coherent live timestamp export; capture timestamps are not a live heartbeat");
+  const auto& live = ep.live_timestamp();
+  const bool external_source = (ep.endpoint_clock_control_raw() & 4) != 0;
+  bool source_context_ok = ep.endpoint_clock_selected() == external_source;
+  for (const auto& sample : live.samples()) {
+    if (sample.quality() == daphne::MEASUREMENT_GOOD &&
+        sample.source() != (external_source ? daphne::NATIVE_TIMESTAMP_EXTERNAL_PDTS : daphne::NATIVE_TIMESTAMP_LOCAL_COUNTER))
+      source_context_ok = false;
+  }
+  const bool host_bracket_ok = id.acquisition_started_monotonic_ns() != 0 &&
+      id.acquisition_started_monotonic_ns() <= ep.observed_monotonic_ns() &&
+      ep.observed_monotonic_ns() <= live.acquisition_started_monotonic_ns() &&
+      live.observed_monotonic_ns() <= p.acquisition_started_monotonic_ns() &&
+      p.acquisition_started_monotonic_ns() <= p.configuration_observed_monotonic_ns() &&
+      p.configuration_observed_monotonic_ns() <= id.observed_monotonic_ns();
+  const bool live_available = supports_live_timestamp(id.abi()) &&
+      fresh(id.quality(), id.observed_monotonic_ns(), now) && id.has_matches_admitted_profile() && id.matches_admitted_profile() &&
+      timing && source_context_ok && host_bracket_ok && live.identity_bracket_verified() &&
+      fresh(live.quality(), live.observed_monotonic_ns(), now) && native_timestamp_pair_consistent(live);
+  add("live_timestamp_progress", live_available, live.advancing(),
+      "Two coherent same-source native samples must advance; local bench progress is not external timing readiness, frequency, epoch or acquisition alignment", live.observed_monotonic_ns());
   add("hermes_data_path", false, false, "SFP EEPROM/optical levels and configured identities do not prove PCS/link health, packet progress or receiver delivery");
   add("external_reset_epoch", false, false, "ABI-2 has no persistent reset/programming epoch; identical image reloads between samples can evade detection");
   result.set_state(failed ? daphne::FPGA_HEALTH_NOT_READY : unknown ? daphne::FPGA_HEALTH_UNKNOWN : daphne::FPGA_HEALTH_OBSERVED_OK);

@@ -80,6 +80,12 @@ int main() {
     require(status.capabilities(17).name() == "OnboardRegulatorTelemetry" && status.capabilities(17).supported());
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
+  for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, 0x00020002U}) {
+    daphne::SystemStatusSnapshot status;
+    add_register_capabilities(status, GatewareMode::kSelfTrigger, abi);
+    require(status.capabilities(3).name() == "LiveTimingTimestamp");
+    require(status.capabilities(3).supported() == (abi == kGatewareAbiV21));
+  }
   const int fd = mkstemp(filename);
   require(fd >= 0);
   const uint32_t values[] = {11, 22, 33, 44};

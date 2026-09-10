@@ -2,6 +2,7 @@
 #include "server_controller/readonly_mmio.hpp"
 #include "server_controller/timing_status.hpp"
 #include "server_controller/board_monitor.hpp"
+#include "server_controller/native_timestamp.hpp"
 #include <stdexcept>
 
 namespace daphne_sc {
@@ -9,7 +10,13 @@ FpgaStatusReaders default_fpga_status_readers() {
   return {
     [] { return read_fpga_programming_status(); },
     [] { ReadOnlyMmio mmio(kGatewareIdentityMagicAddress, 16); return probe_gateware_identity(mmio); },
-    [] { ReadOnlyMmio mmio(kTimingRegisterBase, 16); return read_timing_status(mmio); }
+    [] { ReadOnlyMmio mmio(kTimingRegisterBase, 16); return read_timing_status(mmio); },
+    [](const GatewareIdentity& admitted) {
+      if (!supports_live_timestamp(admitted.abi))
+        throw std::logic_error("Snapshot mapping requested without ABI 2.1 admission");
+      ReadOnlyMmio mmio(kTimingRegisterBase, kNativeTimestampWindowLength);
+      return read_native_timestamp(mmio, admitted.abi, monotonic_time_ns);
+    }
   };
 }
 
@@ -33,8 +40,14 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
       id->set_message(status.message());
       return false;
     }
+    if (!admitted) {
+      status.set_message("FPGA status MMIO skipped: no process-admitted image identity");
+      endpoint->set_message(status.message());
+      id->set_message(status.message());
+      return false;
+    }
     id->set_acquisition_started_monotonic_ns(monotonic_time_ns());
-    auto observe_identity = [&](std::optional<uint32_t> expected) {
+    auto observe_identity = [&](std::optional<GatewareIdentity> expected) {
       mmio_started = true;
       const auto value = read.identity();
       id->set_magic(value.magic);
@@ -45,21 +58,46 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
       id->set_observed_monotonic_ns(monotonic_time_ns());
       id->set_matches_admitted_profile(false);
       id->set_message("Sampled identity does not match admitted ABI/mode/build");
-      validate_runtime_gateware(value, mode, expected, runtime);
+      validate_runtime_gateware(value, mode, expected ? std::optional<uint32_t>(expected->build_id) : std::nullopt, runtime);
+      if (expected && !same_gateware_identity(value, *expected)) {
+        if (runtime) runtime->invalidate("Observed complete FPGA identity changed from admission");
+        throw std::runtime_error("Complete gateware identity mismatch");
+      }
       id->set_matches_admitted_profile(true);
       id->set_message("Sampled identity matches admitted ABI/mode/build");
       return value;
     };
-    const auto before = observe_identity(admitted ? std::optional<uint32_t>(admitted->build_id) : std::nullopt);
+    const auto before = observe_identity(admitted);
     *endpoint = read.timing();
     if (endpoint->observation_quality() != daphne::MEASUREMENT_GOOD)
       throw std::runtime_error("Timing observation unavailable");
+    if (supports_live_timestamp(before.abi)) {
+      *endpoint->mutable_live_timestamp() = read.timestamp(before);
+      const auto after_timing = read.timing();
+      if (after_timing.observation_quality() != daphne::MEASUREMENT_GOOD ||
+          after_timing.endpoint_clock_control_raw() != endpoint->endpoint_clock_control_raw() ||
+          after_timing.endpoint_clock_status_raw() != endpoint->endpoint_clock_status_raw() ||
+          after_timing.endpoint_control_raw() != endpoint->endpoint_control_raw() ||
+          after_timing.endpoint_status_raw() != endpoint->endpoint_status_raw())
+        throw std::runtime_error("Timing context changed around native timestamp reads");
+      for (const auto& sample : endpoint->live_timestamp().samples()) {
+        if (sample.quality() == daphne::MEASUREMENT_GOOD &&
+            sample.source() != (endpoint->endpoint_clock_selected() ?
+                daphne::NATIVE_TIMESTAMP_EXTERNAL_PDTS : daphne::NATIVE_TIMESTAMP_LOCAL_COUNTER))
+          throw std::runtime_error("Native timestamp source disagrees with bracketed timing controls");
+      }
+      endpoint->set_live_timestamp_quality(endpoint->live_timestamp().quality());
+    } else {
+      endpoint->mutable_live_timestamp()->set_message(
+          "Platform ABI 2.0 has no native timestamp snapshot; extension addresses were not accessed");
+    }
     // Check host programming state before the second MMIO access as well.
     *p = read.programming();
     if (!fpga_status_mmio_prerequisites(*p, monotonic_time_ns()))
       throw std::runtime_error("FPGA programming prerequisites changed or became unavailable during timing observation");
-    observe_identity(before.build_id);
-    id->set_message("Matching admitted identity samples bracket timing reads; not a hardware latch or protection against external reloads");
+    observe_identity(before);
+    if (supports_live_timestamp(before.abi)) endpoint->mutable_live_timestamp()->set_identity_bracket_verified(true);
+    id->set_message("Matching complete admitted identity samples bracket timing/native timestamp reads; not a hardware latch or protection against identical reloads");
     return true;
   } catch (const std::exception&) {
     if (mmio_started && runtime) runtime->invalidate("FPGA status could not confirm a stable admitted fabric observation");
@@ -71,6 +109,11 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
       id->set_message("Stable admitted identity observation was not completed");
     }
     endpoint->set_observation_quality(daphne::MEASUREMENT_ERROR);
+    if (endpoint->has_live_timestamp()) {
+      invalidate_native_timestamp(*endpoint->mutable_live_timestamp(), daphne::MEASUREMENT_ERROR,
+          "Native timestamp not qualified across FPGA admission/programming/timing checks");
+      endpoint->set_live_timestamp_quality(daphne::MEASUREMENT_ERROR);
+    }
     endpoint->set_ready(false);
     endpoint->set_message("Timing observation not qualified across FPGA admission checks");
     status.set_message("FPGA status collection failed; inspect programming, identity and timing qualities");

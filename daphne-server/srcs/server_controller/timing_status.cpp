@@ -39,13 +39,14 @@ daphne::EndpointStatus read_timing_status(Mmio32& mmio) {
     status.set_observed_host_unix_ns(host_unix_time_ns());
     status.set_observed_monotonic_ns(monotonic_time_ns());
     status.set_message("Two matching sampled reads, not a hardware latch or continuous health guarantee. "
-                       "Live timestamp is unavailable in this ABI; host wall clock is unverified");
+                       "Live timestamp, when supported, is collected separately; host wall clock is unverified");
     return status;
   }
   throw std::runtime_error("Timing registers changed across all three read attempts; retry");
 }
 
-void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMode mode) {
+void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMode mode,
+                              std::optional<uint32_t> admitted_abi) {
   auto add = [&](const char* name, bool supported, const char* reason) {
     auto* capability = status.add_capabilities();
     capability->set_name(name);
@@ -56,7 +57,10 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("TimingStatus", true, "Clock source, locks, resets, FSM and timestamp-valid at 0x84000000..0C");
   add("TriggerCounters", supports_trigger_counters(mode),
       supports_trigger_counters(mode) ? "Use request 320; 40 self-trigger channels" : "Not present in full-stream mode");
-  add("LiveTimingTimestamp", false, "I273/TI001: capture-buffer words are not a coherent live timestamp");
+  const bool native_timestamp = admitted_abi && supports_live_timestamp(*admitted_abi);
+  add("LiveTimingTimestamp", native_timestamp, native_timestamp ?
+      "ABI 2.1 native-clock diagnostic snapshot/progress comparison; no acquisition alignment, epoch or frequency qualification. Inspect per-observation quality" :
+      "I273/TI001: exact ABI 2.1 required for native snapshots; no probes of aliased ABI 2.0 offsets. Capture-buffer words are not a live timestamp");
   add("CommandDecoderMap", false, "I277: optical decoder wrapper output is not implemented");
   add("ProtocolErrorCount", false, "I281: optical register is hardwired zero, not a measured counter");
   add("CrateSlotDetectorReadback", false, "I058/I059/I061: legacy addresses overlap ABI-2 self-trigger controls");

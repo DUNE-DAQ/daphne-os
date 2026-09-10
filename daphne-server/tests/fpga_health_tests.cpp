@@ -1,5 +1,6 @@
 #include "server_controller/fpga_health.hpp"
 #include "server_controller/board_monitor.hpp"
+#include "server_controller/native_timestamp.hpp"
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -59,6 +60,35 @@ daphne::ManagementNetworkObservation good_network() {
   n.set_running_flag(true);
   n.set_mac_address("private-must-not-be-exported");
   return n;
+}
+void native_progress(daphne::SystemStatusSnapshot& status, bool advancing = true) {
+  status.mutable_gateware_identity()->set_abi(kGatewareAbiV21);
+  status.mutable_gateware_identity()->set_acquisition_started_monotonic_ns(now - 2000);
+  status.mutable_endpoint()->set_observed_monotonic_ns(now - 1500);
+  status.mutable_fpga_programming()->set_acquisition_started_monotonic_ns(now);
+  status.mutable_endpoint()->set_endpoint_clock_selected(true);
+  status.mutable_endpoint()->set_endpoint_clock_control_raw(4);
+  auto* live = status.mutable_endpoint()->mutable_live_timestamp();
+  live->set_quality(daphne::MEASUREMENT_GOOD);
+  live->set_feature_abi(kNativeTimestampAbi); live->set_feature_abi_after(kNativeTimestampAbi);
+  live->set_timeout_cycles(1024); live->set_timeout_cycles_after(1024);
+  live->set_maximum_attempts_per_sample(kNativeTimestampMaximumAttempts);
+  live->set_maximum_acquisition_ms(kNativeTimestampMaximumAcquisitionMs);
+  live->set_acquisition_started_monotonic_ns(now - 1000);
+  live->set_observed_monotonic_ns(now);
+  live->set_identity_bracket_verified(true);
+  live->set_delta_ticks(advancing ? 100 : 0); live->set_advancing(advancing);
+  for (unsigned i = 0; i < 2; ++i) {
+    auto* sample = live->add_samples();
+    sample->set_quality(daphne::MEASUREMENT_GOOD);
+    sample->set_request_status_raw(0x13); sample->set_status_raw(0x13);
+    sample->set_sequence_before(i); sample->set_sequence_first(i + 1); sample->set_sequence_after(i + 1);
+    sample->set_low_raw(i && advancing ? 200 : 100); sample->set_high_raw(0);
+    sample->set_timestamp_ticks(sample->low_raw()); sample->set_source(daphne::NATIVE_TIMESTAMP_EXTERNAL_PDTS);
+    sample->set_acquisition_started_monotonic_ns(now - 800 + i * 300);
+    sample->set_observed_monotonic_ns(now - 600 + i * 300);
+    sample->set_sample_index(i); sample->set_attempt_index(1);
+  }
 }
 daphne::HealthCheckState check(const daphne::FpgaHealthAssessment& health, const std::string& name) {
   for (const auto& c : health.checks()) if (c.name() == name) return c.state();
@@ -150,6 +180,30 @@ int main() {
     unknowns += c.state() == daphne::HEALTH_CHECK_UNKNOWN;
   }
   require(passes == 12 && unknowns == 3);
+  for (bool advancing : {false, true}) {
+    auto native = good_status(); native_progress(native, advancing);
+    const auto measured = assess_fpga_health(native, network, now);
+    require(check(measured, "live_timestamp_progress") == (advancing ? daphne::HEALTH_CHECK_PASS : daphne::HEALTH_CHECK_FAIL));
+    require(measured.state() != daphne::FPGA_HEALTH_OBSERVED_OK); // Hermes and reset epoch remain unknown.
+  }
+  for (unsigned mutation = 0; mutation < 11; ++mutation) {
+    auto native = good_status(); native_progress(native);
+    auto* live = native.mutable_endpoint()->mutable_live_timestamp();
+    switch (mutation) {
+      case 0: live->set_identity_bracket_verified(false); break;
+      case 1: live->set_observed_monotonic_ns(now - 5000000001); break;
+      case 2: live->set_quality(daphne::MEASUREMENT_ERROR); break;
+      case 3: live->set_delta_ticks(999); break;
+      case 4: native.mutable_gateware_identity()->set_abi(kGatewareAbiV2); break;
+      case 5: native.mutable_endpoint()->set_endpoint_clock_selected(false); break;
+      case 6: live->mutable_samples(0)->clear_timestamp_ticks(); break;
+      case 7: native.mutable_endpoint()->set_endpoint_clock_control_raw(0); break;
+      case 8: native.mutable_gateware_identity()->set_acquisition_started_monotonic_ns(now); break;
+      case 9: native.mutable_fpga_programming()->set_acquisition_started_monotonic_ns(now - 1); break;
+      case 10: native.mutable_endpoint()->set_observed_monotonic_ns(now); break;
+    }
+    require(check(assess_fpga_health(native, network, now), "live_timestamp_progress") == daphne::HEALTH_CHECK_UNKNOWN);
+  }
   require(health.SerializeAsString().find("private-must-not-be-exported") == std::string::npos);
   require(assess_fpga_health({}, {}, now).state() == daphne::FPGA_HEALTH_UNKNOWN);
   status.mutable_endpoint()->set_ready(false);

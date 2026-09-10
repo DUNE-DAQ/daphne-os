@@ -2280,7 +2280,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
   handlers[daphne::MT2_READ_SYSTEM_STATUS_REQ] = [mode, admitted_identity, temperature_policy, board_identity](const std::string& in, std::string& out, Daphne& d) {
     daphne::ReadSystemStatusRequest req;
     daphne::SystemStatusSnapshot resp;
-    add_register_capabilities(resp, mode);
+    add_register_capabilities(resp, mode, admitted_identity ? std::optional<uint32_t>(admitted_identity->abi) : std::nullopt);
     daphne::ManagementNetworkObservation network;
     bool accepted = false;
     try {
