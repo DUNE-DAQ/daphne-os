@@ -3,8 +3,8 @@
 # declared identity ABI and supports both --gateware-mode variants.
 # This is a DUNE-DAQ/daphne-os commit, with source under daphne-server/;
 # it is not an ecristal/daphneZMQ revision. See
-# docs/afe-global-readback-verification.md for native and live evidence.
-DAPHNE_SERVER_REQUIRED_GIT_COMMIT = "78504f11dec0ebc5971bd0bbc9ba8b3f76ca89cd"
+# docs/afe-reset-health-verification.md for native and live evidence.
+DAPHNE_SERVER_REQUIRED_GIT_COMMIT = "4e74f1071d09e16a15db597204c22debead2592c"
 DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MAJOR = "2"
 # Explicit supported minors of the pinned server, not of the packaging tools.
 # Native ARM software qualification and live self-trigger ABI 2.0 regression
