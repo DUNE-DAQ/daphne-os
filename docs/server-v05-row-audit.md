@@ -6,9 +6,9 @@ All **251 rows** are now individually assessed in the
 test scope and limitation. The original XLSX is unchanged.
 
 Source snapshot: server **78504f1**, including the new AFE readback collector.
-DAPHNE-015 still runs server **75972de** and self-trigger firmware
-**3f17f1b / ABI 2.0**. The candidate's standalone collector passed native tests;
-it has not replaced the server. This audit is not a full-workbook completion claim.
+DAPHNE-015 now runs server **78504f1** with unchanged self-trigger firmware
+**3f17f1b / ABI 2.0**. Native and live RPC/full regression, the complete runtime
+and image pin pass. This audit is not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
@@ -29,7 +29,8 @@ calibration or overall FPGA-health qualification is inferred.
   bracketed read-only register observations with quality/times; two native
   probes passed. [AFE readback evidence](afe-global-readback-verification.md)
   separates SC-owned BiasEnable from the cached BIASCTRL DAC setpoint.
-  Candidate server RPC/full regression remains pending.
+  Live RPC/full regression and runtime checks now pass; physical transitions
+  and full-stream/new-firmware qualification remain separate.
 - **I207–I214, mezzanine samples:** independent cached atomics have no coherent
   quality/time; monitor exceptions can leave old values visible. No mezzanines
   are fitted on this bench, so physical qualification remains unavailable.
@@ -51,9 +52,9 @@ and deployment evidence are retained, not retroactively upgraded.
 
 ## Next implementation order
 
-1. Deploy and qualify the **AFE global readback candidate** for I283–I288;
-   source mapping, clean builds, native collector and negative tests now pass.
-   Complete server RPC/full regression and handoff without changing SC policy.
+1. Finish the **AFE global readback ONL/wiki handoff** for I283–I288;
+   source mapping, clean builds, native/live RPC/full regression and complete
+   runtime now pass. Keep physical transitions and SC policy separate.
 2. Correct **mezzanine cache quality/time and calibration provenance** with
    deterministic tests. Keep no-mezzanine behavior explicitly unavailable;
    hardware readback/metrology needs populated hardware.

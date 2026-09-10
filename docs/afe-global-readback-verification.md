@@ -1,9 +1,10 @@
 # AFE global status: SC ownership and hardware readback
 
 Server implementation **0e5f48b**, client verification **78504f1**.
-The candidate is compiled and its collector is tested on DAPHNE-015, but it
-has **not replaced the installed 75972de server**. Firmware remains
-self-trigger **3f17f1b / ABI 2.0**.
+Server **78504f1 is deployed and live-qualified on DAPHNE-015**. Firmware
+remains self-trigger **3f17f1b / ABI 2.0**. The complete runtime and native
+loader pass; image pin **fb53223** and 140 packaging/audit tests pass.
+The refreshed ONL home/source/client handoff and wiki publication are pending.
 
 ## What the fields mean
 
@@ -93,8 +94,8 @@ sudo env LD_LIBRARY_PATH=/usr/lib/daphne-server \
   "$PROBE_STAGE/afe_global_probe" self-trigger 0x20000 0x3f17f1b
 ```
 
-After a candidate server is separately deployed and qualified, its matching
-client can check three ordinary RPCs without private opt-ins or writes:
+The deployed server's matching client checks three ordinary RPCs without
+private opt-ins or writes:
 
 ```bash
 python3 daphne-server/scripts/verify_afe_global.py \
@@ -103,6 +104,49 @@ python3 daphne-server/scripts/verify_afe_global.py \
   --expected-build-id 0x3f17f1b --expected-abi 0x20000 --mode self-trigger
 ```
 
-Remaining: candidate server RPC/full regression and runtime handoff; real
-busy/reset transitions; full-stream and newer routed firmware qualification.
-Do not toggle SC-owned energization or reset merely to make a diagnostic pass.
+## Deployed regression and complete runtime
+
+Deployment one-shot `daphne-deploy-78504f1.service` exited successfully. Only
+the server executable was replaced after the old process exited; the normal
+runtime restart reloaded the same installed FPGA. The old executable remains
+in RAM at `/run/daphne-candidate-78504f1/previous-server`, not in a recovery
+image. No partition, library, identity, network, time or bias-policy changes.
+
+Initial and final full zero-BIAS passes each completed **153 exchanges**:
+both AFE orders, all five alignments and all 40 usable spybuffer channels.
+The new AFE client passed three RPCs with fresh raw words **0x2 / 0x1**, matching
+quality, identity brackets, source/schema and unchanged configuration evidence.
+
+Bookkeeping passed 46 metadata-checked observations, 31 during Configure;
+maximum round trip **322.311 ms**. Rejections preserved applied state, a direct
+rewrite of the existing channel-0 offset invalidated it, and full Configure
+restored the reference hash. The six inherited regressions passed: v0.5 (17
+exchanges), ADC (93, including 80 CRC-checked samples), SFP (5), regulator (7),
+FPGA health (4) and private identity/link reporting (5). Kernel/OS, clock and
+build clients passed three exchanges each; timesync privacy passed five.
+
+Final FE hash:
+`c858989d7e847a98146c39ad50ec1f053c67acc78ea3c268d6a880341ad8d503`.
+Policy remains BIAS/BIASCTRL=0, offset=2200/x1, trim=0, VGAIN=1700,
+generator=1 and current selectors=0/0. These are command/register observations,
+not physical zero-voltage or calibration evidence. Health remains **11 PASS /
+1 external-timing FAIL / 3 UNKNOWN**. No automatic restart or error-or-higher
+journal entry was observed for the new invocation; private messages were not
+exported. Protected-file, boot, service and final policy guards pass.
+
+Live proof `live-abi20.gFlLwtK4/qualification.json` SHA-256:
+`ca90374e49749db0558f4b0e6dd68cb9ea9177adee908fdca89a9549bbc085f9`.
+Complete runtime `runtime-78504f1/daphne-server-runtime-minimal.tgz` SHA-256:
+`38e691b37ee80b5a5dd5a1d97157347eaf270d05269c01181d2712b81b3ad61a`.
+Its 20 regular files and four aliases include the exact server and unchanged
+qualified Hermes/protobuf/utf8/ZeroMQ dependencies. The archive's payload checks
+and native loader/help pass with all three private libraries resolved inside
+the extracted bundle; OS-provided libsystemd is not bundled or replaced.
+
+Actual runtime staging and all nine synthetic overlay-minor combinations pass.
+The source `daphne-server-version.inc` remains fail-closed until a real project
+stages the matching archive. This is not BitBake or a complete image build.
+
+Remaining: refreshed ONL/wiki handoff; real busy/reset transitions;
+full-stream and newer routed firmware qualification. Do not toggle SC-owned
+energization or reset merely to make a diagnostic pass.
