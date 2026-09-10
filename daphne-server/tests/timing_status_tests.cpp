@@ -62,7 +62,7 @@ int main() {
   for (auto mode : {GatewareMode::kSelfTrigger, GatewareMode::kFullStream}) {
     daphne::SystemStatusSnapshot status;
     add_register_capabilities(status, mode);
-    require(status.capabilities_size() == 22);
+    require(status.capabilities_size() == 23);
     require(status.capabilities(2).supported() == supports_trigger_counters(mode));
     for (int i = 3; i < 7; ++i)
       require(!status.capabilities(i).supported() && !status.capabilities(i).reason().empty());
@@ -84,6 +84,7 @@ int main() {
     require(status.capabilities(19).reason().find("I086/I087/I090") != std::string::npos);
     require(status.capabilities(20).name() == "TimesyncService" && status.capabilities(20).supported());
     require(status.capabilities(21).name() == "HostSoftware" && status.capabilities(21).supported());
+    require(status.capabilities(22).name() == "AfeGlobalReadback" && !status.capabilities(22).supported());
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
   for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, kGatewareAbiV22, 0x00020003U}) {
@@ -93,6 +94,7 @@ int main() {
     require(status.capabilities(3).supported() == (abi == kGatewareAbiV21 || abi == kGatewareAbiV22));
     require(status.capabilities(5).name() == "ProtocolErrorCount");
     require(status.capabilities(5).supported() == (abi == kGatewareAbiV22));
+    require(status.capabilities(22).supported() == supports_gateware_abi(abi));
   }
   const int fd = mkstemp(filename);
   require(fd >= 0);

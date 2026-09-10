@@ -114,5 +114,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("HostSoftware", true,
       "I091/I092 and partial I093: uname release and six allow-listed os-release fields with quality and acquisition times. "
       "Original base BUILD_ID and image labels are metadata, not current rootfs integrity, server version or boot-slot evidence");
+  add("AfeGlobalReadback", admitted_abi && supports_gateware_abi(*admitted_abi),
+      "I283-I288: admitted ABI 2.0/2.1/2.2 read-only POWERSTATE/reset, sampled AFE SPI busy flags and separate BiasEnable register. "
+      "SC owns requested state; not BIASCTRL DAC cache, physical power/bias voltage, busy history or a run permit. Inspect quality and identity bracket");
 }
 }

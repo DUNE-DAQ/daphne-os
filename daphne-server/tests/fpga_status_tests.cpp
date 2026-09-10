@@ -1,5 +1,6 @@
 #include "server_controller/fpga_status.hpp"
 #include "server_controller/board_monitor.hpp"
+#include "server_controller/afe_global.hpp"
 #include <iostream>
 #include <stdexcept>
 
@@ -10,7 +11,7 @@ struct Fixture {
   RuntimeState runtime{"instance", "boot", [] { return ObservationTime{monotonic_time_ns(), 1}; }};
   daphne::SystemStatusSnapshot status;
   GatewareIdentity identity{kGatewareIdentityMagic, kGatewareAbiV2, 1, 0x03f17f1b};
-  unsigned programs = 0, ids = 0, timings = 0, timestamps = 0, histories = 0;
+  unsigned programs = 0, ids = 0, timings = 0, timestamps = 0, histories = 0, afes = 0;
   unsigned fail_program = 0, change_id = 0, throw_id = 0, change_abi = 0;
   bool fail_timing = false, unknown_program = false, change_timing = false;
   FpgaStatusReaders readers;
@@ -75,6 +76,16 @@ struct Fixture {
       attempt->set_count_raw(7); attempt->set_detail_raw(129);
       return observation; // Outer checks only; raw contract has dedicated tests.
     };
+    readers.afe_global = [&](const GatewareIdentity& value) {
+      ++afes; require(same_gateware_identity(value, identity));
+      daphne::AfeGlobalObservation r;
+      r.set_quality(daphne::MEASUREMENT_GOOD); r.set_global_control_raw(0); r.set_bias_enable_raw(1);
+      r.set_power_state_bit(false); r.set_reset_asserted(false);
+      r.set_busy_afe0(false); r.set_busy_afe12(false); r.set_busy_afe34(false); r.set_bias_enabled(true);
+      r.set_acquisition_started_monotonic_ns(monotonic_time_ns()); r.set_observed_monotonic_ns(monotonic_time_ns());
+      r.set_source(kAfeGlobalSource); r.set_maximum_acquisition_ms(kAfeGlobalMaximumAcquisitionMs);
+      return r;
+    };
   }
   bool collect() {
     return collect_fpga_status(status, static_cast<GatewareMode>(identity.variant), identity, &runtime, readers);
@@ -91,6 +102,7 @@ int main() {
     require(f.programs == 2 && f.ids == 2 && f.timings == (abi == kGatewareAbiV2 ? 1 : 2));
     require(f.timestamps == (abi == kGatewareAbiV2 ? 0 : 1));
     require(f.histories == (abi == kGatewareAbiV22 ? 1 : 0));
+    require(f.afes == 1 && afe_global_consistent(f.status.afe_global()) && f.status.afe_global().identity_bracket_verified());
     require(f.status.endpoint().live_timestamp().identity_bracket_verified() == (abi != kGatewareAbiV2));
     require(f.status.endpoint().protocol_errors().identity_bracket_verified() == (abi == kGatewareAbiV22));
     require(f.status.endpoint().protocol_errors().has_count() == (abi == kGatewareAbiV22));
@@ -117,6 +129,10 @@ int main() {
     require(!f.collect() && !f.runtime.snapshot().applied_configuration_valid());
     const bool collected = failure == 1 || failure == 3 || failure == 5 || failure == 7;
     require(f.histories == unsigned(collected));
+    require(f.afes == unsigned(collected));
+    require(!f.status.afe_global().has_bias_enabled() && !f.status.afe_global().has_power_state_bit() &&
+        !f.status.afe_global().identity_bracket_verified());
+    require(f.status.afe_global().has_global_control_raw() == collected);
     const auto& r = f.status.endpoint().protocol_errors();
     require(!r.has_count() && !r.has_reasons_seen() && !r.has_saturated() &&
             !r.has_overflowed() && !r.has_receiver_reset() && !r.identity_bracket_verified());
@@ -135,7 +151,7 @@ int main() {
   for (unsigned mode : {1, 2}) {
     Fixture f; f.identity.variant = mode; f.identity.abi = kGatewareAbiV22;
     require(!collect_fpga_status(f.status, static_cast<GatewareMode>(mode), std::nullopt, &f.runtime, f.readers));
-    require(f.ids == 0 && f.timings == 0 && f.timestamps == 0 && f.histories == 0);
+    require(f.ids == 0 && f.timings == 0 && f.timestamps == 0 && f.histories == 0 && f.afes == 0);
     require(f.runtime.snapshot().applied_configuration_valid());
   }
   for (auto quality : {daphne::MEASUREMENT_UNAVAILABLE, daphne::MEASUREMENT_ERROR, daphne::MEASUREMENT_STALE}) {
@@ -254,6 +270,49 @@ int main() {
     try { validate_runtime_gateware(f.identity, GatewareMode::kFullStream, f.identity.build_id, &f.runtime); }
     catch (const std::exception&) { rejected = true; }
     require(rejected && !f.runtime.snapshot().applied_configuration_valid());
+  }
+  for (unsigned failure = 0; failure < 6; ++failure) {
+    auto id = Fixture{}.identity;
+    if (failure == 0) id.magic = 0;
+    if (failure == 1) id.abi = 0x20003;
+    if (failure == 2) id.abi = 0x10000;
+    if (failure == 3) id.variant = 0;
+    if (failure == 4) id.variant = 3;
+    if (failure == 5) id.build_id |= 0x10000000;
+    bool rejected = false;
+    try { default_fpga_status_readers().afe_global(id); }
+    catch (const std::logic_error&) { rejected = true; }
+    require(rejected); // Invalid identity rejected before opening /dev/mem.
+  }
+  {
+    Fixture f; require(f.collect());
+    f.unknown_program = true;
+    require(!f.collect() && !f.status.afe_global().has_global_control_raw() && !f.status.afe_global().has_bias_enabled());
+    require(f.afes == 1); // Reusing a snapshot cannot retain the previous successful observation.
+  }
+  for (unsigned failure = 0; failure < 2; ++failure) {
+    Fixture f;
+    if (failure == 0) f.readers.afe_global = [](const GatewareIdentity&) -> daphne::AfeGlobalObservation {
+      throw std::runtime_error("mapping failed");
+    };
+    else {
+      auto original = f.readers.afe_global;
+      f.readers.afe_global = [original](const GatewareIdentity& id) {
+        auto r = original(id); r.set_bias_enabled(false); return r;
+      };
+    }
+    require(!f.collect() && !f.runtime.snapshot().applied_configuration_valid());
+    require(!f.status.afe_global().has_bias_enabled() && !f.status.afe_global().identity_bracket_verified());
+  }
+  for (auto quality : {daphne::MEASUREMENT_UNAVAILABLE, daphne::MEASUREMENT_ERROR, daphne::MEASUREMENT_STALE}) {
+    Fixture f;
+    f.readers.afe_global = [quality](const GatewareIdentity&) {
+      daphne::AfeGlobalObservation r; r.set_quality(quality); return r;
+    };
+    require(f.collect() && f.runtime.snapshot().applied_configuration_valid());
+    require(f.status.afe_global().quality() == quality && !f.status.afe_global().has_bias_enabled());
+    require(f.status.afe_global().identity_bracket_verified());
+    // A completed identity bracket is not a guarantee that every diagnostic succeeded.
   }
   std::cout << "Both ABI variants, lazy admission, before/after failures, known invalidation and ADC-shared guard passed\n";
 }

@@ -886,6 +886,29 @@ message HostSoftwareObservation {
   string detail = 8;
 }
 
+// I283-I288: fresh FPGA register observations, not cached SC requests or
+// measurements of AFE power/bias voltage. SC owns the requested state.
+message AfeGlobalObservation {
+  MeasurementQuality quality = 1;
+  optional uint32 global_control_raw = 2; // 0x80000000; defined bits 4..0.
+  optional uint32 bias_enable_raw = 3; // 0x9400000C; defined bit 0.
+  optional bool power_state_bit = 4; // Raw POWERSTATE bit 1; firmware drives afe_pdn = !bit1.
+  optional bool reset_asserted = 5; // Bit 0 drives the AFE reset output.
+  optional bool busy_afe0 = 6; // Bit 2: AFE/trim/offset SPI engines, not executor busy.
+  optional bool busy_afe12 = 7; // Bit 3: combined engines for AFE1 and AFE2.
+  optional bool busy_afe34 = 8; // Bit 4: combined engines for AFE3 and AFE4.
+  optional bool bias_enabled = 9; // Enable register, NOT the BIASCTRL DAC setpoint.
+  uint64 acquisition_started_monotonic_ns = 10;
+  uint64 observed_monotonic_ns = 11;
+  bool identity_bracket_verified = 12;
+  string source = 13;
+  string message = 14;
+  uint32 maximum_acquisition_ms = 15;
+  // The two words are sequential reads, not a common hardware latch. Busy
+  // flags are instantaneous samples, not history or proof of completed work.
+  // Failed observations retain available raw evidence but no decoded values.
+}
+
 message SystemStatusSnapshot {
   bool   success               = 1;
   string message               = 2;
@@ -918,6 +941,7 @@ message SystemStatusSnapshot {
   ServerBuildInfo server_build = 29;
   HostTimeStatus host_time = 30;
   repeated HostSoftwareObservation host_software = 31;
+  AfeGlobalObservation afe_global = 32;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }

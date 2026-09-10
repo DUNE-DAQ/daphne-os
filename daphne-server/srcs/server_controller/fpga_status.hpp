@@ -12,6 +12,7 @@ struct FpgaStatusReaders {
   std::function<daphne::EndpointStatus()> timing;
   std::function<daphne::NativeTimestampObservation(const GatewareIdentity&)> timestamp;
   std::function<daphne::ProtocolErrorObservation(const GatewareIdentity&)> protocol_errors;
+  std::function<daphne::AfeGlobalObservation(const GatewareIdentity&)> afe_global;
 };
 FpgaStatusReaders default_fpga_status_readers();
 bool collect_fpga_status(daphne::SystemStatusSnapshot&, GatewareMode,

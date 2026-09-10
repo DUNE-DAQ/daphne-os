@@ -130,6 +130,7 @@ target_include_directories(daphne_software_build PUBLIC "${CMAKE_CURRENT_SOURCE_
 target_link_libraries(daphne_software_build PUBLIC daphne_proto)
 
 add_library(daphne_telemetry_protocol
+  srcs/server_controller/afe_global.cpp
   srcs/server_controller/protocol_errors.cpp
   srcs/server_controller/native_timestamp.cpp
   srcs/server_controller/regulator_monitor.cpp
@@ -190,6 +191,12 @@ if(BUILD_TESTING)
   target_link_libraries(fpga_status_tests PRIVATE daphne_fpga_status)
   add_test(NAME fpga_status_unit COMMAND fpga_status_tests)
   set_tests_properties(fpga_status_unit PROPERTIES LABELS unit)
+  add_executable(afe_global_tests tests/afe_global_tests.cpp)
+  target_link_libraries(afe_global_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME afe_global_unit COMMAND afe_global_tests)
+  set_tests_properties(afe_global_unit PROPERTIES LABELS unit)
+  add_executable(afe_global_probe tests/afe_global_probe.cpp)
+  target_link_libraries(afe_global_probe PRIVATE daphne_fpga_status)
   add_executable(native_timestamp_tests tests/native_timestamp_tests.cpp)
   add_executable(protocol_error_tests tests/protocol_error_tests.cpp)
   target_link_libraries(protocol_error_tests PRIVATE daphne_telemetry_protocol)
