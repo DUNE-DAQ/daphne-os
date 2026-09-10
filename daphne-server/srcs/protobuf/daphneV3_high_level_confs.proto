@@ -340,6 +340,45 @@ message TemperatureAlarm {
   string message = 9;
 }
 
+enum NativeTimestampSource {
+  NATIVE_TIMESTAMP_SOURCE_UNSPECIFIED = 0;
+  NATIVE_TIMESTAMP_LOCAL_COUNTER = 1; // Bench counter, not externally synchronized time.
+  NATIVE_TIMESTAMP_EXTERNAL_PDTS = 2; // Native PDTS domain, not acquisition-mux readback.
+}
+message NativeTimestampSample {
+  MeasurementQuality quality = 1;
+  optional uint32 request_status_raw = 2;
+  optional uint32 sequence_before = 3;
+  optional uint32 sequence_first = 4;
+  optional uint32 sequence_after = 5;
+  optional uint32 status_raw = 6;
+  optional uint32 low_raw = 7;
+  optional uint32 high_raw = 8;
+  optional uint64 timestamp_ticks = 9; // Present only for a qualified capture; zero is possible.
+  NativeTimestampSource source = 10;
+  uint64 acquisition_started_monotonic_ns = 11;
+  uint64 observed_monotonic_ns = 12;
+  string message = 13;
+  uint32 sample_index = 14; // 0 or 1 in the progress comparison.
+  uint32 attempt_index = 15; // 1..maximum_attempts_per_sample; conflicts retain raw evidence.
+}
+message NativeTimestampObservation {
+  MeasurementQuality quality = 1; // Quality of the pair, distinct from whether it advances.
+  optional uint32 feature_abi = 2;
+  optional uint32 timeout_cycles = 3; // Firmware budget in AXI cycles, not a syscall deadline.
+  repeated NativeTimestampSample samples = 4;
+  optional bool advancing = 5; // Only for two qualified same-source samples; not a frequency check.
+  optional uint64 delta_ticks = 6; // Unsigned modulo 2^64; >=2^63 is not accepted as forward progress.
+  uint64 acquisition_started_monotonic_ns = 7;
+  uint64 observed_monotonic_ns = 8;
+  bool identity_bracket_verified = 9; // Set only by completed outer FPGA admission/programming checks.
+  string message = 10;
+  uint32 maximum_attempts_per_sample = 11;
+  uint64 maximum_acquisition_ms = 12; // Checked after calls return; cannot interrupt a stuck MMIO read.
+  optional uint32 feature_abi_after = 13;
+  optional uint32 timeout_cycles_after = 14;
+}
+
 message EndpointStatus {
   bool   ready                            = 1;
   uint32 endpoint_status_raw              = 2;
@@ -367,6 +406,7 @@ message EndpointStatus {
   uint64 observed_host_unix_ns              = 20; // unverified host wall clock
   uint64 observed_monotonic_ns              = 21;
   optional uint32 endpoint_address          = 22; // ep_ctrl_reg[15:0], observed control value, NOT a DB assignment.
+  NativeTimestampObservation live_timestamp = 23;
 }
 
 // Identity assignments are database/configuration evidence, NEVER hardware
