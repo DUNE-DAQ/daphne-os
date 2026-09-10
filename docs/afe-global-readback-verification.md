@@ -9,6 +9,10 @@ section below and the [SC ownership wiki page](https://github.com/DUNE-DAQ/daphn
 
 ## What the fields mean
 
+**Ownership follow-up:** [candidate fb82e0a](sc-bias-enable-ownership.md) removes
+the implicit enable write from aggregate Configure. It is native-tested but not
+deployed; the historical read-only qualification below did not change write policy.
+
 The v0.5 workbook assigns ordinary energization authority to **SC**;
 `daphne-server` executes local operations and reports observed state.
 `SystemStatusSnapshot.afe_global` is read-only. No write policy, Configure
