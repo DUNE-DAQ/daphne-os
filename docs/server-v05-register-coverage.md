@@ -5,7 +5,8 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `13bc725`, including
+Current DAPHNE-015 server: `3556811`, including
+[live host-resource observations](host-resource-verification.md),
 [onboard regulator telemetry](onboard-regulator-verification.md),
 [sampled FPGA health evidence](server-fpga-health.md),
 [database identity assignments and live management readback](board-identity-verification.md),
@@ -56,7 +57,7 @@ preserved history. Relevant prior work:
 | Temperature-alarm follow-up | Active startup thresholds and Good/Warning/High/Critical/Missing/Invalid/Stale evaluation on each temperature | Deployed with provisional 85/95/105 C thresholds; boundary/fault tests synthetic. Monitoring only, not protection or safe ratings |
 | M009, GeneralInfo temperature | Bound to identified carrier U9; additive source/time metadata; failures NaN with quality | Real carrier readout tested; not calibrated ambient temperature |
 | Service observations / proposed SV017 instance | Eight allow-listed systemd unit observations, available PID/restart/exit data; same-PID invocation ID and uptime | Deployed; service state is not hardware readiness, heartbeat or authentication. Configured app name is not live xmutil inventory |
-| I088/I101–I104, host resources | Typed host uptime, one-minute load, MemAvailable and root free/available/read-only observations with quality and acquisition times | 25 native/ARM suites, 109 Python tests and standalone native collector probes pass; not yet deployed through server RPC. See host-resource-verification.md |
+| I088/I101–I104, host resources | Typed host uptime, one-minute load, MemAvailable and root free/available/read-only observations with quality and acquisition times | Deployed as 3556811; 25 native/ARM suites, 109 Python tests, standalone probes and live RPC freshness checks pass. Full zero-bias/all-channel and existing-collector regression passes; runtime packaging/image pin update pending. See host-resource-verification.md |
 | SV016–SV021, server bookkeeping | Responsive request 326, heartbeat/process/boot identity, in-progress execution, canonical successful configuration hash/validity and correlated last result | Deployed and observed during full Configure. Known local invalidations only; no claim to detect all external resets or prove analog readback |
 | I264, timing usable | Endpoint source + both MMCM locks + FSM 8 + timestamp-valid + no reset requests | Sampled observation only; not a continuous lock guarantee |
 | FPGA-health follow-up | Live ZynqMP configuration STAT separate from cached programming state; identity/timing admission checks and 15 named prerequisites | Local-clock bench reports 11 pass, external timing not ready and three unknown requirements. No continuous integrity, timestamp-progress, Hermes delivery, external-reset or run-permit claim |

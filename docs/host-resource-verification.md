@@ -1,8 +1,9 @@
 # Host resource observations
 
 Source `a9cac7d`, client/compatibility checks `3556811`, probe serialization
-`b4e50b8`. **Not deployed yet**;
-DAPHNE-015 and the qualified image-runtime pin remain at `13bc725`.
+`b4e50b8`. DAPHNE-015 now runs the clean ARM server built at `3556811`,
+with live self-trigger ABI 2.0 regression passing. The complete runtime archive
+and image-runtime pin remain at `13bc725`; updating those is still pending.
 
 The v0.5 workbook SHA-256 is
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
@@ -74,15 +75,62 @@ Evidence under `firmware-health.W1CUQ3E7/host-resources.SKeWnt4N`:
 `arm-onboard-checks.txt`, `native-readable-probe-guards.txt` and
 `native-readable-probe-verification.json`. The latter SHA-256 is
 `08fb7519f92c36d35bb20fce41985e926955aef042804860f3541eba046acca5`.
-The uninstalled server candidate SHA-256 is
+The qualified server candidate SHA-256 is
 `727b9187ec239f65d7e93740553be89acba606ef11a8a67ff2f068b8c64fa993`.
 
-The board probes execute the actual collector, **not the running server's RPC
-handler**. Deployment, live RPC regression and updating the qualified runtime
-bundle/source pin remain pending. The current `13bc725` service was not restarted.
+Those initial board probes execute the actual collector, **not the running
+server's RPC handler**. They did not restart the then-running `13bc725` service.
+The later deployment and RPC checks below are separate evidence.
 
-Once a matching server is deployed, add `--require-host-resources` to
+Add `--require-host-resources` to
 `verify_server_v05.py` with the intended endpoint and exact firmware build ID.
 That option adds only status reads and checks advancing acquisition times.
-It must fail against the current `13bc725` server; do not treat optional empty
+It must fail against the older `13bc725` server; do not treat optional empty
 results as qualification of the new fields.
+
+## Live self-trigger ABI 2.0 qualification
+
+The application-only replacement installs the exact `3556811` binary above.
+The normal runtime chain reloads the **same** installed `3f17f1b` firmware;
+there was no reboot, OS flash, network/identity edit, partition change or backup
+removal. A hash-checked previous executable is retained in RAM at
+`/run/daphne-candidate-3556811/previous-server` until reboot. Its exact bytes
+also remain in the durable [13bc725 ONL runtime archive](qualified-server-runtime.md).
+
+Startup correctly invalidated the old process's FE configuration evidence.
+Two bookkeeping configurations then demonstrated responsive heartbeat,
+in-progress reporting, rejected-request preservation, direct-write invalidation
+and the original canonical hash. A separate aggregate test applied full
+BIAS=0/BIASCTRL=0 configurations in two AFE orders: all five AFEs aligned,
+fresh register checks passed and all 40 spybuffer channels passed capture checks
+in both runs (**153 exchanges**). Offset remains 2200/x1, trim 0 and VGAIN 1700.
+Bias acknowledgements/caches are not analog voltage measurements.
+
+The subsequent sequential live regression passed:
+
+| Check | Exchanges / scope |
+| --- | --- |
+| Host resources and v0.5 telemetry | 17; all six metrics, advancing acquisition times, four named temperatures/alarms, voltage freshness, eight services, rejections and five AFE register reads |
+| ADS1261 | 93; all 40 physical channels twice, 80 CRC-checked raw acquisitions, mux restoration and unchanged FE evidence |
+| SFP diagnostics | 5; six routes, GTH0/TMG/GTR identity, explicit unknown presence elsewhere, all routes restored |
+| Regulators | 7; four PEC-checked modules, including combined SFP readout; retained status flags |
+| FPGA health | 4; 11 PASS, 1 external-timing FAIL, 3 UNKNOWN, correctly reported |
+| Private identity | 5; exact assignments/binding, fresh management observations and default-response redaction |
+
+The live host snapshot reports 3,529,646,080 bytes available RAM, load 0.17,
+root free/available bytes 40,030,208 / 23,680,000 and a writable root. An
+independent post-test `statvfs` guard agrees within the one-MiB audit tolerance.
+Wall-clock timestamps remain unverified. No overall FPGA-health claim follows.
+
+Final guards verify server PID **24225**, no automatic restarts, unchanged boot,
+Hermes payload/libraries, private identity, protected network/population settings,
+generator/current-selector policy and the original valid FE hash
+`c858989d7e847a98146c39ad50ec1f053c67acc78ea3c268d6a880341ad8d503`.
+
+Evidence: `host-resources.SKeWnt4N/live-abi20.mPO8l0LC`, including the prepared
+deployment/guard/regression/audit scripts and individual result files.
+`qualification.json` SHA-256:
+`861828a4a61a1acc8ee3c918302d535ee54323ee752fa79262dccbaef907bfec`.
+This closes live deployment of the five workbook host-resource rows, not all
+251 rows. New complete-runtime packaging/image pinning, real ABI 2.1 firmware,
+full-stream hardware and full-image qualification remain pending.

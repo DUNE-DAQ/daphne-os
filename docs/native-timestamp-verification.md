@@ -6,8 +6,9 @@ commits `a8adaec` and `ef2ffe9` collect it and assess progress. OS admission
 `7139e28` accepts known platform ABIs 2.0 and 2.1 but still requires the exact
 installed profile to match the loaded FPGA. Unknown minors are rejected.
 
-**DAPHNE-015:** server candidate `13bc725` is deployed and passes the live
-self-trigger ABI 2.0 regression below. Firmware remains `3f17f1b`; native
+**DAPHNE-015:** the `13bc725` deployment passed the live self-trigger ABI 2.0
+regression below. It is now superseded by the [host-resource server `3556811`](host-resource-verification.md),
+which also passes live ABI 2.0 regression. Firmware remains `3f17f1b`; native
 snapshot readout still requires the unqualified ABI 2.1 firmware builds.
 
 ## What changes

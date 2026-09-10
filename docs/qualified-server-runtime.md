@@ -4,6 +4,11 @@ This userspace archive contains the server already tested on DAPHNE-015.
 It is **not a new OS/firmware image** and contains no private identity,
 MAC/IP, network, analogue or service configuration.
 
+The board now runs the separately [live-qualified host-resource server `3556811`](host-resource-verification.md).
+This archived `13bc725` runtime remains valid as a previous-version handoff;
+it does not contain the new host-resource fields. The image contract still pins
+this archive's server while new complete-runtime packaging remains pending.
+
 ## What is pinned
 
 - Source: `DUNE-DAQ/daphne-os@13bc7251b6a8dceedf4db3a8d6f91c4f4782c5e7`,
