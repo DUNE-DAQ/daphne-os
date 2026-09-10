@@ -29,6 +29,9 @@ python validate_daphne_server_runtime () {
             f"the release contract {expected_commit!r}"
         )
 
+    if d.getVar("DAPHNE_SERVER_RUNTIME_EXECUTION_KIND") not in ("native-aarch64", "qemu-aarch64"):
+        bb.fatal("Staged runtime lacks an explicit ARM execution method; restage the runtime with its validation record")
+
     expected_abi = d.getVar("DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MAJOR") or ""
     staged_abi = d.getVar("DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR") or ""
     if expected_abi != "2" or staged_abi != expected_abi:

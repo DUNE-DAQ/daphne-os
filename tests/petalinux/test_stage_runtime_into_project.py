@@ -174,6 +174,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('DAPHNE_SERVER_RUNTIME_QUALIFIED = "1"', version)
+        self.assertIn('DAPHNE_SERVER_RUNTIME_EXECUTION_KIND = "qemu-aarch64"', version)
         self.assertIn(
             f'DAPHNE_SERVER_RUNTIME_GIT_COMMIT = "{REQUIRED_COMMIT}"',
             version,
@@ -181,6 +182,54 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
         self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR = "2"', version)
         self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "0"', version)
         self.assertIn(f'DAPHNE_SERVER_RUNTIME_SHA256 = "{bundle_sha}"', version)
+
+    def test_explicit_native_execution_is_preserved_without_qemu_claim(self) -> None:
+        bundle, _ = self.make_bundle()
+        metadata = bundle.parent / "BUILD-METADATA.txt"
+        metadata.write_text(metadata.read_text().replace(
+            "qemu_validation=PASS: --help advertises required options\n",
+            "execution_validation_kind=native-aarch64\n"
+            "execution_validation=PASS: software tests and --help on AArch64 target\n"))
+        result = self.run_stage(bundle)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.staged / "BUILD-METADATA.txt").read_bytes(), metadata.read_bytes())
+        self.assertNotIn("qemu_validation", metadata.read_text())
+        version = (self.recipe / "daphne-server-version.inc").read_text()
+        self.assertIn('DAPHNE_SERVER_RUNTIME_EXECUTION_KIND = "native-aarch64"', version)
+        self.assertIn("recorded execution native-aarch64", result.stdout)
+        self.assertIn("staging performs no executable or hardware tests", result.stdout)
+
+    def test_explicit_qemu_execution_is_supported(self) -> None:
+        bundle, _ = self.make_bundle()
+        metadata = bundle.parent / "BUILD-METADATA.txt"
+        metadata.write_text(metadata.read_text().replace(
+            "qemu_validation=PASS: --help advertises required options\n",
+            "execution_validation_kind=qemu-aarch64\n"
+            "execution_validation=PASS: --help advertises required options\n"))
+        result = self.run_stage(bundle)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        version = (self.recipe / "daphne-server-version.inc").read_text()
+        self.assertIn('DAPHNE_SERVER_RUNTIME_EXECUTION_KIND = "qemu-aarch64"', version)
+
+    def test_missing_failed_duplicate_or_ambiguous_execution_records_preserve_state(self) -> None:
+        bundle, _ = self.make_bundle()
+        metadata = bundle.parent / "BUILD-METADATA.txt"
+        legacy = "qemu_validation=PASS: --help advertises required options\n"
+        original = metadata.read_text().replace(legacy, "")
+        kind = "execution_validation_kind=native-aarch64\n"
+        passed = "execution_validation=PASS: native target tests\n"
+        for records in ("", kind, passed, kind + passed + legacy,
+                        kind * 2 + passed, kind + passed * 2, legacy * 2,
+                        "execution_validation_kind=x86_64\n" + passed,
+                        kind + "execution_validation=FAIL: target tests\n",
+                        kind + "execution_validation=PASS:\n",
+                        kind + "execution_validation=PASS:   \n",
+                        "qemu_validation=PASS:\n"):
+            with self.subTest(records=records):
+                metadata.write_text(original + records)
+                result = self.run_stage(bundle)
+                self.assertNotEqual(result.returncode, 0)
+                self.assert_prior_state_preserved()
 
     def test_bare_bundle_stages_only_as_unqualified_fallback(self) -> None:
         bundle, bundle_sha = self.make_bundle(rich_metadata=False)
@@ -198,6 +247,7 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('DAPHNE_SERVER_RUNTIME_QUALIFIED = "0"', version)
+        self.assertIn('DAPHNE_SERVER_RUNTIME_EXECUTION_KIND = "unqualified"', version)
         self.assertIn(
             'DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR = "unqualified"',
             version,

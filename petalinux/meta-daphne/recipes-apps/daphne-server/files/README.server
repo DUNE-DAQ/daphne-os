@@ -21,7 +21,12 @@ Qualification contract:
   tarball; the stager preserves the rich metadata instead of replacing it
 - metadata must bind the exact tarball and bundled `daphneServer`, identify the
   server commit pinned by `daphne-server-contract.inc`, and record a clean
-  AArch64 build with passing QEMU validation
+  AArch64 build with passing execution validation
+- new metadata uses exactly one `execution_validation_kind=native-aarch64`
+  or `execution_validation_kind=qemu-aarch64` and one
+  `execution_validation=PASS: <description>` record. The old
+  `qemu_validation=PASS: <description>` format remains supported, but cannot
+  be mixed with the new fields. Record the method actually used
 - the executable must expose both `--gateware-mode` and
   `--expected-gateware-build-id`
 - the reviewed source contract lists explicit supported ABI minors; staging
@@ -29,8 +34,8 @@ Qualification contract:
 - the recipe rejects either staged overlay when its minor is unsupported by
   the pinned server (including the inactive variant). RC1 supports only 2.0;
   qualify a new source pin/runtime before pairing it with ABI 2.1 gateware
-- older runtime sentinels without the minor set must be restaged
-- validation of a recorded passing QEMU result is not a new QEMU execution,
+- older runtime sentinels without the minor set or execution method must be restaged
+- validation of a recorded passing result is not a new executable test,
   authenticated provenance, or physical board qualification
 - a bare tarball can still be staged for inspection, but its generated
   `daphne-server-version.inc` remains unqualified and cannot build the release

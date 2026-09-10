@@ -36,6 +36,7 @@ class RuntimeOverlayContractTests(unittest.TestCase):
         self.values.update({
             "DAPHNE_SERVER_RUNTIME_QUALIFIED": "1",
             "DAPHNE_SERVER_RUNTIME_GIT_COMMIT": self.values["DAPHNE_SERVER_REQUIRED_GIT_COMMIT"],
+            "DAPHNE_SERVER_RUNTIME_EXECUTION_KIND": "qemu-aarch64",
             "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR": "2",
             "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0",
             "DAPHNE_SERVER_RUNTIME_SHA256": "a" * 64,
@@ -137,6 +138,16 @@ class RuntimeOverlayContractTests(unittest.TestCase):
             with self.assertRaisesRegex(Refused, text):
                 self.check()
             self.values[variable] = original
+
+    def test_execution_kind_is_explicit_and_known(self):
+        for kind in ("qemu-aarch64", "native-aarch64"):
+            self.values["DAPHNE_SERVER_RUNTIME_EXECUTION_KIND"] = kind
+            self.check()
+        for kind in (None, "", "unstaged", "unqualified", "native", "x86_64", "qemu-aarch64 native-aarch64"):
+            with self.subTest(kind=kind):
+                self.values["DAPHNE_SERVER_RUNTIME_EXECUTION_KIND"] = kind
+                with self.assertRaisesRegex(Refused, "execution method"):
+                    self.check()
 
 
 if __name__ == "__main__":

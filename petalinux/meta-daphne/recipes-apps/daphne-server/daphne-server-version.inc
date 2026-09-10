@@ -2,6 +2,7 @@
 # this file only after validating a runtime against daphne-server-contract.inc.
 DAPHNE_SERVER_RUNTIME_QUALIFIED = "0"
 DAPHNE_SERVER_RUNTIME_GIT_COMMIT = "unstaged"
+DAPHNE_SERVER_RUNTIME_EXECUTION_KIND = "unstaged"
 DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MAJOR = "unstaged"
 DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "unstaged"
 DAPHNE_SERVER_RUNTIME_SHA256 = "unstaged"
