@@ -54,3 +54,7 @@ if(DAPHNE_ENABLE_HARDWARE_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     RUN_SERIAL TRUE
   )
 endif()
+add_executable(pmbus_linear_tests pmbus_linear_tests.cpp)
+target_link_libraries(pmbus_linear_tests PRIVATE daphne_i2c_hw)
+add_test(NAME pmbus_linear_unit COMMAND pmbus_linear_tests)
+set_tests_properties(pmbus_linear_unit PROPERTIES LABELS unit)

@@ -147,8 +147,7 @@ namespace I2CRegulatorsDrivers{
         I2CDevice REG_2VA1;
         I2CDevice REG_3VA6;
         I2CDevice REG_1VD8;
-        double decodeRaw(const uint16_t &rawData, const uint16_t &exponentLSBPos, const uint16_t &mantissaMSBPos);
-        double decodeRaw(const uint16_t &rawData, const int &exponent);
+        I2CDevice& regulator(uint8_t number);
     };
 }
 

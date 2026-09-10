@@ -1,5 +1,6 @@
 #include "DaphneI2CDrivers.hpp"
 #include "BoardI2C.hpp"
+#include "PmbusLinear.hpp"
 
 #include <cmath>
 #include <utility>
@@ -692,122 +693,39 @@ void I2CMezzDrivers::HDMezzDriver::setPowerRequestsUnlocked(
 }
 
 I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::PJT004A0X43_SRZ_Driver():
-    REG_3VD3("/dev/i2c-2", I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_3VD3"), 1),
-    REG_2VA1("/dev/i2c-2", I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_2VA1"), 1),
-    REG_3VA6("/dev/i2c-2", I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_3VA6"), 1),
-    REG_1VD8("/dev/i2c-2", I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_1VD8"), 1){}
+    REG_3VD3(board_pl_i2c_adapter(), I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_3VD3"), 1),
+    REG_2VA1(board_pl_i2c_adapter(), I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_2VA1"), 1),
+    REG_3VA6(board_pl_i2c_adapter(), I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_3VA6"), 1),
+    REG_1VD8(board_pl_i2c_adapter(), I2C_drivers_defines::I2CDevicesAddress.at("SW_REG_1VD8"), 1){}
 
 
 I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::~PJT004A0X43_SRZ_Driver(){}
 
-double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::readRailVoltage(const uint8_t &regulatorNumber){
-    if(regulatorNumber > 3){
-        throw std::invalid_argument("Invalid regulator number. Valid values are 0 to 3.");
+I2CDevice& I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::regulator(uint8_t number) {
+    switch (number) {
+        case 0: return REG_3VD3;
+        case 1: return REG_2VA1;
+        case 2: return REG_3VA6;
+        case 3: return REG_1VD8;
+        default: throw std::invalid_argument("Invalid regulator number; expected 0..3");
     }
-    uint16_t voltage_reg;
-    switch(regulatorNumber){
-        case 0:
-            voltage_reg = this->REG_3VD3.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_VOUT"));
-            break;
-        case 1:
-            voltage_reg = this->REG_2VA1.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_VOUT"));
-            break;
-        case 2:
-            voltage_reg = this->REG_3VA6.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_VOUT"));
-            break;
-        case 3:
-            voltage_reg = this->REG_1VD8.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_VOUT"));
-            break;
-        default:
-            throw std::invalid_argument("Invalid regulator number. Valid values are 0 to 3.");
-    };
-    // Now. this value is the mantissa and the exponent is fixed to -9.
-    double voltage = decodeRaw(voltage_reg, -9);
-    return voltage;
 }
 
-double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::readRailCurrent(const uint8_t &regulatorNumber){
-    if(regulatorNumber > 3){
-        throw std::invalid_argument("Invalid regulator number. Valid values are 0 to 3.");
-    }
-    uint16_t current_reg;
-    switch(regulatorNumber){
-        case 0:
-            current_reg = this->REG_3VD3.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_IOUT"));
-            break;
-        case 1:
-            current_reg = this->REG_2VA1.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_IOUT"));
-            break;
-        case 2:
-            current_reg = this->REG_3VA6.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_IOUT"));
-            break;
-        case 3:
-            current_reg = this->REG_1VD8.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_IOUT"));
-            break;
-        default:
-            throw std::invalid_argument("Invalid regulator number. Valid values are 0 to 3.");
-    }
-    // Now. this value is the mantissa and the exponent is fixed to -9.
-    double current = decodeRaw(current_reg, 11, 10);
-    return current;
+double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::readRailVoltage(const uint8_t& number) {
+    auto& device = regulator(number);
+    const auto mode = device.readByteSMBus(0x20);
+    const auto raw = device.readWordSMBus(0x8b);
+    if (device.readByteSMBus(0x20) != mode)
+        throw std::runtime_error("Regulator VOUT_MODE changed across voltage read");
+    return daphne_sc::pmbus_linear16(raw, mode);
 }
 
-double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::readTemperature(const uint8_t &regulatorNumber){
-    if(regulatorNumber > 3){
-        throw std::invalid_argument("Invalid regulator number. Valid values are 0 to 3.");
-    }
-    uint16_t temperature_reg;
-    switch(regulatorNumber){
-        case 0:
-            temperature_reg = this->REG_3VD3.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_TEMPERATURE_2"));
-            break;
-        case 1:
-            temperature_reg = this->REG_2VA1.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_TEMPERATURE_2"));
-            break;
-        case 2:
-            temperature_reg = this->REG_3VA6.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_TEMPERATURE_2"));
-            break;
-        case 3:
-            temperature_reg = this->REG_1VD8.readWordSMBus(I2C_drivers_defines::PJT004A0X43_SRZ_RegisterMAP.at("READ_TEMPERATURE_2"));
-            break;
-        default:
-            throw std::invalid_argument("Invalid regulator number. Valid values are 0 to 3.");
-    }
-    // Now. this value is the mantissa and the exponent is fixed to -8.
-    double temperature = decodeRaw(temperature_reg, 11, 10);
-    return temperature;
+double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::readRailCurrent(const uint8_t& number) {
+    return daphne_sc::pmbus_linear11(regulator(number).readWordSMBus(0x8c));
 }
 
-double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::decodeRaw(const uint16_t &rawData, const uint16_t &exponentLSBPos, const uint16_t &mantissaMSBPos) 
-{
-    // Extract mantissa
-    uint16_t mantissaMask = (1u << (mantissaMSBPos + 1)) - 1u;
-    int16_t mantissa = static_cast<int16_t>(rawData & mantissaMask);
-
-    // Sign-extend mantissa
-    int mantissaBits = mantissaMSBPos + 1;
-    if (mantissa & (1 << (mantissaBits - 1))) {
-        mantissa |= ~((1 << mantissaBits) - 1);
-    }
-
-    // Extract exponent
-    uint16_t exponentMask = ~mantissaMask;
-    int16_t exponent = static_cast<int16_t>((rawData & exponentMask) >> exponentLSBPos);
-
-    // Sign-extend exponent
-    int exponentBits = 16 - exponentLSBPos;
-    if (exponent & (1 << (exponentBits - 1))) {
-        exponent |= ~((1 << exponentBits) - 1);
-    }
-
-    return static_cast<double>(mantissa) * std::pow(2.0, exponent);
-}
-
-double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::decodeRaw(const uint16_t &rawData, const int &exponent) 
-{
-    int16_t mantissa = static_cast<int16_t>(rawData);
-
-    return static_cast<double>(mantissa) * std::pow(2.0, exponent);
+double I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver::readTemperature(const uint8_t& number) {
+    return daphne_sc::pmbus_linear11(regulator(number).readWordSMBus(0x8e));
 }
 
 I2CADCsDrivers::ADS7138_Driver::ADS7138_Driver(const uint8_t &deviceAddress):

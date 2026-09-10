@@ -44,6 +44,7 @@ public:
     void readByte(uint8_t regAddress, uint8_t &data) override;
     void readBytes(uint8_t regAddress, std::vector<uint8_t> &data, std::size_t numBytes) override;
     void readFrame(std::vector<uint8_t> &data, std::size_t numBytes);
+    uint8_t readByteSMBus(uint8_t command); // Uses kernel SMBus PEC when enabled; unlike readByte/I2C_RDWR.
     uint16_t readWordSMBus(uint8_t command);
     void writeWordSMBus(uint8_t command, uint16_t value);
 

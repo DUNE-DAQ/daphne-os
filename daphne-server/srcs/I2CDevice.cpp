@@ -138,11 +138,12 @@ int I2CDevice::openDevice(int enablePEC) {
             close(file);
             throw i2c_error("Querying I2C adapter capabilities", devicePath, deviceAddress, error_number);
         }
-        const unsigned long required = I2C_FUNC_SMBUS_PEC | I2C_FUNC_SMBUS_WORD_DATA;
+        const unsigned long required = I2C_FUNC_SMBUS_PEC |
+            I2C_FUNC_SMBUS_READ_WORD_DATA | I2C_FUNC_SMBUS_READ_BYTE_DATA;
         if ((functions & required) != required) {
             close(file);
             throw std::runtime_error(
-                i2c_context("Enabling PEC (adapter lacks SMBus PEC/word-data support)",
+                i2c_context("Enabling PEC (adapter lacks SMBus PEC/byte/word-read support)",
                             devicePath, deviceAddress));
         }
     }
@@ -274,6 +275,13 @@ void I2CDevice::readFrame(std::vector<uint8_t> &data, std::size_t numBytes){
     data.swap(received);
 }
 
+uint8_t I2CDevice::readByteSMBus(uint8_t command) {
+    const auto result = i2c_smbus_read_byte_data(fileDescriptor, command);
+    if (result < 0)
+        throw i2c_error("Reading SMBus byte", devicePath, deviceAddress, errno, command);
+    return static_cast<uint8_t>(result);
+}
+
 uint16_t I2CDevice::readWordSMBus(uint8_t command) {
     auto res = i2c_smbus_read_word_data(fileDescriptor, command);
     if (res < 0) {
@@ -313,6 +321,7 @@ void I2CDevice::readByte(uint8_t, uint8_t&) { not_supported(); }
 void I2CDevice::readBytes(uint8_t, std::vector<uint8_t>&, std::size_t) { not_supported(); }
 void I2CDevice::readFrame(std::vector<uint8_t>&, std::size_t) { not_supported(); }
 uint16_t I2CDevice::readWordSMBus(uint8_t) { not_supported(); }
+uint8_t I2CDevice::readByteSMBus(uint8_t) { not_supported(); }
 void I2CDevice::writeWordSMBus(uint8_t, uint16_t) { not_supported(); }
 
 #endif
