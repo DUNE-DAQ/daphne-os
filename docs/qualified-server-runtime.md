@@ -59,6 +59,16 @@ checksums, packaging/native-check scripts, native smoke result and privacy-filte
 source exports. Read its `README.md`, `SOURCE-METADATA.txt` and per-export
 redaction manifests before reuse.
 
+All 16 handoff file checksums passed on ONL, with mode 0700 verified for the
+directory. Handoff `SHA256SUMS` digest:
+`aaa0623030aa8bd7b279dcdd9f554dc5a53f5a85d1ab7f86875bde6df62bc03e`.
+The OS integration export is based on `6dcd12a`; source-export audit confirms
+1,172 / 1,329 unchanged regular files in the server / OS exports, respectively.
+There are 19 / 22 redacted text files and one omitted serialized request per
+export; all 13 affected Python/shell examples per export pass syntax checks.
+The known-address scan passes after filtering. Unfiltered local source exports
+were retained outside the handoff, not uploaded as part of this bundle.
+
 The server-source export starts from `3556811`. The newer OS integration export
 includes the matching image contract and documentation, plus the probe-only
 TextFormat fix `b4e50b8`. Known private MAC/IPv4 literals in legacy client examples,
