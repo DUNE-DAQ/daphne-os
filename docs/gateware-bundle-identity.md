@@ -4,7 +4,8 @@ Source implementation only. No new image, FPGA application or network settings
 have been installed on DAPHNE-015.
 
 Source revisions: firmware build binding `a5f93a2`, staging fixes through
-`0281c82`; OS staging/refresh `c08eb05`.
+`0281c82`; OS staging/refresh `c08eb05`. The separate full-stream producer now
+has build binding `6052164` and packaging/checker `67510d0`.
 
 Previously, staging wrote `identity_abi_minor=0` and changed only the runtime
 profile's app name. That would incorrectly label a new ABI 2.1 payload and make
@@ -45,11 +46,11 @@ upgrades it by inference from a branch/app name. A timestamp report without a
 record is rejected. Bare old handoffs cannot be relabelled/repackaged as new
 qualified builds; retain their existing qualified archives.
 
-Only the firmware's default board-complete implementation lane currently
-produces the captured/sealed evidence. The compatibility/native export lane
-does not, so its standalone exports do not satisfy the new packaging gate.
-The separate full-stream firmware has not yet received the timestamp RTL port;
-legacy full-stream ABI 2.0 can coexist with a qualified self-trigger ABI 2.1.
+The self-trigger default board-complete lane and separate full-stream build
+flow now produce captured/sealed evidence. The self-trigger compatibility/native
+export lane does not, so its standalone exports do not satisfy the packaging
+gate. Both source trees have timestamp RTL and routed-check gates; legacy
+full-stream ABI 2.0 can still coexist with a qualified self-trigger ABI 2.1.
 
 Staging commands are unchanged. For example, use the existing
 `scripts/petalinux/stage_overlay_into_project.sh` with both exact bundle paths
@@ -67,10 +68,29 @@ and SHA selections. **Do not manually edit `IDENTITY_ABI_MINOR` to force admissi
 - Remote-wrapper commit `96abace` also fixes failure propagation through `tee`.
   Its three local tests exercise failed preflight/build/package stages, failed
   logging and successful completion; no Vivado process is launched by them.
+- The full-stream port passes **37 source/Tcl/build/packaging tests** and three
+  shell gate tests. Its real packager/checker uses actual dtc, ZIP and hashes
+  against synthetic build inputs; wrong/missing metadata and rehashed altered,
+  duplicate or unexpected archive members are rejected.
+- Cross-repository integration runs both real packagers and the actual OS
+  overlay staging script. Both profiles/recipe bindings retain ABI 2.1 and the
+  evidence hashes. Missing identity-manifest coverage is rejected with the
+  previously staged tree unchanged. It uses synthetic artifacts, not an image
+  build or a server-runtime qualification. Full-stream DTBO `firmware-name`
+  now matches the immutable installed app binary rather than the Vivado basename.
 
 Evidence is under `completion-VEpMKkGG/firmware-health.W1CUQ3E7/bundle-identity-*`.
 No full PetaLinux image build, real Vivado source-object binding, routed build,
-ARM/live regression or deployment has been qualified for these changes yet.
+live ABI 2.1 regression or deployment has been qualified for these changes yet.
+Five affected ARM software suites pass with hardware-free fixtures; that is not
+firmware qualification. Cross-repository log: `fullstream-os-staging-integration-final.txt`;
+retained fixture directory: `fullstream-os-staging-qclbz_wi` (DO NOT DEPLOY).
+
+The image runtime contract still pins server `77b39b7`; updating/qualifying the
+matching server runtime and its image compatibility contract remains necessary.
+Do not combine new ABI 2.1 overlays with the old server merely because both
+declare ABI major 2. The overlay-only integration does not prove compatibility
+of the complete OS image.
 
 The synthesis-source query follows
 [AMD's documented compile-order query](https://docs.amd.com/r/2024.1-English/ug896-vivado-ip/Querying-IP-Customization-Files).

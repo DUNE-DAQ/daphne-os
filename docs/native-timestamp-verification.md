@@ -99,9 +99,9 @@ report, **not full FPGA health**. Output contains no private network values.
 
 1. Qualify the new [bundle identity and staging path](gateware-bundle-identity.md)
    with actual build outputs. Local positive/negative tests pass; do not
-   relabel old profiles or bypass admission. The separate full-stream producer
-   still needs its build-bound identity/packaging port before its ABI 2.1 output
-   can be staged correctly; its old metadata-free ZIP would be treated as 2.0.
+   relabel old profiles or bypass admission. Both producers now retain the ABI
+   evidence through OS overlay staging. The image's pinned server runtime still
+   needs to be updated/qualified alongside the new overlay/profile contract.
 2. Run qualified Cooper synthesis/routing, review mandatory CDC/path reports,
    and qualify both firmware variants. No synthesis job is running yet.
 3. Complete the remaining ARM suites and guarded live ABI 2.0/2.1 regression. Preserve CERN
@@ -120,3 +120,10 @@ timestamp path remain unchanged. Eight ratio/phase simulations, four FuseSoC
 smoke suites and 20 source/Tcl-mock tests pass. These do not qualify the actual
 endpoint netlist, routing, CDC or live full-stream data. Cooper's latest route
 check terminated with a bridge timeout; no build job was launched.
+
+Full-stream build binding `6052164` and packaging `67510d0` now pass 37
+source/Tcl/packaging tests and three shell gate tests. Cross-repository synthetic
+integration runs both actual packagers and OS overlay staging with real dtc,
+ZIP and checksums; ABI 2.1 survives into both profiles and recipe variables.
+Invalid evidence preserves the previous staged tree. This does not stage or
+qualify the matching server runtime, build an OS image or qualify hardware.

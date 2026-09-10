@@ -14,7 +14,7 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 | Temperature alarms | Configurable high initial thresholds, Good/Warning/High/Critical/Missing/Invalid/Stale distinction, boundary/stale tests; observation only, no new shutdown policy | Implemented; 14 native/ARM suites and live normal-temperature/all-channel checks passed. High/fault cases synthetic, not physical trips |
 | SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Implemented/deployed; 18 native/ARM suites and 53 Python tests pass. GTH0/TMG/GTR identified; 14 diagnostic values per acquisition. Three unanswered cages and installed PCB/wiring caveat remain unresolved; factory RX warnings retained |
 | FPGA health | Actual loaded/admitted FPGA identity, configuration state, clocks/reset/timing, transport/link observations and clear degraded/unknown reasons; no service-active shortcut | Sampled programming STAT and 15-check assessment deployed/tested; see server-fpga-health.md. Coherent live timestamp, Hermes delivery and external-reset epoch remain unknown; no overall health/run-permit claim |
-| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp RTL/ABI 2.1 and routed-check scripts now committed in both firmware repositories. Server/OS admission, snapshot collector, protocol, health, client and ABI-aware bundle staging source tests pass; five affected ARM suites pass on board with hardware-free fixtures. Full-stream build-identity packaging, real build/image/routed/live qualification and decoder/error exports remain pending |
+| Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Native timestamp RTL/ABI 2.1, routed-check scripts and build-bound packaging now committed in both firmware repositories. Both real packagers pass synthetic integration with actual OS overlay staging. Server/OS source tests and five affected hardware-free ARM suites pass. Matching image/server-runtime contract, real build/image/routed/live qualification and decoder/error exports remain pending |
 | Qualification and handoff | Native/ARM tests, negative/stale/concurrency cases, live zero-BIAS/all-channel regression, both-ABI scope recorded, protocol clients/docs/wiki and ONL bundle | Pending |
 
 Evidence found so far:
@@ -84,7 +84,10 @@ Do not relabel old artifacts or bypass identity checks. Firmware
 physical qualification gates. The separate full-stream repository now contains
 the source port `8798471` and routed-check gates `d52e420`, with eight simulation
 ratios/phases, four smoke suites and 20 source/Tcl-mock tests passing. Its
-build-bound identity/packaging producer port remains pending: do not deploy an
-ABI 2.1 binary using its old metadata-free ZIP/profile path. Both repositories'
-actual netlist/routing and live qualification remain open. Legacy full-stream
-ABI 2.0 remains supported without a native timestamp claim.
+build-bound identity/packaging producer port is now implemented in `6052164` /
+`67510d0`, with 37 source/Tcl/packaging tests, three shell tests and cross-repository
+synthetic OS-overlay staging passing. The image runtime contract still pins
+server `77b39b7`; a matching qualified runtime/compatibility contract must be
+prepared before an ABI 2.1 image can be qualified. Both repositories' actual
+netlist/routing and live qualification remain open. Legacy full-stream ABI 2.0
+remains supported without a native timestamp claim.
