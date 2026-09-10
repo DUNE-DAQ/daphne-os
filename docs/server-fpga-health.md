@@ -63,10 +63,56 @@ That prerequisite is **not a lock against concurrent external reprogramming**.
 Always stop the server before changing the FPGA application. Matching image IDs
 cannot detect an unload/reload of the same image between observations.
 
-## Qualification boundary
+## Deployed qualification, DAPHNE-015
 
-Initial read-only inspection on DAPHNE-015 found manager state `operating`, an
-applied overlay, and configuration STAT `0x16907ffc`. These are observations,
-not a new bitstream validation. Server RPC integration and live qualification
-of this feature are recorded separately when completed. Approved management
-MAC/IP configuration and BIAS/BIASCTRL are unchanged by these collectors.
+Server source **`8a53161`**, client **`1431858`**, unchanged self-trigger ABI-2
+firmware **`0x03F17F1B`**. Server binary SHA-256:
+`e5adb2768f794091edff7eef5f6834cf108511949b1619059b450ee8203aaca5`.
+
+The update stops the runtime and explicitly confirms the server PID is zero
+before replacing the binary. Starting the runtime can reload the same installed
+FPGA application; no new OS/bitstream was flashed. Previous executable retained:
+`/usr/bin/daphneServer.pre-fpga-health-8a53161`. Identity artifact/drop-ins and
+protected network/SSH/firmware files remain unchanged.
+
+Qualification passed:
+
+- 21 native C++ suites, the same 21 ARM64 executables on the board, 87 tracked
+  Python tests, plus the real kernel configuration-status probe.
+- Health client: four exchanges, twice, independently comparing raw words with
+  named checks. STAT `0x16907ffc`; **11 PASS, one FAIL (external timing), three
+  UNKNOWN**. Local-clock operation is expected to report NOT_READY for this
+  externally timed acquisition checklist.
+- Complete zero-BIAS/BIASCTRL restoration and bookkeeping checks; 153 aggregate
+  exchanges across two AFE orders, five-AFE alignment and all 40 spy waveforms.
+- 93 ADC exchanges including 80 CRC-checked conversions; five SFP, five private
+  identity/redaction, and 11 telemetry/rejection regression exchanges.
+
+All retained FE evidence is valid, final offset 2200/x1, BIAS/BIASCTRL zero;
+canonical hash `c858989d7e847a98146c39ad50ec1f053c67acc78ea3c268d6a880341ad8d503`.
+SFP warning flags remain visible; the physical wiring/population question is
+not resolved by this pass. No hardware fault, reset, or corrupted image was
+injected; those failure paths were tested with mocks.
+
+Evidence: `completion-VEpMKkGG/fpga-health-*`, including the guarded deployment
+and final-board scripts. The initial final-board helper used a nonexistent I2C
+class path and stopped before the mux check; the corrected helper verifies
+`/sys/bus/i2c/devices/i2c-1/of_node` before reading the selected mux. Both logs
+are retained. The server itself already uses controller-based bus discovery.
+
+## Client command
+
+Use matching generated protobufs and an approved SSH forward. This requests
+private details for comparison but prints only redacted checklist results:
+
+```bash
+python daphne-server/scripts/verify_fpga_health.py \
+  --endpoint tcp://127.0.0.1:44015 \
+  --proto-dir /path/to/arm-build/srcs/protobuf \
+  --expected-build-id 0x03F17F1B --mode self-trigger \
+  --require-bench-profile
+```
+
+Exit zero means **reporting verified**, not "FPGA fully healthy." The bench
+option requires exactly the qualified local-clock profile above. Do not use it
+as a production external-timing requirement or authorization check.

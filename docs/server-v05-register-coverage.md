@@ -5,7 +5,8 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `0150b66`, including
+Current DAPHNE-015 server: `8a53161`, including
+[sampled FPGA health evidence](server-fpga-health.md),
 [database identity assignments and live management readback](board-identity-verification.md),
 [opt-in SFP inventory and diagnostics](sfp-diagnostics-verification.md),
 [CRC-checked 40-channel ADS1261 raw readout](ads1261-readout-verification.md),
@@ -55,6 +56,7 @@ preserved history. Relevant prior work:
 | Service observations / proposed SV017 instance | Eight allow-listed systemd unit observations, available PID/restart/exit data; same-PID invocation ID and uptime | Deployed; service state is not hardware readiness, heartbeat or authentication. Configured app name is not live xmutil inventory |
 | SV016–SV021, server bookkeeping | Responsive request 326, heartbeat/process/boot identity, in-progress execution, canonical successful configuration hash/validity and correlated last result | Deployed and observed during full Configure. Known local invalidations only; no claim to detect all external resets or prove analog readback |
 | I264, timing usable | Endpoint source + both MMCM locks + FSM 8 + timestamp-valid + no reset requests | Sampled observation only; not a continuous lock guarantee |
+| FPGA-health follow-up | Live ZynqMP configuration STAT separate from cached programming state; identity/timing admission checks and 15 named prerequisites | Local-clock bench reports 11 pass, external timing not ready and three unknown requirements. No continuous integrity, timestamp-progress, Hermes delivery, external-reset or run-permit claim |
 | I273/TI001, live timestamp | Explicit unsupported capability; never interpret spy-capture words as a live timestamp | Requires a firmware-supported coherent export |
 | I058/I059/I061, legacy identity offsets | Explicit unsupported crate/slot/detector readback; expose common ABI identity instead | Do not read self-trigger controls under old identity names |
 | Database-assigned placement and network identity | Private startup artifact supplies explicit crate/slot/detector, management address and one Hermes MAC/IP assignment with source hashes; separate live management controller/MAC/IPv4 comparison | Deployed and live-tested; assignments are not FPGA readback. Timing/management-MAC assignment and physical Hermes mapping remain unavailable, not guessed |
