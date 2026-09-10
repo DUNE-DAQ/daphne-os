@@ -62,7 +62,7 @@ int main() {
   for (auto mode : {GatewareMode::kSelfTrigger, GatewareMode::kFullStream}) {
     daphne::SystemStatusSnapshot status;
     add_register_capabilities(status, mode);
-    require(status.capabilities_size() == 17);
+    require(status.capabilities_size() == 18);
     require(status.capabilities(2).supported() == supports_trigger_counters(mode));
     for (int i = 3; i < 7; ++i)
       require(!status.capabilities(i).supported() && !status.capabilities(i).reason().empty());
@@ -77,6 +77,7 @@ int main() {
     require(status.capabilities(14).name() == "SFPDiagnostics" && status.capabilities(14).supported());
     require(status.capabilities(15).name() == "DatabaseIdentityAssignments" && status.capabilities(15).supported());
     require(status.capabilities(16).name() == "FpgaHealthEvidence" && status.capabilities(16).supported());
+    require(status.capabilities(17).name() == "OnboardRegulatorTelemetry" && status.capabilities(17).supported());
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
   const int fd = mkstemp(filename);

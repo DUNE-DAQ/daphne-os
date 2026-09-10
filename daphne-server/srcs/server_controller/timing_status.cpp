@@ -91,5 +91,9 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("FpgaHealthEvidence", true,
       "Sampled ZynqMP configuration STAT, bracketed gateware identity/timing and named acquisition-prerequisite checklist. "
       "Unknown evidence cannot pass; no run permit, automatic recovery, continuous integrity or Hermes delivery claim");
+  add("OnboardRegulatorTelemetry", true,
+      "Opt-in include_regulator_telemetry: four fixed schematic PJT004 rails on identified PL I2C with mandatory PEC. "
+      "Bracketed module/mode identity, raw and decoded VOUT/IOUT/TEMPERATURE_2, host alarms, factory calibration raw and retained status flags. "
+      "No VIN, qualified manufacturer status, regulator writes, network changes or overall rail-health claim");
 }
 }
