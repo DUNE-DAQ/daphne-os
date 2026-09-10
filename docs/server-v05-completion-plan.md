@@ -67,10 +67,10 @@ Actual netlist bindings, both variants and both timing-source cases still need
 the qualified synthesis/routing toolchain and hardware regression.
 
 The configured route to Cooper still times out at the FNAL bridge; no synthesis
-job is running. DAPHNE-015 remains on server `a729c2b` and firmware `3f17f1b`;
-the firmware work did not change the board. A subsequent five-suite ARM run
+job was launched. The firmware work initially left server `a729c2b` and firmware
+`3f17f1b` unchanged. A subsequent five-suite ARM run
 used hardware-free fixtures on the board; all passed with service, executable,
-boot and protected/private-file guards unchanged. The deployed server accepts
+boot and protected/private-file guards unchanged. That old server accepted
 ABI 2.0 exactly. New source admission `7139e28` explicitly admits known ABI 2.1
 while requiring exact installed-profile agreement. The collector `a8adaec`,
 health integration `ef2ffe9` and independent client checks pass 24 native C++
@@ -105,6 +105,11 @@ library/link-input differences were verified as debug/metadata stripping, and
 the final guard checks the actual installed hashes. The running board service,
 private identity and protected configuration remain unchanged. See
 [candidate qualification](native-timestamp-verification.md#complete-clean-candidate-arm-check).
-Next: qualify the candidate's live ABI 2.0 behavior, prepare the complete runtime
-archive with honest execution provenance, then update the image source/minor
-contract. Current firmware still cannot supply ABI 2.1 snapshot evidence.
+The candidate is now deployed and passes live self-trigger ABI 2.0 bookkeeping,
+full zero-bias configuration/alignment/all-channel spy capture, ADC, telemetry,
+identity, SFP/regulator and FPGA-health regression. The original valid FE hash,
+private identity and approved network settings are preserved; no automatic
+server restarts occurred. See [live qualification](native-timestamp-verification.md#live-self-trigger-abi-20-qualification).
+Next: prepare the complete runtime archive with honest execution provenance,
+then update the image source/minor contract. Current firmware still cannot
+supply ABI 2.1 snapshot evidence, and full-stream live qualification is pending.

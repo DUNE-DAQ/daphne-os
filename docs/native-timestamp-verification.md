@@ -1,4 +1,4 @@
-# Native timestamp health: source ready, not deployed
+# Native timestamp health: server deployed, firmware pending
 
 This addresses workbook **I273/TI001**. Firmware branch
 `fix/health-timestamp-abi21` provides the native-clock snapshot export. Server
@@ -6,8 +6,9 @@ commits `a8adaec` and `ef2ffe9` collect it and assess progress. OS admission
 `7139e28` accepts known platform ABIs 2.0 and 2.1 but still requires the exact
 installed profile to match the loaded FPGA. Unknown minors are rejected.
 
-**DAPHNE-015 is unchanged:** deployed server `a729c2b`, firmware `3f17f1b`,
-ABI 2.0. These new sources have not been installed or hardware-qualified.
+**DAPHNE-015:** server candidate `13bc725` is deployed and passes the live
+self-trigger ABI 2.0 regression below. Firmware remains `3f17f1b`; native
+snapshot readout still requires the unqualified ABI 2.1 firmware builds.
 
 ## What changes
 
@@ -111,9 +112,51 @@ The final run was unprivileged and checked the service PID/restart count and
 invocation, boot ID, deployed binary, eight protected files, private identity
 and three installed private libraries before/after. Only temporary test files
 were added. No service restart, installation, live RPC, FPGA or analog access,
-QEMU execution or PetaLinux image build occurred. This is a software candidate,
-**not** a qualified runtime installation bundle; the release pin remains old
-until the matching runtime and live regression are qualified.
+QEMU execution or PetaLinux image build occurred during that software-only
+check. Live qualification followed as described below. The complete image
+runtime archive and release pin still require a separate packaging step.
+
+## Live self-trigger ABI 2.0 qualification
+
+The exact candidate above replaced only `/usr/bin/daphneServer`, after stopping
+the normal runtime target and confirming process exit. Restarting the target
+reloaded the same installed firmware; no new firmware/OS image was flashed.
+The previous executable remains at `/usr/bin/daphneServer.pre-native-13bc725`.
+The one-time deployment ran as a transient systemd unit, completed with exit
+zero, and was stopped after its journal was collected. A new process correctly
+started with invalid FE bookkeeping; full zero-bias configuration restored it.
+
+Passed on the running candidate:
+
+- Bookkeeping: two equivalent AFE orderings, canonical hash agreement, rejected
+  requests preserving state, direct-write invalidation, and heartbeat progress
+  during configuration; maximum observed status round trip **286 ms** (rounded).
+- Full zero-BIAS/BIASCTRL aggregate regression: **153 exchanges**, all five AFEs
+  aligned, fresh register readback, all 40 spybuffer channels usable.
+- ADS1261: **93 exchanges / 80 CRC-checked conversions**, all physical channels;
+  no calibrated amperes claim.
+- Telemetry/rejection/AFE checks: **16 exchanges**, all four named temperatures,
+  provisional 85/95/105 C alarm policy, voltage refresh and eight service records.
+- SFP diagnostics: **5 exchanges**; GTH0/TMG/GTR answer, the other three remain
+  unknown presence. Regulator/combined SFP checks: **7 exchanges**, with the
+  existing U42/U33 CML `0x02` flags retained and all mux restorations verified.
+- Private identity: **5 exchanges**, exact assignment/binding comparison and
+  default redaction. FPGA health: **4 exchanges**, independently decoded as
+  11 pass, external timing not ready, and native timestamp/Hermes/reset epoch
+  unknown. ABI 2.0 supplies no snapshot words, samples or progress claim.
+
+Final guards confirm PID **22523**, no automatic restarts, the same boot,
+protected files/private identity, generator enable `1`, ADC selectors `0/0`
+and the original valid FE hash
+`c858989d7e847a98146c39ad50ec1f053c67acc78ea3c268d6a880341ad8d503`.
+BIASCTRL/all five BIAS caches remain zero; this is not analog voltage readback.
+The temporary SSH forward was closed. Firmware/full-stream/ABI 2.1 physical
+qualification, external timing and Hermes delivery are not implied.
+
+Evidence: `runtime-candidate.00FTH1Zj/live-abi20.b1fHz8NH` in the firmware-health
+workspace: deployment script/journal, before/after/final RPC guards and named
+regression logs. Waveform SHA-256:
+`3a1d9698074bcf2432a2241ab7986fb51cc778fe0294e1246f4ef35aa3f7947e`.
 
 ## Client command — only after qualifying/deploying the matching firmware
 
@@ -134,7 +177,7 @@ its actual build ID. The ABI 2.1 bench check requires native local progress,
 external timing FAIL, and Hermes/reset-epoch UNKNOWN. Exit zero verifies the
 report, **not full FPGA health**. Output contains no private network values.
 
-## Before deployment
+## Before deploying ABI 2.1 firmware
 
 1. Qualify the new [bundle identity and staging path](gateware-bundle-identity.md)
    with actual build outputs. Local positive/negative tests pass; do not
@@ -143,7 +186,8 @@ report, **not full FPGA health**. Output contains no private network values.
    needs to be updated/qualified alongside the new overlay/profile contract.
 2. Run qualified Cooper synthesis/routing, review mandatory CDC/path reports,
    and qualify both firmware variants. No synthesis job is running yet.
-3. Complete guarded live ABI 2.0/2.1 regression (all ARM software suites now pass). Preserve CERN
+3. Complete full-stream and ABI 2.1 live regression; self-trigger ABI 2.0 and
+   all ARM software suites now pass. Preserve CERN
    MAC/IP, private identity and zero BIAS/BIASCTRL; verify the complete FE
    configuration, alignment and all 40 spy waveforms separately.
 4. Publish the qualified client/source/bundle and update the wiki with actual
