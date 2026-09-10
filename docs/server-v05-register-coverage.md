@@ -5,7 +5,8 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: **702155b**, with [live-qualified clock/time-service reporting](timesync-verification.md),
+Current DAPHNE-015 server: **75972de**, with [live-qualified kernel/OS metadata](host-software-verification.md),
+[clock/time-service reporting](timesync-verification.md),
 [server/schema identity](software-build-verification.md)
 and the inherited [management-link telemetry](management-link-verification.md).
 The previous [3f636f4 regression and handoff](protocol-error-server-verification.md) qualified the inherited features, including
@@ -61,11 +62,13 @@ preserved history. Relevant prior work:
 
 ## Corrections
 
-Candidate `75972de` adds [typed kernel/OS release observations](host-software-verification.md)
+Deployed `75972de` adds [typed kernel/OS release observations](host-software-verification.md)
 for I091/I092 and partial I093 metadata. Clean 32 host/32 native ARM suites and
-197 Python tests per binding pass, including actual ARM metadata reads.
-It is not deployed; current runtime and
-handoff remain `702155b`. No rootfs integrity or A/B boot-health claim is added.
+197 Python tests per binding pass, including actual ARM and live RPC metadata
+reads. Full zero-BIAS/all-channel/six-suite regression, complete runtime/native
+loader, image pin and 128 packaging tests pass. Refreshed ONL handoff/wiki remain
+pending; prior `702155b` handoff is unchanged. No rootfs integrity or A/B
+boot-health claim is added.
 
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |

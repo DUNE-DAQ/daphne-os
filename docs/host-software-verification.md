@@ -1,9 +1,10 @@
 # Kernel and OS release observations
 
 Collector `710e336` adds `SystemStatusSnapshot.host_software`, field **31**.
-Candidate `75972de` now passes clean host and native ARM qualification, but is
-**not yet installed**. DAPHNE-015 still runs
-server `702155b`; its runtime/image pin and ONL handoff remain unchanged.
+**Deployed server `75972de`** passes clean host/native ARM checks and live
+self-trigger ABI 2.0 regression on DAPHNE-015. Complete runtime/native loader
+and matching image pin `95e418d` pass. Refreshed ONL home/source/client handoff
+and wiki publication remain pending; the previous `702155b` handoff is unchanged.
 
 ## What is covered
 
@@ -99,8 +100,7 @@ it is not registered as an automatic hardware test. With a matching ARM build:
 LD_LIBRARY_PATH=/usr/lib/daphne-server ./host_software_probe
 ```
 
-After a separately qualified server installation, use matching source/bindings
-and the approved SSH forward:
+With deployed `75972de`, use matching source/bindings and the approved SSH forward:
 
 ```bash
 python3 daphne-server/scripts/verify_host_software.py \
@@ -116,6 +116,60 @@ It requires valid kernel/OS identification, but permits absent optional image
 labels. It prints only selected metadata; no private identity/time-source
 opt-ins. Exit zero means reporting verified, not boot health or rootfs integrity.
 
-Remaining: guarded deployment/live RPC/full regression, runtime assembly/pin/
-ONL/wiki handoff. Full-stream, new firmware and full-image
-qualification remain distinct; the broader 251-row semantic audit is not closed.
+## Deployed live regression and runtime
+
+Exact native-qualified server bytes replaced `/usr/bin/daphneServer` only after
+the previous process exited. The normal runtime restart reloads the same FPGA
+application (`3f17f1b`, self-trigger ABI 2.0). No new bitstream/OS image, library,
+network, time, identity or partition changes. The previous executable is retained
+in RAM under `/run/daphne-candidate-75972de/previous-server`; no recovery image
+was created. Deployment one-shot `daphne-deploy-75972de.service` exited successfully.
+
+The first post-start RPC check confirms the new source/schema, unchanged boot
+and firmware, zero BIAS command caches, and deliberately invalid applied-config
+evidence. Full zero-BIAS configuration precedes alignment or capture.
+
+Verified on the installed server:
+
+- Initial and final full aggregate passes: **153 exchanges each**, both AFE
+  orders, all five alignments and all 40 usable spybuffer channels per order.
+- Bookkeeping: 48 metadata-checked observations, 32 during Configure;
+  maximum round trip **267.223 ms**. Rejected requests preserve applied state;
+  a direct rewrite of the existing channel-0 offset invalidates it correctly.
+- v0.5 status/rejections/AFE readback: 17 exchanges; ADC: 93 exchanges including
+  80 CRC-checked physical-channel reads; SFP: 5; regulator: 7; FPGA health: 4;
+  private identity/link reporting: 5.
+- Actual kernel/OS client: 3 exchanges, matching native metadata and explicit
+  unavailable build/image labels. Clock: 3; compiled build metadata: 3;
+  timesync default/opt-in/default privacy: 5. No private peer values recorded.
+- Before/after protected-file guards pass; no automatic restart. The new
+  service invocation has no error-or-higher journal entries. Journal messages
+  were counted privately, not exported.
+
+Final FE hash:
+`c858989d7e847a98146c39ad50ec1f053c67acc78ea3c268d6a880341ad8d503`.
+BIAS/BIASCTRL commands remain zero, offset 2200/x1, trim 0, VGAIN 1700,
+generator 1, current selectors 0/0. These are qualified command/configuration
+observations, not a physical zero-voltage or metrology guarantee.
+Health remains **11 PASS / 1 external-timing FAIL / 3 UNKNOWN**.
+
+Live proof `host-software.MSil6c4w/live-abi20.3d4sWbOW/qualification.json` SHA-256:
+`f3ce607148425dd54534b00f8aa171e9808ab3d492e86fa8b93210b964b2c30d`.
+The complete `runtime-75972de/daphne-server-runtime-minimal.tgz` SHA-256 is
+`2c2c8c39310f838fc93ee7b129204ec1f32272fdc35b12ed76d1ccea78e16e72`.
+Its 15 regular members and four library aliases include the exact server,
+unchanged qualified Hermes/protobuf/utf8/ZeroMQ dependencies and redacted
+qualification records. OS-provided libsystemd remains unchanged/unbundled.
+
+The extracted runtime passes native loader/`--help` smoke at
+`/tmp/daphne-runtime-75972de.XXmEtUsj`; all three private dependencies resolve
+inside the extracted bundle. Final live and post-runtime board guards match.
+Image pin `95e418d`, **128 packaging tests**, actual archive staging and all nine
+synthetic overlay-minor decisions pass. The unstaged version-include sentinel
+remains fail-closed until a real project stages the matching runtime. These
+checks are not BitBake, a full-image build, routed firmware or full-stream tests.
+
+Next: refreshed ONL home/source/client/runtime handoff and wiki. Approved
+rootfs identity, missing database assignments, hardware/metrology evidence,
+new firmware, full-stream and full-image qualification remain separate gaps;
+the broader 251-row semantic audit is not closed.

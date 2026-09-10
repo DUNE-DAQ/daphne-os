@@ -1,5 +1,9 @@
 # Timesync service: implemented and live-qualified
 
+Current server **75972de** inherits this collector and passes the repeated
+[kernel/OS metadata deployment regression](host-software-verification.md).
+The detailed `702155b` qualification/handoff below is retained as history.
+
 **Deployed as `702155b`.** Collector `dcd6bc6`, client/checker `702155b`.
 DAPHNE-015 retains firmware `3f17f1b`, self-trigger ABI 2.0. Native/live regression,
 complete runtime loader checks and matching image pin `d54f967` pass.
