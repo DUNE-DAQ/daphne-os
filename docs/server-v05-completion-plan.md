@@ -131,9 +131,11 @@ Both producer/packaging paths require all 170 routed diagnostic payload bits.
 Actual parser and AXI simulations, source wiring, Tcl-model and synthetic
 packaging tests pass. See [scope and evidence](protocol-error-firmware-verification.md).
 
-This is **not deployed or hardware-qualified**. The deployed server still reports
-ProtocolErrorCount unavailable; it and the current image contract only admit
-ABI 2.0/2.1. New server/client source `41aea4c` / `0962e7a` / `3f636f4` implements
+The new firmware is **not deployed or hardware-qualified**. Server `3f636f4`
+is now deployed and passes full zero-bias self-trigger ABI 2.0 regression;
+ProtocolErrorCount correctly remains unavailable on that firmware. The current
+image contract still admits ABI 2.0/2.1. Server/client source
+`41aea4c` / `0962e7a` / `3f636f4` implements
 typed history, exact ABI 2.2 admission and independent client checks. All 26
 native C++ suites, 119 Python tests with each binding set and 13 serialized-wire
 cases pass; the clean AArch64 cross-build passes. All 26 native ARM software
@@ -142,8 +144,9 @@ boot/protected-file guards. See [server evidence](protocol-error-server-verifica
 OS commits `38f0547` / `d9dc40c` implement complete ABI 2.2 report validation,
 staging/loader and runtime pairing guards; all 121 clean-checkout tests pass.
 The actual image pin remains 3556811/minors `0 1`. See
-[image tooling scope](protocol-error-image-verification.md). Next are running-candidate
-regression, full runtime handoff/pin, supported synthesis/routing and image/live tests.
+[image tooling scope](protocol-error-image-verification.md). The complete runtime
+passes native packaged-library smoke. Next are runtime handoff/pin, supported
+synthesis/routing and image/live tests.
 Optical 0x76 remains a separate placeholder; the new PS interface is not an
 optical bridge. No command decoder or board change is claimed.
 The ready ABI 2.1 worktrees remain untouched.

@@ -1,4 +1,4 @@
-# Parser-error history: ARM software qualified, not deployed
+# Parser-error history: server deployed, new firmware still pending
 
 2026-09-10. Small commits: `41aea4c` (reader/protobuf), `0962e7a`
 (runtime admission/bracketing), `3f636f4` (independent client/wire tests).
@@ -120,14 +120,41 @@ build ID, selected mode, matching generated bindings and an approved tunnel.
 Its default remains exact ABI 2.0. `verify_server_v05.py` remains the separate
 ABI 2.0 regression tool; it has not been silently loosened for new firmware.
 
+## Live self-trigger ABI 2.0 regression
+
+Server `3f636f4` is now deployed on DAPHNE-015 with the exact binary hash above.
+The normal runtime restart reloaded the same `3f17f1b` firmware; no flash,
+partition, network or private-identity changes were made. The original full
+zero-bias FE profile was restored before alignment and capture.
+
+Evidence: `protocol-server.Mh4iBcOB/live-abi20.416CxtFF/qualification.json`,
+SHA-256 `d3ec69409bb0a2087cd0ff0cce8f76b77e719e7048064fd60eae146408336807`.
+
+- 153 aggregate exchanges: both five-AFE orders, alignment, fresh registers and
+  all 40 spybuffer channels pass. Bookkeeping heartbeat, rejection before hardware,
+  direct-write invalidation and canonical-hash restoration also pass.
+- Six regression suites pass: v0.5 telemetry (17 exchanges), ADC (93, including
+  80 CRC-checked samples), SFP (5), regulators (7), FPGA health (4), identity (5).
+- The new parser-history field explicitly reports unavailable on ABI 2.0;
+  its capability remains false. Neither native timestamp nor parser-history
+  firmware measurements are claimed. Health remains 11 PASS / 1 external-timing
+  FAIL / 3 UNKNOWN, not an overall healthy-board declaration.
+- Same boot, protected/private-file hashes, reference FE hash and generator/
+  current-selector policy; BIASCTRL and all five BIAS caches zero. No automatic
+  server restarts occurred. Cache checks are not analog voltage measurements.
+
+The complete runtime archive also passes a native-board loader/CLI smoke using
+its packaged private libraries, with service/configuration guards unchanged.
+Archive SHA-256: `1af9600acbfb8e557bedde23bde93e13270ccf7b5439d8a4b9f6803e335d0497`.
+Known private MAC/IPv4 literal checks pass; this is not a general secret audit.
+
 ## Still required
 
-Qualify the running candidate's ABI 2.0 regression and complete its runtime
-archive/handoff and image pairing. [ABI 2.2 OS staging/guards](protocol-error-image-verification.md)
+Complete the runtime handoff and image pairing. [ABI 2.2 OS staging/guards](protocol-error-image-verification.md)
 are now implemented with 121 clean-checkout tests; these use synthetic artifacts,
 not a PetaLinux image build. The image contract remains pinned to qualified server
 `3556811`, minors `0 1`; do not widen it merely to pass a build.
 Then qualify supported-tool firmware builds, routed paths, both modes/sources
 and live zero-bias readout/regression. The current Cooper probe still times out
-at the FNAL bridge; **no synthesis job was launched**. No service, firmware,
-bias or network configuration was changed. This does not close the entire workbook.
+at the FNAL bridge; **no synthesis job was launched**. The application deployment
+above does not qualify new firmware or close the entire workbook.
