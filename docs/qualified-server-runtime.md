@@ -1,6 +1,13 @@
 # Qualified server runtime
 
-Current server: **eecff61**, deployed with full self-trigger ABI 2.0 regression;
+Current server/runtime: **79f6e5d**, image pin **cb8958c**, with a verified 46-file
+ONL handoff and six exported read-only client checks. See
+[current qualification, commands and limits](mezzanine-status-verification.md#runtime-and-onl-handoff).
+The older handoffs below are historical and remain unchanged.
+
+## Previous handoff: eecff61
+
+Historical server: **eecff61**, deployed with full self-trigger ABI 2.0 regression;
 see [server/schema identity qualification](software-build-verification.md).
 
 On `np04-onl-004`:

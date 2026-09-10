@@ -3,7 +3,7 @@
 Historical driver-step evidence follows. Subsequent [79f6e5d](mezzanine-status-verification.md)
 connects this cache to the monitor/RPC/client and is deployed, with actual ARM
 fixtures and live no-mezzanine/full regression passing. Its runtime handoff is
-pending. The counts and boundaries below remain specific to 6514092.
+verified. The counts and boundaries below remain specific to 6514092.
 
 Source **6514092** added the cache to `HDMezzDriver` without connecting the
 background monitor/status RPC/client. That standalone step was not deployed;
@@ -87,6 +87,6 @@ ctest --test-dir "$BUILD_DIR" -R '^hdmezz_driver_unit$' --output-on-failure
 Server 97831dc and client 79f6e5d now connect this driver, remove independent
 atomics and add compatible quality/time/presence and client validation. Combined
 native fixtures, live no-mezzanine responses and full regression pass; 79f6e5d
-is deployed and its runtime handoff is pending. I207–I214 are source-implemented by that integration, not by the
+is deployed and its runtime/pin/ONL handoff is verified. I207–I214 are source-implemented by that integration, not by the
 original internal helper alone. I203/I204, populated-hardware/metrology and the
 remaining firmware/database requirements remain open.

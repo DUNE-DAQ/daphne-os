@@ -13,8 +13,8 @@ No mezzanines are fitted. See [scope and evidence](mezzanine-status-verification
 
 Server-only maintenance kept firmware/runtime/Hermes running, protected CERN
 settings unchanged and SC enable1 preserved. Self-trigger firmware remains
-**3f17f1b / ABI 2.0**. The complete runtime, image pin **1039f46** and 41-file ONL
-handoff still contain previously qualified **fb82e0a**; packaging 79f6e5d is next.
+**3f17f1b / ABI 2.0**. The exact runtime/native loader, image pin **cb8958c**,
+142 packaging tests and **46-file ONL handoff/six exported clients** are verified.
 Previous handoffs remain unchanged. This audit is not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
@@ -35,7 +35,7 @@ calibration or overall FPGA-health qualification is inferred.
 - **SC003/I288 ownership:** deployed 79f6e5d retains fb82e0a's correction, leaving BiasEnable untouched by
   aggregate Configure and fingerprints that no enable command was issued.
   Live preservation is verified at enable1; the other state is synthetic-only.
-  The fb82e0a handoff is verified; the new handoff and dedicated/authenticated SC request contract remain open. See
+  The new runtime/pin/ONL handoff is verified; the dedicated/authenticated SC request contract remains open. See
   [correction and verification scope](sc-bias-enable-ownership.md).
 - **I283–I288, AFE global state:** the candidate now supplies admitted,
   bracketed read-only register observations with quality/times; two native
@@ -88,7 +88,7 @@ The producer backlog remains:
    proceed with the missing producers below without changing SC policy.
 2. **Mezzanine cache/monitor/RPC/client integration is deployed** in 79f6e5d,
    with native and live no-mezzanine/full SC-preserving regression passing.
-   Next package the exact runtime/client for ONL and advance the image pin.
+   Its exact runtime/pin/ONL handoff now passes, including six exported clients.
    Physical readback, protection and metrology need populated hardware.
 3. Add **read-only fan command/raw tach** observations after checking the exact
    deployed RTL and board wiring. RPM, presence and stall claims need validated

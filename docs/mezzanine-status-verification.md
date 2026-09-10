@@ -2,8 +2,8 @@
 
 Server **79f6e5d is deployed and live-tested** on DAPHNE-015. Server `97831dc` connects
 the [cache driver](mezzanine-monitoring-cache.md); client `79f6e5d` validates and
-renders its response. The image pin and ONL runtime still contain **fb82e0a**;
-the new runtime handoff is pending. No mezzanines are fitted. SC-owned BiasEnable
+renders its response. Image pin **cb8958c** and the verified **46-file ONL handoff**
+now contain this exact server. No mezzanines are fitted. SC-owned BiasEnable
 remains 1; BIAS and BIASCTRL remain zero. Firmware was not reloaded.
 
 ## Response contract
@@ -122,8 +122,41 @@ Set `BUILD_DIR` explicitly. This command never enables/configures a block. With
 the no-mezzanine startup policy, expect typed unavailable, no measurements and
 exit 2—not zero readings and not a reason to enable nonexistent hardware.
 
-Next: package the exact deployed runtime and matching client for ONL, qualify
-the packaged loader and advance the image pin. The fb82e0a handoff is unchanged
-and does not contain this mezzanine correction. Populated-hardware and
+## Runtime and ONL handoff
+
+The exact deployed executable and unchanged Hermes/Protobuf/UTF-8/ZeroMQ bytes
+are packaged together. Native Kria loader/help checks resolve bundled libraries
+inside the archive and retain OS libsystemd 255.21. Hermes was not executed.
+All **142 packaging tests** and actual staging pass; the old fb82e0a runtime is
+rejected without replacing staged files. The fail-closed unstaged sentinel is
+retained. This is not a BitBake/image build or firmware qualification.
+
+On `np04-onl-004`:
+
+```bash
+cd "$HOME/daphne015-server-runtime-79f6e5d"
+sha256sum --check --strict SHA256SUMS
+```
+
+Owner-only directory: **46 payload files plus SHA256SUMS**, verified remotely.
+Runtime SHA-256: `efdb5159075852e31f2ef333e64f8a20071534bef876466713fdd0b027f39c1c`.
+Manifest SHA-256: `060fb8484a47870f6955e61e25d47a41f433b99bff16b18c95db4226dd1cf32e`.
+Six exported clients pass **42 read-only exchanges**, including all five
+no-mezzanine blocks and actual CLI calls. Before/after bookkeeping matches the
+qualified process, boot and FE hash. Existing ONL Python 3.9.16/protobuf 6.33.5/
+pyzmq 25.1.2 were used; nothing installed. See the bundle README for commands.
+
+Server source export base 79f6e5d and OS integration base cb8958c differ only in
+the already reviewed server documentation page. Production/build sources and
+schemas are unchanged; uncommitted work is excluded. Known MAC/IP examples are
+placeholders and one serialized request is omitted per export. File-by-file Git
+comparisons and all 13 changed Python/shell examples per export pass. Modified
+exports are not exact Git snapshots or a general secret audit.
+
+Packaging evidence: `mezzanine-status.9rUhbWps/runtime-handoff.C31Gb0ID`.
+Board guards preserve the server process, SC state, firmware/runtime/Hermes and
+protected settings. No Configure, service restart, FPGA load or network/time
+write occurred during packaging. Earlier fb82e0a and 4e74f10 handoff hashes are
+unchanged. Populated-hardware and
 metrology, firmware/full-stream, missing authoritative assignments and other
 v0.5 producer gaps remain in the [completion plan](server-v05-completion-plan.md).

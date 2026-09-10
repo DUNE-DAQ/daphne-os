@@ -3,7 +3,7 @@
 This page retains the native qualification of **de420e0**, which was not deployed
 standalone. Its correction is now included in deployed
 [79f6e5d](mezzanine-status-verification.md), with live no-mezzanine responses and
-SC-preserving regression tested. The ONL bundle/image pin still contain fb82e0a.
+SC-preserving regression tested. The exact 79f6e5d runtime, image pin cb8958c and ONL handoff are verified.
 No mezzanines are fitted. This fixes the producer for workbook **I225/I226**; it does not
 qualify physical current measurement or close the mezzanine telemetry backlog.
 
@@ -110,6 +110,6 @@ or inventing a shutdown policy. Combined native fixtures and client tests pass;
 the historical native evidence above still covers **de420e0 only**.
 
 Live no-mezzanine responses, deployment and regression pass in 79f6e5d; its
-runtime/ONL handoff remains pending. I203/I204 still do not prove complete physical block/protection
+runtime/pin/ONL handoff is now verified. I203/I204 still do not prove complete physical block/protection
 state. Populated-hardware readback/metrology, firmware/full-stream and remaining
 register/database requirements stay open. Native de420e0 evidence above is unchanged.

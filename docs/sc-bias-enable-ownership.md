@@ -2,7 +2,7 @@
 
 The SC correction was deployed and live-tested as **fb82e0a**. DAPHNE-015 now
 runs [79f6e5d, with the same ownership correction](mezzanine-status-verification.md);
-its runtime handoff is pending. The fb82e0a qualification below is historical.
+its exact runtime/pin/ONL handoff is also verified. The fb82e0a qualification below is historical.
 Aggregate Configure
 now leaves SC-owned BiasEnable untouched. The FPGA was not reloaded. The complete
 runtime bundle, image pin **1039f46** and **41-file ONL handoff** are verified.
@@ -106,6 +106,10 @@ Sealed `qualification.json` SHA-256:
 The native-phase qualification above remains historical and unchanged.
 
 ## Repeat the maintenance verification
+
+The command below retains the historical fb82e0a revision pin and deliberately
+rejects currently installed 79f6e5d. Use its [matching handoff](mezzanine-status-verification.md)
+for current read-only checks; do not bypass the revision guard.
 
 With the exact deployed source/client and an approved SSH forward:
 
