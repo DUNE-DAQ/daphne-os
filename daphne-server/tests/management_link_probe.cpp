@@ -1,5 +1,5 @@
 #include <iostream>
-#include <google/protobuf/util/json_util.h>
+#include <iomanip>
 #include "server_controller/board_identity.hpp"
 #include "server_controller/board_monitor.hpp"
 
@@ -14,12 +14,13 @@ int main(int argc, char** argv) {
     const auto identity = daphne_sc::make_board_identity_status(&loaded, observed, false, daphne_sc::monotonic_time_ns());
     if (identity.binding_state() != daphne::IDENTITY_BINDING_MATCH || !observed.has_link())
       throw std::runtime_error("Management baseline did not match");
-    std::string json;
-    if (!google::protobuf::util::MessageToJsonString(observed.link(), &json).ok())
-      throw std::runtime_error("Link serialization failed");
     // This submessage contains fixed labels/validated link measurements only.
     // Never serialize the parent observation, assignments, or private artifact.
-    std::cout << json << '\n';
+    // Keep the probe compatible with the installed minimal protobuf runtime;
+    // JSON utility helpers would add an otherwise unused Abseil dependency.
+    std::cout << "{\"link_wire_hex\":\"" << std::hex << std::setfill('0');
+    for (unsigned char byte : observed.link().SerializeAsString()) std::cout << std::setw(2) << unsigned(byte);
+    std::cout << "\"}\n";
     return observed.link().quality() == daphne::MEASUREMENT_GOOD ? 0 : 2;
   } catch (const std::exception&) {
     std::cerr << "Management-link probe failed; private details suppressed\n";
