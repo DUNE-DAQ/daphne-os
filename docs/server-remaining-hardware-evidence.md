@@ -30,8 +30,9 @@ Candidate directory on ONL:
 
 Follow-up: [the review-only extractor](oks-identity-review.md) now traces the
 selected application/board/Hermes relationships and passes the actual ONL DNS
-comparison. It preserves explicit source hashes and unknown assignments;
-protocol integration is still pending. The plain `pds-dev/configs/vst` files
+comparison. [Private assignment/protocol reporting is now deployed](board-identity-verification.md),
+with separate live management readback and explicit unknown assignments.
+The plain `pds-dev/configs/vst` files
 also identify board 61, while adjacent NP02 files identify 6/7/10. The separate
 VD cold-box DAPHNE-15 set agrees on placement but has a different source hash.
 

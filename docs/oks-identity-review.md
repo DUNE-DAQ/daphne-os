@@ -1,7 +1,8 @@
 # DAPHNE-015: review identity assignments from CERN OKS
 
-Extractor source `30e8708`. This prepares a private review snapshot; **it does
-not yet populate server protocol fields or configure the board**.
+Extractor source `30e8708`. This tool prepares a private review snapshot and
+does not configure the board. The follow-up [private artifact and server
+reporting](board-identity-verification.md) are now deployed and qualified.
 
 The ONL source matching DAPHNE-15 is
 `/nfs/home/marroyav/fddaq-v5.6.0-rc4-a9-1/ehn1-vst-daphne15`:
@@ -71,6 +72,6 @@ Evidence: `completion-VEpMKkGG/identity-python-tests.txt` and
 Still unresolved: authoritative timing-endpoint assignment, management MAC
 assignment, physical SFP-to-Hermes LinkId mapping, and additional link
 assignments. `tp_conf` is trigger configuration, **not** a timing address.
-Those fields remain null, not invented zero values. The next implementation
-step is a validated private assignment artifact plus protocol reporting of
-assigned versus observed identity; no implicit network/configuration writes.
+Those fields remain null, not invented zero values. The validated private
+artifact now supports protocol reporting of assigned versus observed identity;
+there are no implicit network/configuration writes.
