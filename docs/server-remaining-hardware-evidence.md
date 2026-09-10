@@ -28,6 +28,13 @@ Candidate directory on ONL:
 - Several separately inspected `pds/configs/vst` JSON copies identify board
   **61**, not **15**. Do not use those as DAPHNE-015 assignments.
 
+Follow-up: [the review-only extractor](oks-identity-review.md) now traces the
+selected application/board/Hermes relationships and passes the actual ONL DNS
+comparison. It preserves explicit source hashes and unknown assignments;
+protocol integration is still pending. The plain `pds-dev/configs/vst` files
+also identify board 61, while adjacent NP02 files identify 6/7/10. The separate
+VD cold-box DAPHNE-15 set agrees on placement but has a different source hash.
+
 Import identity attributes only. Never apply the candidate's bias, analog,
 clock or network settings as a side effect of collecting metadata. Report
 assigned and observed identity separately, with source IDs and content revision;
