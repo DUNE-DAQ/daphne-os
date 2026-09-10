@@ -58,6 +58,20 @@ daphne::ManagementNetworkObservation good_network() {
   n.set_present(true);
   n.set_interface_up(true);
   n.set_running_flag(true);
+  n.set_interface_index(3);
+  n.set_acquisition_started_monotonic_ns(now - 100);
+  auto* link = n.mutable_link();
+  link->set_quality(daphne::MEASUREMENT_GOOD); link->set_interface_index(3);
+  link->set_acquisition_started_monotonic_ns(now - 90); link->set_observed_monotonic_ns(now - 10);
+  link->set_link_state_bracket_verified(true);
+  auto* state = link->add_observations();
+  state->set_metric(daphne::MANAGEMENT_LINK_OPERSTATE); state->set_text_value("up");
+  auto* carrier = link->add_observations();
+  carrier->set_metric(daphne::MANAGEMENT_LINK_CARRIER); carrier->set_flag_value(true);
+  for (auto& item : *link->mutable_observations()) {
+    item.set_quality(daphne::MEASUREMENT_GOOD);
+    item.set_acquisition_started_monotonic_ns(now - 80); item.set_observed_monotonic_ns(now - 70);
+  }
   n.set_mac_address("private-must-not-be-exported");
   return n;
 }
@@ -235,6 +249,36 @@ int main() {
   absent.clear_interface_up();
   absent.clear_running_flag();
   require(check(assess_fpga_health(good_status(), absent, now), "management_interface") == daphne::HEALTH_CHECK_FAIL);
+  for (unsigned mutation = 0; mutation < 13; ++mutation) {
+    auto n = network;
+    auto* link = n.mutable_link();
+    switch (mutation) {
+      case 0: n.clear_link(); break;
+      case 1: link->set_link_state_bracket_verified(false); break;
+      case 2: link->set_interface_index(4); break;
+      case 3: link->set_quality(daphne::MEASUREMENT_ERROR); break;
+      case 4: link->mutable_observations(0)->set_text_value("unknown"); break;
+      case 5: link->mutable_observations(0)->set_text_value("PRIVATE-invalid-state"); break;
+      case 6: link->mutable_observations(1)->clear_value(); break;
+      case 7: *link->add_observations() = link->observations(0); break;
+      case 8: link->mutable_observations(0)->set_quality(daphne::MEASUREMENT_UNAVAILABLE); break;
+      case 9: link->set_observed_monotonic_ns(now + 1); break;
+      case 10: link->mutable_observations(1)->set_observed_monotonic_ns(now); break;
+      case 11: n.clear_acquisition_started_monotonic_ns(); break;
+      case 12: link->mutable_observations(0)->set_acquisition_started_monotonic_ns(now); break;
+    }
+    const auto h = assess_fpga_health(good_status(), n, now);
+    require(check(h, "management_interface") == daphne::HEALTH_CHECK_UNKNOWN);
+    require(h.SerializeAsString().find("PRIVATE") == std::string::npos);
+  }
+  for (unsigned mutation = 0; mutation < 4; ++mutation) {
+    auto n = network;
+    if (mutation == 0) n.set_interface_up(false);
+    if (mutation == 1) n.set_running_flag(false);
+    if (mutation == 2) n.mutable_link()->mutable_observations(1)->set_flag_value(false);
+    if (mutation == 3) n.mutable_link()->mutable_observations(0)->set_text_value("dormant");
+    require(check(assess_fpga_health(good_status(), n, now), "management_interface") == daphne::HEALTH_CHECK_FAIL);
+  }
   auto stale = assess_fpga_health(good_status(), network, now + 5000000001);
   for (const auto& c : stale.checks()) require(c.state() == daphne::HEALTH_CHECK_UNKNOWN);
   daphne::FpgaHealthAssessment decoded;

@@ -29,7 +29,14 @@ class FpgaHealthTests(unittest.TestCase):
         s.board_identity.observed_monotonic_ns = 90
         s.board_identity.management.CopyFrom(h.ManagementNetworkObservation(quality=h.MEASUREMENT_GOOD,
             present=True, interface_up=True, running_flag=True, observed_monotonic_ns=80,
-            mac_address="secret-test-only"))
+            acquisition_started_monotonic_ns=60, interface_index=3, mac_address="secret-test-only"))
+        link = s.board_identity.management.link
+        link.CopyFrom(h.ManagementLinkStatus(quality=h.MEASUREMENT_GOOD, interface_index=3,
+            acquisition_started_monotonic_ns=61, observed_monotonic_ns=79, link_state_bracket_verified=True))
+        link.observations.add(metric=h.MANAGEMENT_LINK_OPERSTATE, quality=h.MEASUREMENT_GOOD,
+            text_value="up", acquisition_started_monotonic_ns=62, observed_monotonic_ns=63)
+        link.observations.add(metric=h.MANAGEMENT_LINK_CARRIER, quality=h.MEASUREMENT_GOOD,
+            flag_value=True, acquisition_started_monotonic_ns=64, observed_monotonic_ns=65)
         s.temperatures.add(name="Temp_PL", temperature_c=40, valid=True, quality=h.MEASUREMENT_GOOD,
                            observed_monotonic_ns=192).alarm.state = h.TEMPERATURE_ALARM_GOOD
         s.fpga_health.CopyFrom(h.FpgaHealthAssessment(state=h.FPGA_HEALTH_NOT_READY, scope="external timing",
@@ -92,6 +99,39 @@ class FpgaHealthTests(unittest.TestCase):
         self.assertTrue(same_gateware_image(first, second))
         second.build_id += 1
         self.assertFalse(same_gateware_image(first, second))
+
+    def test_management_unknown_or_unbracketed_is_not_a_pass(self):
+        for mutate in (lambda n: n.ClearField("link"),
+                       lambda n: setattr(n.link, "link_state_bracket_verified", False),
+                       lambda n: setattr(n.link, "interface_index", 4),
+                       lambda n: setattr(n.link.observations[0], "text_value", "unknown"),
+                       lambda n: setattr(n.link.observations[0], "text_value", "private-invalid-state"),
+                       lambda n: n.link.observations[1].ClearField("value"),
+                       lambda n: n.link.observations.add().CopyFrom(n.link.observations[0]),
+                       lambda n: setattr(n.link.observations[0], "quality", h.MEASUREMENT_ERROR),
+                       lambda n: setattr(n.link, "observed_monotonic_ns", 81),
+                       lambda n: n.ClearField("acquisition_started_monotonic_ns")):
+            s = self.fixture()
+            mutate(s.board_identity.management)
+            with self.assertRaises(RuntimeError):
+                self.check(s)  # Deliberately incorrect server PASS must be rejected.
+            for check in s.fpga_health.checks:
+                if check.name == "management_interface":
+                    check.state = h.HEALTH_CHECK_UNKNOWN
+            report = check_status(s, h, 0x3f17f1b, 1)
+            self.assertEqual(report["checks"]["management_interface"], "HEALTH_CHECK_UNKNOWN")
+            self.assertNotIn("private-invalid-state", str(report))
+
+    def test_management_carrier_loss_or_dormancy_is_failed(self):
+        for mutate in (lambda n: setattr(n.link.observations[1], "flag_value", False),
+                       lambda n: setattr(n.link.observations[0], "text_value", "dormant")):
+            s = self.fixture()
+            mutate(s.board_identity.management)
+            for check in s.fpga_health.checks:
+                if check.name == "management_interface":
+                    check.state = h.HEALTH_CHECK_FAIL
+            report = check_status(s, h, 0x3f17f1b, 1)
+            self.assertEqual(report["checks"]["management_interface"], "HEALTH_CHECK_FAIL")
 
     def test_abi21_bench_progress_and_exact_admission(self):
         s = self.fixture()

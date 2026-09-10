@@ -12,6 +12,37 @@ bool config_fresh(const daphne::FpgaProgrammingStatus& p, uint64_t now) {
   return p.has_configuration_status_raw() &&
          fresh(p.configuration_quality(), p.configuration_observed_monotonic_ns(), now);
 }
+daphne::HealthCheckState management_health(const daphne::ManagementNetworkObservation& n, uint64_t now) {
+  if (!fresh(n.quality(), n.observed_monotonic_ns(), now) || !n.has_present()) return daphne::HEALTH_CHECK_UNKNOWN;
+  if (!n.present() || (n.has_interface_up() && !n.interface_up()) || (n.has_running_flag() && !n.running_flag()))
+    return daphne::HEALTH_CHECK_FAIL;
+  if (!n.has_interface_up() || !n.has_running_flag()) return daphne::HEALTH_CHECK_UNKNOWN;
+  const auto& link = n.link();
+  if (!n.has_interface_index() || !link.has_interface_index() || !n.interface_index() ||
+      link.interface_index() != n.interface_index() || !link.link_state_bracket_verified() ||
+      !fresh(link.quality(), link.observed_monotonic_ns(), now) || !n.acquisition_started_monotonic_ns() ||
+      link.acquisition_started_monotonic_ns() < n.acquisition_started_monotonic_ns() ||
+      link.acquisition_started_monotonic_ns() > link.observed_monotonic_ns() ||
+      link.observed_monotonic_ns() > n.observed_monotonic_ns()) return daphne::HEALTH_CHECK_UNKNOWN;
+  const daphne::ManagementLinkObservation *state = nullptr, *carrier = nullptr;
+  for (const auto& item : link.observations()) {
+    auto** destination = item.metric() == daphne::MANAGEMENT_LINK_OPERSTATE ? &state :
+                         item.metric() == daphne::MANAGEMENT_LINK_CARRIER ? &carrier : nullptr;
+    if (!destination) continue;
+    if (*destination || !fresh(item.quality(), item.observed_monotonic_ns(), now) ||
+        item.acquisition_started_monotonic_ns() < link.acquisition_started_monotonic_ns() ||
+        item.acquisition_started_monotonic_ns() > item.observed_monotonic_ns() ||
+        item.observed_monotonic_ns() > link.observed_monotonic_ns()) return daphne::HEALTH_CHECK_UNKNOWN;
+    *destination = &item;
+  }
+  if (!state || !carrier || !state->has_text_value() || !carrier->has_flag_value()) return daphne::HEALTH_CHECK_UNKNOWN;
+  const auto& value = state->text_value();
+  if (value != "unknown" && value != "notpresent" && value != "down" && value != "lowerlayerdown" &&
+      value != "testing" && value != "dormant" && value != "up") return daphne::HEALTH_CHECK_UNKNOWN;
+  if (!carrier->flag_value()) return daphne::HEALTH_CHECK_FAIL;
+  if (value == "unknown") return daphne::HEALTH_CHECK_UNKNOWN;
+  return value == "up" ? daphne::HEALTH_CHECK_PASS : daphne::HEALTH_CHECK_FAIL;
+}
 }
 
 bool fpga_status_mmio_prerequisites(const daphne::FpgaProgrammingStatus& p, uint64_t now) {
@@ -82,10 +113,10 @@ daphne::FpgaHealthAssessment assess_fpga_health(const daphne::SystemStatusSnapsh
       temperature->alarm().state() <= daphne::TEMPERATURE_ALARM_CRITICAL;
   add("pl_die_temperature", thermal, thermal && temperature->alarm().state() == daphne::TEMPERATURE_ALARM_GOOD,
       "PL die observation against provisional startup alarm thresholds; warning or above fails this conservative checklist", temperature ? temperature->observed_monotonic_ns() : 0);
-  add("management_interface", fresh(network.quality(), network.observed_monotonic_ns(), now) && network.has_present() &&
-      (!network.present() || (network.has_interface_up() && network.has_running_flag())),
-      network.present() && network.interface_up() && network.running_flag(),
-      "Selected approved management interface present/up/running; no private addresses exported, no reachability or Hermes-link inference", network.observed_monotonic_ns());
+  const auto management = management_health(network, now);
+  add("management_interface", management != daphne::HEALTH_CHECK_UNKNOWN, management == daphne::HEALTH_CHECK_PASS,
+      "Selected interface present/admin-up/running with matching carrier-up and operational-up samples; unknown operstate is not a pass. No reachability or Hermes inference",
+      network.observed_monotonic_ns());
   const auto& binding = s.board_identity();
   add("management_identity", fresh(daphne::MEASUREMENT_GOOD, binding.observed_monotonic_ns(), now) &&
       (binding.binding_state() == daphne::IDENTITY_BINDING_MATCH || binding.binding_state() == daphne::IDENTITY_BINDING_MISMATCH),

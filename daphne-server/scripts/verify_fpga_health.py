@@ -12,6 +12,7 @@ from pathlib import Path
 import sys
 from native_timestamp import check_progress
 from protocol_errors import check_history
+from management_link import health_state as management_health
 
 
 def require(ok, reason):
@@ -76,9 +77,7 @@ def check_status(s, h, expected_build, variant, require_bench=False, expected_ab
                                            runtime.applied_configuration_valid and not runtime.configuration_in_progress
                                            and bool(runtime.applied_configuration_hash)),
         "pl_die_temperature": outcome(thermal, thermal and t.alarm.state == h.TEMPERATURE_ALARM_GOOD),
-        "management_interface": outcome(fresh(network.quality, network.observed_monotonic_ns) and network.HasField("present")
-                                        and (not network.present or (network.HasField("interface_up") and network.HasField("running_flag"))),
-                                        network.present and network.interface_up and network.running_flag),
+        "management_interface": management_health(network, h, now),
         "management_identity": outcome(fresh(h.MEASUREMENT_GOOD, binding.observed_monotonic_ns)
                                        and binding.binding_state in (h.IDENTITY_BINDING_MATCH, h.IDENTITY_BINDING_MISMATCH),
                                        binding.binding_state == h.IDENTITY_BINDING_MATCH),
