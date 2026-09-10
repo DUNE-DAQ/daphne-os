@@ -18,6 +18,7 @@
 
 #include "server_controller/board_monitor.hpp"
 #include "server_controller/software_build.hpp"
+#include "server_controller/host_software.hpp"
 
 extern char** environ;
 namespace daphne_sc {
@@ -234,9 +235,8 @@ void add_host_status(daphne::SystemStatusSnapshot& status, bool mezzanine_access
   utsname identity{};
   if (uname(&identity) == 0) {
     status.set_hostname(identity.nodename);
-    status.set_kernel_release(identity.release);
   }
-  status.set_petalinux_version(read_assignment("/etc/os-release", "PRETTY_NAME"));
+  add_host_software(status);
   const auto app = read_assignment("/run/daphne-gateware/active.env", "APP");
   if (!app.empty() && app.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") == std::string::npos) {
     auto* configured = status.add_ps_values();

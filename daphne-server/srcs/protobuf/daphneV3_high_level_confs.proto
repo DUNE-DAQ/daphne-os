@@ -865,6 +865,27 @@ message ServerBuildInfo {
   // stable source tree: metadata collection is not an atomic source snapshot.
 }
 
+enum HostSoftwareMetric {
+  HOST_SOFTWARE_UNSPECIFIED = 0;
+  HOST_KERNEL_RELEASE = 1;
+  HOST_OS_PRETTY_NAME = 2;
+  HOST_OS_ID = 3;
+  HOST_OS_VERSION_ID = 4;
+  HOST_OS_BASE_BUILD_ID = 5; // Original installation base, NOT current rootfs integrity.
+  HOST_OS_IMAGE_ID = 6;
+  HOST_OS_IMAGE_VERSION = 7;
+}
+message HostSoftwareObservation {
+  HostSoftwareMetric metric = 1;
+  optional string value = 2;
+  MeasurementQuality quality = 3;
+  string source = 4;
+  uint64 acquisition_started_monotonic_ns = 5;
+  uint64 observed_monotonic_ns = 6;
+  uint64 observed_host_unix_ns = 7; // Unverified host wall clock.
+  string detail = 8;
+}
+
 message SystemStatusSnapshot {
   bool   success               = 1;
   string message               = 2;
@@ -896,6 +917,7 @@ message SystemStatusSnapshot {
   repeated HostResourceObservation host_resources = 28;
   ServerBuildInfo server_build = 29;
   HostTimeStatus host_time = 30;
+  repeated HostSoftwareObservation host_software = 31;
   // Only explicitly populated messages/capabilities are implemented. Empty
   // inventory fields above are NOT measurements of absence or zero.
 }

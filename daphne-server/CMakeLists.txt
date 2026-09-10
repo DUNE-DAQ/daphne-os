@@ -142,6 +142,7 @@ add_library(daphne_telemetry_protocol
   srcs/server_controller/current_monitor_protocol.cpp
   srcs/server_controller/service_status.cpp
   srcs/server_controller/host_resources.cpp
+  srcs/server_controller/host_software.cpp
   srcs/server_controller/host_clock.cpp
   srcs/server_controller/timesync.cpp
   srcs/server_controller/timesync_linux.cpp
@@ -174,6 +175,12 @@ target_include_directories(daphne_fpga_status PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(daphne_fpga_status PUBLIC daphne_telemetry_protocol daphne_configuration)
 if(BUILD_TESTING)
   add_executable(software_build_tests tests/software_build_tests.cpp)
+  add_executable(host_software_tests tests/host_software_tests.cpp)
+  target_link_libraries(host_software_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME host_software_unit COMMAND host_software_tests)
+  set_tests_properties(host_software_unit PROPERTIES LABELS unit)
+  add_executable(host_software_probe tests/host_software_probe.cpp)
+  target_link_libraries(host_software_probe PRIVATE daphne_telemetry_protocol)
   target_link_libraries(software_build_tests PRIVATE daphne_configuration)
   add_test(NAME software_build_unit COMMAND software_build_tests)
   set_tests_properties(software_build_unit PROPERTIES LABELS unit)

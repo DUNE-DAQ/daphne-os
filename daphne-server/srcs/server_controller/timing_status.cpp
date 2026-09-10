@@ -111,5 +111,8 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
   add("TimesyncService", true,
       "Read-only pinned-owner timesync1 GetAll: selected peer (private opt-in), poll policy and historical NTP sample/offset/spike. "
       "Monotonic age bounds require observed same-context packet progress. No service activation, clock setting or verified synchronization");
+  add("HostSoftware", true,
+      "I091/I092 and partial I093: uname release and six allow-listed os-release fields with quality and acquisition times. "
+      "Original base BUILD_ID and image labels are metadata, not current rootfs integrity, server version or boot-slot evidence");
 }
 }
