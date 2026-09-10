@@ -99,7 +99,9 @@ report, **not full FPGA health**. Output contains no private network values.
 
 1. Qualify the new [bundle identity and staging path](gateware-bundle-identity.md)
    with actual build outputs. Local positive/negative tests pass; do not
-   relabel old profiles or bypass admission.
+   relabel old profiles or bypass admission. The separate full-stream producer
+   still needs its build-bound identity/packaging port before its ABI 2.1 output
+   can be staged correctly; its old metadata-free ZIP would be treated as 2.0.
 2. Run qualified Cooper synthesis/routing, review mandatory CDC/path reports,
    and qualify both firmware variants. No synthesis job is running yet.
 3. Complete the remaining ARM suites and guarded live ABI 2.0/2.1 regression. Preserve CERN
@@ -107,3 +109,14 @@ report, **not full FPGA health**. Output contains no private network values.
    configuration, alignment and all 40 spy waveforms separately.
 4. Publish the qualified client/source/bundle and update the wiki with actual
    deployed versions and hardware evidence, not these source-only results.
+
+## Full-stream source port
+
+The separate full-stream repository now has branch `fix/health-timestamp-abi21`:
+`8798471` adds the same native snapshot RTL/ABI and native-clock bindings;
+`d52e420` adds mandatory routed payload checks and excludes the held payload
+from the two legacy master-clock-to-PS blanket cuts. The A002 mux and acquisition
+timestamp path remain unchanged. Eight ratio/phase simulations, four FuseSoC
+smoke suites and 20 source/Tcl-mock tests pass. These do not qualify the actual
+endpoint netlist, routing, CDC or live full-stream data. Cooper's latest route
+check terminated with a bridge timeout; no build job was launched.
