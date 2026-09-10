@@ -5,10 +5,11 @@ All **251 rows** are now individually assessed in the
 [provenance and evidence groups](server-v05-row-audit.json) define each source,
 test scope and limitation. The original XLSX is unchanged.
 
-Source snapshot: server **78504f1**, including the new AFE readback collector.
+Source snapshot: candidate **4e74f10**, adding AFE-reset health assessment.
+Clean/native tests and two standalone probes pass; it is **not deployed**.
 DAPHNE-015 now runs server **78504f1** with unchanged self-trigger firmware
 **3f17f1b / ABI 2.0**. Native and live RPC/full regression, the complete runtime
-and image pin pass. This audit is not a full-workbook completion claim.
+and image pin/ONL/wiki handoff pass. This audit is not a full-workbook completion claim.
 
 | Assessment | Rows | Meaning |
 | --- | ---: | --- |
@@ -31,6 +32,11 @@ calibration or overall FPGA-health qualification is inferred.
   separates SC-owned BiasEnable from the cached BIASCTRL DAC setpoint.
   Live RPC/full regression and runtime checks now pass; physical transitions
   and full-stream/new-firmware qualification remain separate.
+- **I284, reset-health follow-up:** candidate 4e74f10 derives a sixteenth
+  prerequisite from qualified readback, without SC bias/power policy changes.
+  33 host/33 actual ARM suites, 208 Python tests per binding and two native
+  probes pass. Candidate RPC/deployment/handoff is still pending; see
+  [verification and scope](afe-reset-health-verification.md).
 - **I207–I214, mezzanine samples:** independent cached atomics have no coherent
   quality/time; monitor exceptions can leave old values visible. No mezzanines
   are fitted on this bench, so physical qualification remains unavailable.
@@ -52,9 +58,9 @@ and deployment evidence are retained, not retroactively upgraded.
 
 ## Next implementation order
 
-1. Finish the **AFE global readback ONL/wiki handoff** for I283–I288;
-   source mapping, clean builds, native/live RPC/full regression and complete
-   runtime now pass. Keep physical transitions and SC policy separate.
+1. Qualify deployment/RPC and package the **AFE reset-health candidate**;
+   its clean/native tests and probes pass. The 78504f1 readback ONL/wiki handoff
+   is complete and unchanged. Keep physical transitions and SC policy separate.
 2. Correct **mezzanine cache quality/time and calibration provenance** with
    deterministic tests. Keep no-mezzanine behavior explicitly unavailable;
    hardware readback/metrology needs populated hardware.
@@ -91,7 +97,7 @@ python3 scripts/check_server_v05_audit.py \
 ```
 
 All 251 IDs/meanings/row positions and **all 30 worksheet/export columns** match
-the hash-pinned inputs. The checker verifies 54 reviewed code-file hashes and
+the hash-pinned inputs. The checker verifies 55 reviewed code-file hashes and
 all evidence references; 12 positive/negative tests pass. The source XLSX
 SHA-256 is `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 No extra Python packages are needed. The checker is read-only and does not

@@ -23,6 +23,14 @@ reset epoch remain UNKNOWN in either ABI. SFP diagnostics or successful
 oneshot services cannot satisfy those requirements. Neither ABI can currently
 earn an overall OBSERVED_OK result.
 
+## Native-qualified AFE reset follow-up
+
+Native-qualified candidate **4e74f10** adds the sampled `afe_reset_released`
+prerequisite; see [AFE reset health verification](afe-reset-health-verification.md).
+It is not deployed: the installed 78504f1 RPC still has 15 checks. The additional
+check does not introduce an SC power/bias decision or treat transient SPI busy
+as a hardware fault.
+
 ## Why two different Linux statuses matter
 
 At board kernel `6.18.10-xilinx-g4f7afe14f724`, the manager's `state` exposes cached
