@@ -31,13 +31,25 @@ python validate_dual_overlay () {
                 f"{firmware_var}={firmware_name!r} does not match {app_var}={app!r}"
             )
         prefix = app_var.removesuffix("_APP")
-        minor = d.getVar(prefix + "_ABI_MINOR") or "0"
-        sealed = d.getVar(prefix + "_IDENTITY_SEALED") or "0"
-        if minor not in ("0", "1") or sealed not in ("0", "1") or (minor == "1" and sealed != "1"):
+        minor = d.getVar(prefix + "_ABI_MINOR")
+        sealed = d.getVar(prefix + "_IDENTITY_SEALED")
+        # Missing old-stager declarations mean ABI 2.0, but empty/malformed
+        # declarations must not silently downgrade a new or invalid profile.
+        if minor is None:
+            minor = "0"
+        if sealed is None:
+            sealed = "0"
+        if minor not in ("0", "1", "2") or sealed not in ("0", "1") or (minor != "0" and sealed != "1"):
             bb.fatal("Invalid/unsealed gateware ABI declaration")
 }
 
 do_fetch[prefuncs] += "validate_dual_overlay"
+validate_dual_overlay[vardeps] += " \
+    DAPHNE_SELF_TRIGGER_APP DAPHNE_SELF_TRIGGER_FIRMWARE_NAME \
+    DAPHNE_FULL_STREAM_APP DAPHNE_FULL_STREAM_FIRMWARE_NAME \
+    DAPHNE_SELF_TRIGGER_ABI_MINOR DAPHNE_FULL_STREAM_ABI_MINOR \
+    DAPHNE_SELF_TRIGGER_IDENTITY_SEALED DAPHNE_FULL_STREAM_IDENTITY_SEALED \
+"
 
 SRC_URI += " \
   file://README.overlay \
@@ -126,6 +138,6 @@ FILES:${PN} += " \
 SRC_URI += " \
   ${@'file://staged/self-trigger/GATEWARE-IDENTITY.json' if d.getVar('DAPHNE_SELF_TRIGGER_IDENTITY_SEALED') == '1' else ''} \
   ${@'file://staged/full-stream/GATEWARE-IDENTITY.json' if d.getVar('DAPHNE_FULL_STREAM_IDENTITY_SEALED') == '1' else ''} \
-  ${@'file://staged/self-trigger/post_route_timestamp_snapshot.rpt' if d.getVar('DAPHNE_SELF_TRIGGER_ABI_MINOR') == '1' else ''} \
-  ${@'file://staged/full-stream/post_route_timestamp_snapshot.rpt' if d.getVar('DAPHNE_FULL_STREAM_ABI_MINOR') == '1' else ''} \
+  ${@'file://staged/self-trigger/post_route_timestamp_snapshot.rpt' if d.getVar('DAPHNE_SELF_TRIGGER_ABI_MINOR') in ('1', '2') else ''} \
+  ${@'file://staged/full-stream/post_route_timestamp_snapshot.rpt' if d.getVar('DAPHNE_FULL_STREAM_ABI_MINOR') in ('1', '2') else ''} \
 "

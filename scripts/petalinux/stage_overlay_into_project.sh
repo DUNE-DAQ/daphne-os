@@ -373,7 +373,7 @@ stage_one() {
     identity_origin=sealed-build-record
     cp -f "$identity_file" "$destination/GATEWARE-IDENTITY.json"
     staged_files+=(GATEWARE-IDENTITY.json)
-    if [[ "$abi_minor" == 1 ]]; then
+    if [[ "$abi_minor" == 1 || "$abi_minor" == 2 ]]; then
       cp -f "$source_dir/post_route_timestamp_snapshot.rpt" "$destination/post_route_timestamp_snapshot.rpt"
       staged_files+=(post_route_timestamp_snapshot.rpt)
     fi
@@ -428,7 +428,7 @@ render_profile() {
   profile_count="$(grep -Fxc "PROFILE=$expected_mode" "$source" || true)"
   mode_count="$(grep -Fxc "GATEWARE_MODE=$expected_mode" "$source" || true)"
   major_count="$(grep -Fxc 'IDENTITY_ABI_MAJOR=2' "$source" || true)"
-  minor_count="$(grep -Ec '^IDENTITY_ABI_MINOR=[01]$' "$source" || true)"
+  minor_count="$(grep -Ec '^IDENTITY_ABI_MINOR=[012]$' "$source" || true)"
   if [[ "$app_count" != "1" || "$profile_count" != "1" || "$mode_count" != "1" ||
         "$major_count" != "1" || "$minor_count" != "1" ||
         "$(grep -c '^IDENTITY_ABI_MAJOR=' "$source")" != 1 || "$(grep -c '^IDENTITY_ABI_MINOR=' "$source")" != 1 ]]; then

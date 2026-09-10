@@ -56,6 +56,16 @@ class RuntimeOverlayContractTests(unittest.TestCase):
             "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0",
         })
 
+    def use_abi22_candidate_contract(self):
+        # Actual release pin is deliberately unchanged; this models future
+        # explicit restaging with the implemented candidate, not an image build.
+        self.values.update({
+            "DAPHNE_SERVER_REQUIRED_GIT_COMMIT": "3f636f4acf3f795e96d1e20e89936c6a861ac58a",
+            "DAPHNE_SERVER_RUNTIME_GIT_COMMIT": "3f636f4acf3f795e96d1e20e89936c6a861ac58a",
+            "DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS": "0 1 2",
+            "DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS": "0 1 2",
+        })
+
     def test_recipe_requires_overlay_version_and_registers_guard(self):
         self.assertIn("require recipes-firmware/daphne-overlay/daphne-overlay-version.inc\n", self.recipe)
         self.assertIn('do_fetch[prefuncs] += "validate_daphne_server_runtime"', self.recipe)
@@ -117,12 +127,43 @@ class RuntimeOverlayContractTests(unittest.TestCase):
             self.values[prefix + "_ABI_MINOR"] = "0"
 
     def test_unknown_or_noncanonical_server_capability_sets_rejected(self):
-        for value in (None, "", "0 1 2", "01", "1 0", "0 0", "0  1"):
+        for value in (None, "", "0 1 2 3", "01", "1 0", "0 0", "0  1", "0 2"):
             with self.subTest(value=value):
                 self.values["DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS"] = value
                 self.values["DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS"] = value
                 with self.assertRaisesRegex(Refused, "minor capabilities"):
                     self.check()
+
+    def test_current_release_pin_rejects_either_abi22_overlay(self):
+        for prefix in ("DAPHNE_SELF_TRIGGER", "DAPHNE_FULL_STREAM"):
+            self.values[prefix + "_ABI_MINOR"] = "2"
+            self.values[prefix + "_IDENTITY_SEALED"] = "1"
+            with self.assertRaisesRegex(Refused, "does not support"):
+                self.check()
+            self.values[prefix + "_ABI_MINOR"] = "0"
+
+    def test_new_explicit_contract_accepts_all_nine_overlay_combinations(self):
+        self.use_abi22_candidate_contract()
+        for left in ("0", "1", "2"):
+            for right in ("0", "1", "2"):
+                for prefix, minor in (("DAPHNE_SELF_TRIGGER", left), ("DAPHNE_FULL_STREAM", right)):
+                    self.values[prefix + "_ABI_MINOR"] = minor
+                    self.values[prefix + "_IDENTITY_SEALED"] = "1"
+                self.check()
+        for stale in ("0", "1", "0 1", "unstaged"):
+            self.values["DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS"] = stale
+            with self.assertRaisesRegex(Refused, "minor capabilities"):
+                self.check()
+
+    def test_abi22_also_requires_sealed_identity_for_either_mode(self):
+        self.use_abi22_candidate_contract()
+        for prefix in ("DAPHNE_SELF_TRIGGER", "DAPHNE_FULL_STREAM"):
+            self.values[prefix + "_ABI_MINOR"] = "2"
+            for sealed in (None, "", "0", "2"):
+                self.values[prefix + "_IDENTITY_SEALED"] = sealed
+                with self.assertRaisesRegex(Refused, "sealed identity"):
+                    self.check()
+            self.values[prefix + "_ABI_MINOR"] = "0"
 
     def test_unqualified_or_unstaged_inputs_rejected(self):
         for variable, text in (("DAPHNE_SERVER_RUNTIME_QUALIFIED", "bundle must be staged"),

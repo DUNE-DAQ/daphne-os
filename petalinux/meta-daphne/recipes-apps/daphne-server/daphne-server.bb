@@ -42,7 +42,7 @@ python validate_daphne_server_runtime () {
 
     expected_minors = d.getVar("DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS") or ""
     staged_minors = d.getVar("DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS") or ""
-    if expected_minors not in ("0", "1", "0 1") or staged_minors != expected_minors:
+    if expected_minors not in ("0", "1", "0 1", "0 1 2") or staged_minors != expected_minors:
         bb.fatal("Staged daphne-server ABI minor capabilities do not match the reviewed source contract; restage the runtime")
 
     if d.getVar("DAPHNE_DUAL_OVERLAY_STAGED") != "1":
@@ -55,8 +55,8 @@ python validate_daphne_server_runtime () {
             minor = "0"
         if minor not in expected_minors.split(" "):
             bb.fatal(f"The pinned daphne-server does not support {mode} overlay ABI 2.{minor}; qualify and stage a compatible server runtime")
-        if minor == "1" and d.getVar(prefix + "_IDENTITY_SEALED") != "1":
-            bb.fatal(f"The {mode} ABI 2.1 overlay lacks its sealed identity declaration")
+        if minor in ("1", "2") and d.getVar(prefix + "_IDENTITY_SEALED") != "1":
+            bb.fatal(f"The {mode} ABI 2.{minor} overlay lacks its sealed identity declaration")
 
     runtime_sha = d.getVar("DAPHNE_SERVER_RUNTIME_SHA256") or ""
     if re.fullmatch(r"[0-9a-f]{64}", runtime_sha) is None:

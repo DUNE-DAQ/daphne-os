@@ -236,12 +236,29 @@ class DaphneGatewareTests(unittest.TestCase):
                          {"0x940000F0", "0x940000F4", "0x940000F8", "0x940000FC"})
 
     def test_unknown_minor_rejected_before_hardware_access(self) -> None:
-        self._write_profile("self-trigger", "self_app", 1, minor=2)
+        self._write_profile("self-trigger", "self_app", 1, minor=3)
         result = self._run("prepare-default", check=False)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("ABI 2.0 or 2.1", result.stderr)
+        self.assertIn("ABI 2.0, 2.1 or 2.2", result.stderr)
         self.assertFalse(self.devmem_log.exists())
         self.assertFalse(self.log.exists())
+
+    def test_explicit_abi22_profile_still_requires_exact_live_identity(self) -> None:
+        for profile, app, variant in (("self-trigger", "self_app", 1), ("full-stream", "full_app", 2)):
+            with self.subTest(profile=profile):
+                self._write_profile(profile, app, variant, minor=2)
+                if variant == 1:
+                    self._prepare_active_self_trigger()
+                else:
+                    self._prepare_active_full_stream()
+                result = self._run("verify")
+                self.assertIn("ABI=2.2", result.stdout)
+                for abi in ("0x00020000", "0x00020001", "0x00020003"):
+                    mismatch = self._run("verify", check=False, DAPHNE_TEST_LIVE_ABI=abi)
+                    self.assertNotEqual(mismatch.returncode, 0)
+                    self.assertIn("identity mismatch", mismatch.stderr)
+                self.assertEqual(set(self.devmem_log.read_text().splitlines()),
+                                 {"0x940000F0", "0x940000F4", "0x940000F8", "0x940000FC"})
 
     def test_quiesce_full_stream_verifies_identity_and_waits_for_ack(self) -> None:
         self._prepare_active_full_stream()

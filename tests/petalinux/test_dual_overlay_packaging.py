@@ -109,15 +109,20 @@ class DualOverlayPackagingTests(unittest.TestCase):
         archive = output / f"{app}.zip"
         if identity_minor is not None:
             report = app_dir / "post_route_timestamp_snapshot.rpt"
-            if identity_minor == 1:
-                report.write_text("Native timestamp payload timing: per-bit routed checks\n" + "".join(
+            if identity_minor in (1, 2):
+                mailboxes = [("local_snapshot", 65), ("external_snapshot", 65)]
+                category = "timestamp"
+                if identity_minor == 2:
+                    mailboxes.append(("protocol_snapshot", 40))
+                    category = "diagnostic"
+                report.write_text(f"Native {category} payload timing: per-bit routed checks\n" + "".join(
                     f"ep/ep_axi_inst/{mailbox}/destination_data_reg[{bit}] requirement_ns=10.0 slack_ns=1.0\n"
-                    for mailbox in ("local_snapshot", "external_snapshot") for bit in range(65)))
+                    for mailbox, width in mailboxes for bit in range(width)))
             record = dict(schema_version=1, magic=0x44415048, abi=0x20000 + identity_minor,
                           variant=1 if mode == "self-trigger" else 2, build_id=int(sha, 16), build_sha=sha,
                           source_sha256="a" * 64, vivado_version="2026.1",
                           binary_sha256=self.digest(app_dir / f"{app}.bin"), xsa_sha256="b" * 64,
-                          snapshot_report_sha256=self.digest(report) if identity_minor == 1 else None)
+                          snapshot_report_sha256=self.digest(report) if identity_minor in (1, 2) else None)
             (app_dir / "GATEWARE-IDENTITY.json").write_text(json.dumps(record))
         with zipfile.ZipFile(archive, "w") as bundle:
             for path in sorted(app_dir.iterdir()):
@@ -487,6 +492,64 @@ class DualOverlayPackagingTests(unittest.TestCase):
         (output / f"{app}.SHA256SUMS").write_text("".join(
             f"{self.digest(path)}  {path.relative_to(output)}\n"
             for path in [archive, *sorted(app_dir.iterdir())]))
+
+    def test_all_nine_abi_pairs_preserve_exact_profiles_and_report_payloads(self) -> None:
+        for left in (0, 1, 2):
+            for right in (0, 1, 2):
+                output = self.base / f"pair-{left}-{right}"
+                output.mkdir()
+                for mode, sha, layout, minor in (("self-trigger", "abcdef1", "amba", left),
+                                                  ("full-stream", "1234abc", "fragment", right)):
+                    self.make_bundle(output, mode, sha, layout=layout, identity_minor=minor)
+                result = self.run_shared_stage(output)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for mode, prefix, profile, minor in (("self-trigger", "DAPHNE_SELF_TRIGGER", self.self_profile, left),
+                                                     ("full-stream", "DAPHNE_FULL_STREAM", self.full_profile, right)):
+                    self.assertIn(f"IDENTITY_ABI_MINOR={minor}\n", profile.read_text())
+                    self.assertIn(f'{prefix}_ABI_MINOR = "{minor}"', self.version_inc.read_text())
+                    report = self.staged / mode / "post_route_timestamp_snapshot.rpt"
+                    if minor == 0:
+                        self.assertFalse(report.exists())
+                    else:
+                        self.assertEqual(len(report.read_text().splitlines()), 131 if minor == 1 else 171)
+                        self.assertIn(f"{self.digest(report)}  {report.name}", (report.parent / "SHA256SUMS").read_text())
+                    subprocess.run(["sha256sum", "--check", "--strict", "SHA256SUMS"],
+                                   cwd=self.staged / mode, check=True, capture_output=True, timeout=10)
+
+    def test_abi22_missing_wrong_or_uncovered_report_cannot_replace_prior_state(self) -> None:
+        for mode in ("self-trigger", "full-stream"):
+            for problem in ("missing", "old130", "missing_bit", "negative_slack", "missing_hash"):
+                output = self.base / f"bad22-{mode}-{problem}"
+                output.mkdir()
+                selected = None
+                for choice, sha, layout in (("self-trigger", "abcdef1", "amba"), ("full-stream", "1234abc", "fragment")):
+                    app = self.make_bundle(output, choice, sha, layout=layout, identity_minor=2 if choice == mode else 0)
+                    if choice == mode:
+                        selected = app
+                report = output / selected / "post_route_timestamp_snapshot.rpt"
+                if problem == "missing":
+                    report.unlink()
+                elif problem == "old130":
+                    report.write_text("\n".join(report.read_text().splitlines()[:131]).replace("diagnostic payload", "timestamp payload") + "\n")
+                elif problem == "missing_bit":
+                    report.write_text("\n".join(report.read_text().splitlines()[:-1]) + "\n")
+                elif problem == "negative_slack":
+                    report.write_text(report.read_text().replace("slack_ns=1.0", "slack_ns=-1.0", 1))
+                # Keep hashes consistent where possible: shape/ABI validation,
+                # not merely a stale checksum, must reject corrupted evidence.
+                if report.exists():
+                    record = output / selected / "GATEWARE-IDENTITY.json"
+                    metadata = json.loads(record.read_text())
+                    metadata["snapshot_report_sha256"] = self.digest(report)
+                    record.write_text(json.dumps(metadata))
+                self.rewrite_bundle_evidence(output, selected)
+                if problem == "missing_hash":
+                    manifest = output / f"{selected}.SHA256SUMS"
+                    manifest.write_text("".join(line for line in manifest.read_text().splitlines(keepends=True)
+                                                if not line.endswith("/post_route_timestamp_snapshot.rpt\n")))
+                result = self.run_shared_stage(output)
+                self.assertNotEqual(result.returncode, 0)
+                self.assert_prior_state_preserved()
 
     def test_bad_identity_never_replaces_prior_state(self) -> None:
         for index, mutation in enumerate(("abi", "variant", "build_id", "binary_sha256", "missing_report", "missing_identity")):

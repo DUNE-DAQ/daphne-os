@@ -128,7 +128,7 @@ required_commit="$(contract_value DAPHNE_SERVER_REQUIRED_GIT_COMMIT)"
 required_abi="$(contract_value DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MAJOR)"
 required_minors="$(contract_value DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS)"
 if [[ ! "$required_commit" =~ ^[0-9a-f]{40}$ || "$required_abi" != "2" ||
-      ! "$required_minors" =~ ^(0|1|0\ 1)$ ]]; then
+      ! "$required_minors" =~ ^(0|1|0\ 1|0\ 1\ 2)$ ]]; then
   echo "ERROR: malformed daphne-server compatibility contract in $CONTRACT_INC" >&2
   exit 2
 fi

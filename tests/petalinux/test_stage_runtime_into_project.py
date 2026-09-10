@@ -275,11 +275,28 @@ class StageRuntimeIntoProjectTests(unittest.TestCase):
         contract = self.recipe / "daphne-server-contract.inc"
         contract.write_text(contract.read_text().replace(
             f'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "{REQUIRED_MINORS}"',
-            'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "0 1 2"'))
+            'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "0 1 2 3"'))
         result = self.run_stage(bundle)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("malformed daphne-server compatibility contract", result.stderr)
         self.assert_prior_state_preserved()
+
+    def test_explicit_new_source_contract_stages_abi22_capability(self) -> None:
+        # A synthetic compatibility-contract change only, not a qualified image.
+        # The repository's actual release pin remains unchanged until handoff.
+        bundle, _ = self.make_bundle()
+        candidate = "3f636f4acf3f795e96d1e20e89936c6a861ac58a"
+        contract = self.recipe / "daphne-server-contract.inc"
+        contract.write_text(contract.read_text().replace(REQUIRED_COMMIT, candidate).replace(
+            f'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "{REQUIRED_MINORS}"',
+            'DAPHNE_SERVER_REQUIRED_GATEWARE_ABI_MINORS = "0 1 2"'))
+        metadata = bundle.parent / "BUILD-METADATA.txt"
+        metadata.write_text(metadata.read_text().replace(REQUIRED_COMMIT, candidate))
+        result = self.run_stage(bundle)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        version = (self.recipe / "daphne-server-version.inc").read_text()
+        self.assertIn('DAPHNE_SERVER_RUNTIME_GATEWARE_ABI_MINORS = "0 1 2"', version)
+        self.assertIn(f'DAPHNE_SERVER_RUNTIME_GIT_COMMIT = "{candidate}"', version)
 
     def test_rejects_metadata_tar_digest_mismatch_without_mutation(self) -> None:
         bundle, bundle_sha = self.make_bundle()
