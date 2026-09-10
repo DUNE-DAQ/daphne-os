@@ -1,6 +1,7 @@
 #include "server_controller/protocol_errors.hpp"
 #include "server_controller/timing_status.hpp"
 #include <iostream>
+#include <iomanip>
 #include <stdexcept>
 #include <vector>
 #define REQUIRE(x) do { if (!(x)) throw std::runtime_error("Protocol history test failed at line " + std::to_string(__LINE__)); } while (0)
@@ -159,8 +160,33 @@ void tests() {
   bad = good; bad.add_attempts()->CopyFrom(good.attempts(0)); REQUIRE(!protocol_error_history_consistent(bad));
   invalidate_protocol_error_history(good, daphne::MEASUREMENT_ERROR, "Outer identity bracket failed"); unavailable(good);
 }
+void emit_fixtures() {
+  auto emit = [](const char* label, Fixture& f, uint32_t abi = kGatewareAbiV22) {
+    const auto r = f.run(abi);
+    std::cout << label << ' ' << std::hex << abi << ' ';
+    for (const unsigned char byte : r.SerializeAsString())
+      std::cout << std::setfill('0') << std::setw(2) << unsigned(byte);
+    std::cout << '\n';
+  };
+  Fixture old; emit("abi20", old, kGatewareAbiV2); emit("abi21", old, kGatewareAbiV21);
+  Fixture zero; zero.complete(); emit("zero", zero);
+  Fixture events; events.complete(7, 31); emit("events", events);
+  Fixture saturated; saturated.complete(UINT32_MAX, 33); emit("saturated", saturated);
+  Fixture overflowed; overflowed.complete(UINT32_MAX, 127); emit("overflowed", overflowed);
+  Fixture reset; reset.complete(0, 128); emit("reset", reset);
+  Fixture timeout; timeout.complete(0, 0, 4); emit("timeout", timeout);
+  Fixture busy; busy.complete(0, 0, 8); emit("busy", busy);
+  Fixture retry; retry.header(); retry.attempt(40, 0x11, 7, 1, 1); retry.attempt(43, 0x11, 8, 3); retry.header();
+  emit("retry", retry);
+  Fixture exhausted; exhausted.header(); for (unsigned i = 0; i < 3; ++i) exhausted.attempt(40 + i, 0x11, 7, 1, 1);
+  emit("exhausted", exhausted);
+  Fixture failed; failed.complete(7, 1); failed.script.at(9).fail = true; emit("read_failure", failed);
+  Fixture stale; stale.complete(7, 1); stale.step = 100000001; emit("stale", stale);
 }
-int main() {
+}
+int main(int argc, char** argv) {
+  if (argc == 2 && std::string(argv[1]) == "--emit-fixtures") { emit_fixtures(); return 0; }
+  REQUIRE(argc == 1);
   tests();
   std::cout << "PASS protocol history: exact ABI/no old probes, zero/limits/reasons, all status patterns, conflicts, metadata, time, read failures and wire presence\n";
 }

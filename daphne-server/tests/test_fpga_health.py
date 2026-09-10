@@ -8,6 +8,7 @@ import daphneV3_high_level_confs_pb2 as h
 from verify_fpga_health import check_status
 from verify_board_identity import same_gateware_image
 from test_native_timestamp import native_fixture
+from test_protocol_errors import protocol_fixture
 
 
 class FpgaHealthTests(unittest.TestCase):
@@ -112,6 +113,30 @@ class FpgaHealthTests(unittest.TestCase):
                 check.state = h.HEALTH_CHECK_UNKNOWN
         with self.assertRaises(RuntimeError):
             check_status(s, h, 0x3f17f1b, 1, expected_abi=0x20001)
+
+    def test_abi22_reports_history_without_inventing_current_failure(self):
+        for count, detail in ((0, 0), (7, 1), (0xffffffff, 255)):
+            s = self.fixture()
+            s.gateware_identity.abi = 0x20002
+            s.endpoint.live_timestamp.CopyFrom(native_fixture().endpoint.live_timestamp)
+            s.endpoint.live_timestamp_quality = h.MEASUREMENT_GOOD
+            for check in s.fpga_health.checks:
+                if check.name == "live_timestamp_progress":
+                    check.state = h.HEALTH_CHECK_PASS
+            live = s.endpoint.protocol_errors
+            live.CopyFrom(protocol_fixture(count, detail).endpoint.protocol_errors)
+            live.acquisition_started_monotonic_ns = live.observed_monotonic_ns = 149
+            live.attempts[0].acquisition_started_monotonic_ns = live.attempts[0].observed_monotonic_ns = 149
+            report = check_status(s, h, 0x3f17f1b, 1, require_bench=True, expected_abi=0x20002)
+            self.assertEqual(report["protocol_errors"]["count"], count)
+            self.assertEqual(len(report["checks"]), 15)
+            self.assertEqual(report["checks"]["live_timestamp_progress"], "HEALTH_CHECK_PASS")
+            self.assertNotIn("secret-test-only", str(report))
+            with self.assertRaises(RuntimeError):
+                self.check(s)
+            live.count += 1 if count == 0 else -1
+            with self.assertRaises(RuntimeError):
+                check_status(s, h, 0x3f17f1b, 1, expected_abi=0x20002)
 
 
 if __name__ == "__main__":

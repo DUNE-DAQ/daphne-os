@@ -3,7 +3,7 @@
 
 Requests private network details for comparison but outputs only named check
 results, public FPGA words and observation times. No hardware writes or scans;
-ABI 2.1 reads trigger diagnostic timestamp captures, not acquisition changes.
+ABI 2.1/2.2 reads trigger diagnostic captures, not acquisition changes.
 """
 import argparse
 import json
@@ -11,6 +11,7 @@ import math
 from pathlib import Path
 import sys
 from native_timestamp import check_progress
+from protocol_errors import check_history
 
 
 def require(ok, reason):
@@ -29,7 +30,7 @@ def check_status(s, h, expected_build, variant, require_bench=False, expected_ab
     def fresh(quality, observed):
         return quality == h.MEASUREMENT_GOOD and 0 < observed <= now and now - observed <= 5_000_000_000
 
-    require(expected_abi in (0x20000, 0x20001) and
+    require(expected_abi in (0x20000, 0x20001, 0x20002) and
             (i.magic, i.abi, i.variant, i.build_id) == (0x44415048, expected_abi, variant, expected_build)
             and i.quality == h.MEASUREMENT_GOOD and i.HasField("matches_admitted_profile")
             and i.matches_admitted_profile, "Unexpected gateware/admission")
@@ -98,7 +99,8 @@ def check_status(s, h, expected_build, variant, require_bench=False, expected_ab
             for name, value in expected.items()), "Board differs from expected qualified local-clock bench profile")
     return {"state": h.FpgaHealthState.Name(overall), "configuration_stat": f"0x{raw:08x}",
             "build_id": f"0x{i.build_id:08x}", "abi": f"0x{i.abi:08x}", "observed_monotonic_ns": now,
-            "checks": {name: h.HealthCheckState.Name(value) for name, value in expected.items()}}
+            "checks": {name: h.HealthCheckState.Name(value) for name, value in expected.items()},
+            "protocol_errors": check_history(s, h, now)}
 
 
 def main():
@@ -106,7 +108,7 @@ def main():
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--proto-dir", type=Path, required=True)
     parser.add_argument("--expected-build-id", type=lambda value: int(value, 0), required=True)
-    parser.add_argument("--expected-abi", type=lambda value: int(value, 0), choices=(0x20000, 0x20001), default=0x20000,
+    parser.add_argument("--expected-abi", type=lambda value: int(value, 0), choices=(0x20000, 0x20001, 0x20002), default=0x20000,
                         help="Exact platform ABI word; default 0x20000 preserves deployed qualification")
     parser.add_argument("--mode", choices=("self-trigger", "full-stream"), required=True)
     parser.add_argument("--require-bench-profile", action="store_true")

@@ -58,6 +58,12 @@ class NativeTimestampTests(unittest.TestCase):
         sample.sequence_before, sample.sequence_first, sample.sequence_after = 0xffffffff, 0, 0
         self.assertEqual(self.check(s), h.HEALTH_CHECK_PASS)
 
+    def test_abi22_retains_native_timestamp_contract(self):
+        for external in (False, True):
+            s = native_fixture(external=external)
+            s.gateware_identity.abi = 0x20002
+            self.assertEqual(self.check(s), h.HEALTH_CHECK_PASS)
+
     def test_complete_conflict_then_retry(self):
         for kind in ("sequence_first", "sequence_after", "request_status_raw"):
             s = native_fixture()
@@ -142,7 +148,7 @@ class NativeTimestampTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.check(s)
         s.endpoint.ClearField("live_timestamp")
-        s.gateware_identity.abi = 0x20002
+        s.gateware_identity.abi = 0x20003
         with self.assertRaises(RuntimeError):
             self.check(s)
 

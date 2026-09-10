@@ -1,4 +1,4 @@
-"""Independent wire-evidence checks for the ABI 2.1 diagnostic timestamp.
+"""Independent wire-evidence checks for the ABI 2.1/2.2 diagnostic timestamp.
 
 No I/O or hardware access. Counter progress does not qualify clock frequency,
 external synchronization, reset epoch, or waveform/acquisition alignment.
@@ -26,7 +26,7 @@ def check_progress(status, h, now):
                 not live.identity_bracket_verified,
                 "ABI 2.0 must not advertise native register observations")
         return unknown
-    require(identity.abi == 0x20001, "unsupported platform ABI")
+    require(identity.abi in (0x20001, 0x20002), "unsupported platform ABI")
     require(ep.HasField("live_timestamp") and live.message and
             ep.live_timestamp_quality == live.quality, "missing or inconsistent observation quality")
     require(live.maximum_attempts_per_sample == 3 and live.maximum_acquisition_ms == 100,
