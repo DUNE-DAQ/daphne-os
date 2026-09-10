@@ -4,7 +4,8 @@ Server implementation **0e5f48b**, client verification **78504f1**.
 Server **78504f1 is deployed and live-qualified on DAPHNE-015**. Firmware
 remains self-trigger **3f17f1b / ABI 2.0**. The complete runtime and native
 loader pass; image pin **fb53223** and 140 packaging/audit tests pass.
-The refreshed ONL home/source/client handoff and wiki publication are pending.
+The refreshed ONL home/source/client handoff is verified; see the handoff
+section below and the [SC ownership wiki page](https://github.com/DUNE-DAQ/daphne-os/wiki/DAPHNE-015-AFE-global-and-SC-ownership).
 
 ## What the fields mean
 
@@ -12,6 +13,13 @@ The v0.5 workbook assigns ordinary energization authority to **SC**;
 `daphne-server` executes local operations and reports observed state.
 `SystemStatusSnapshot.afe_global` is read-only. No write policy, Configure
 behavior, default enable state, interlock or automatic power action changed.
+
+Specifically, **SC003 `SC.BiasEnableRequested`** belongs to the workbook's
+SC Gateway tab. **I288 `AFE Global.BiasEnable`** belongs to Server Platform
+because it is device readback consumed by SC, not authority to choose the
+requested state. SC003 is still a proposed SC-interface contract, not a new
+wire command implemented by this read-only collector. Keep both roles distinct;
+do not remove I288 or turn telemetry into an automatic bias decision.
 
 | Workbook row | New field | Exact FPGA readback |
 | --- | --- | --- |
@@ -147,6 +155,24 @@ Actual runtime staging and all nine synthetic overlay-minor combinations pass.
 The source `daphne-server-version.inc` remains fail-closed until a real project
 stages the matching archive. This is not BitBake or a complete image build.
 
-Remaining: refreshed ONL/wiki handoff; real busy/reset transitions;
+## ONL home handoff
+
+`$HOME/daphne015-server-runtime-78504f1` on `np04-onl-004` contains 32 payload
+files plus `SHA256SUMS`, in owner-only storage. Runtime and both source exports,
+matching Python bindings, redaction manifests and native/live/client proofs
+are included. Server export base is 78504f1; OS integration base is 6457a68.
+Production/build sources match Git; known private literals in legacy examples
+are replaced and one serialized seed request is omitted per export. These
+are modified exports, not exact Git snapshots or a general secret guarantee.
+
+ONL's existing Python 3.9.16/protobuf 6.33.5/pyzmq 25.1.2 ran the four exported
+AFE, kernel/OS, clock and build clients: three read-only RPCs each. One extra
+bookkeeping read confirmed the qualified process/boot and unchanged valid FE
+hash. No packages were installed. All handoff and internal runtime payload
+hashes pass; the previous 75972de handoff remains unchanged and was reverified.
+Manifest SHA-256:
+`02d71b5c65344ee03d733d68537849b283f273172ced18930b929d0b6465e30a`.
+
+Remaining: real busy/reset transitions;
 full-stream and newer routed firmware qualification. Do not toggle SC-owned
 energization or reset merely to make a diagnostic pass.
