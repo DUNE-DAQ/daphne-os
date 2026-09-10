@@ -22,6 +22,11 @@ int main(int argc, char** argv) {
     status.set_success(ok);
     // This monotonic time permits independent freshness checks without using UTC.
     status.mutable_server_state()->set_observed_monotonic_ns(daphne_sc::monotonic_time_ns());
+    // Exercise the actual health assessor on fresh AFE evidence. Other health
+    // inputs (network, temperatures, applied configuration) are not collected
+    // by this standalone probe and must not be fabricated as passing.
+    *status.mutable_fpga_health() = daphne_sc::assess_fpga_health(
+        status, {}, daphne_sc::monotonic_time_ns());
     std::string output;
     if (!google::protobuf::TextFormat::PrintToString(status, &output)) return 1;
     std::cout << output;

@@ -1,4 +1,5 @@
 #include "server_controller/fpga_health.hpp"
+#include "server_controller/afe_global.hpp"
 #include "server_controller/native_timestamp.hpp"
 #include <cmath>
 
@@ -94,6 +95,25 @@ daphne::FpgaHealthAssessment assess_fpga_health(const daphne::SystemStatusSnapsh
       "Both DAPHNE timing MMCM lock bits; not a clock-frequency measurement", ep.observed_monotonic_ns());
   add("timing_resets_released", timing, !ep.mmcm0_reset() && !ep.mmcm1_reset() && !ep.endpoint_reset(),
       "Three exposed reset requests; not every internal reset domain", ep.observed_monotonic_ns());
+  const auto& afe = s.afe_global();
+  const bool afe_available = s.success() &&
+      supports_afe_global({id.magic(), id.abi(), id.variant(), id.build_id()}) &&
+      fresh(id.quality(), id.observed_monotonic_ns(), now) &&
+      id.has_matches_admitted_profile() && id.matches_admitted_profile() &&
+      fpga_status_mmio_prerequisites(p, now) && afe.identity_bracket_verified() &&
+      fresh(afe.quality(), afe.observed_monotonic_ns(), now) &&
+      afe_global_consistent(afe) && !afe.message().empty() &&
+      id.acquisition_started_monotonic_ns() != 0 &&
+      id.acquisition_started_monotonic_ns() <= afe.acquisition_started_monotonic_ns() &&
+      afe.observed_monotonic_ns() <= p.acquisition_started_monotonic_ns() &&
+      p.acquisition_started_monotonic_ns() <= p.manager_observed_monotonic_ns() &&
+      p.manager_observed_monotonic_ns() <= p.configuration_observed_monotonic_ns() &&
+      p.configuration_observed_monotonic_ns() <= id.observed_monotonic_ns();
+  add("afe_reset_released", afe_available, !afe.reset_asserted(),
+      "Sampled common AFE hard-reset request is clear; not analog readiness or reset history. No automatic reset, bias or power action",
+      afe.observed_monotonic_ns());
+  // SC owns energization. POWERSTATE/BiasEnable are not acquisition permits.
+  // An instantaneous SPI busy bit cannot distinguish normal work from a stall.
   add("external_timing_ready", timing, ep.ready(),
       "Endpoint clock source, both locks, released resets, FSM 8 and timestamp-valid required; local-clock bench operation deliberately fails this requirement", ep.observed_monotonic_ns());
   const auto& runtime = s.server_state();

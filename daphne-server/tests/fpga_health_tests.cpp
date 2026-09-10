@@ -1,4 +1,5 @@
 #include "server_controller/fpga_health.hpp"
+#include "server_controller/afe_global.hpp"
 #include "server_controller/board_monitor.hpp"
 #include "server_controller/native_timestamp.hpp"
 #include <fstream>
@@ -24,11 +25,25 @@ daphne::FpgaProgrammingStatus good_programming() {
 }
 daphne::SystemStatusSnapshot good_status() {
   daphne::SystemStatusSnapshot s;
+  s.set_success(true);
   *s.mutable_fpga_programming() = good_programming();
+  s.mutable_fpga_programming()->set_acquisition_started_monotonic_ns(now - 200);
   auto* id = s.mutable_gateware_identity();
+  id->set_magic(kGatewareIdentityMagic); id->set_abi(kGatewareAbiV2);
+  id->set_variant(1); id->set_build_id(0x3f17f1b);
+  id->set_acquisition_started_monotonic_ns(now - 1000);
   id->set_quality(daphne::MEASUREMENT_GOOD);
   id->set_matches_admitted_profile(true);
   id->set_observed_monotonic_ns(now);
+  auto* afe = s.mutable_afe_global();
+  afe->set_quality(daphne::MEASUREMENT_GOOD);
+  afe->set_global_control_raw(2); afe->set_bias_enable_raw(1);
+  afe->set_power_state_bit(true); afe->set_reset_asserted(false);
+  afe->set_busy_afe0(false); afe->set_busy_afe12(false); afe->set_busy_afe34(false);
+  afe->set_bias_enabled(true); afe->set_identity_bracket_verified(true);
+  afe->set_source(kAfeGlobalSource); afe->set_message("private-must-not-be-exported");
+  afe->set_maximum_acquisition_ms(kAfeGlobalMaximumAcquisitionMs);
+  afe->set_acquisition_started_monotonic_ns(now - 500); afe->set_observed_monotonic_ns(now - 400);
   auto* ep = s.mutable_endpoint();
   ep->set_observation_quality(daphne::MEASUREMENT_GOOD);
   ep->set_observed_monotonic_ns(now);
@@ -108,6 +123,85 @@ daphne::HealthCheckState check(const daphne::FpgaHealthAssessment& health, const
   for (const auto& c : health.checks()) if (c.name() == name) return c.state();
   throw std::runtime_error("Missing health check");
 }
+void afe_reset_tests() {
+  for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, kGatewareAbiV22})
+    for (uint32_t variant : {1U, 2U}) for (uint32_t raw = 0; raw < 32; ++raw)
+      for (uint32_t bias : {0U, 1U}) {
+        auto s = good_status();
+        s.mutable_gateware_identity()->set_abi(abi); s.mutable_gateware_identity()->set_variant(variant);
+        auto* r = s.mutable_afe_global();
+        r->set_global_control_raw(raw); r->set_bias_enable_raw(bias);
+        r->set_reset_asserted(raw & 1); r->set_power_state_bit(raw & 2);
+        r->set_busy_afe0(raw & 4); r->set_busy_afe12(raw & 8); r->set_busy_afe34(raw & 16);
+        r->set_bias_enabled(bias);
+        const auto health = assess_fpga_health(s, good_network(), now);
+        require(check(health, "afe_reset_released") ==
+            ((raw & 1) ? daphne::HEALTH_CHECK_FAIL : daphne::HEALTH_CHECK_PASS));
+        require(health.state() == ((raw & 1) ? daphne::FPGA_HEALTH_NOT_READY : daphne::FPGA_HEALTH_UNKNOWN));
+        for (const auto& c : health.checks()) if (c.name() == "afe_reset_released")
+          require(c.observed_monotonic_ns() == r->observed_monotonic_ns());
+        require(health.SerializeAsString().find("private-must-not-be-exported") == std::string::npos);
+      }
+  for (unsigned mutation = 0; mutation < 40; ++mutation) {
+    auto s = good_status();
+    auto* r = s.mutable_afe_global(); auto* id = s.mutable_gateware_identity();
+    auto* p = s.mutable_fpga_programming();
+    switch (mutation) {
+      case 0: s.clear_afe_global(); break;
+      case 1: r->clear_reset_asserted(); break;
+      case 2: r->clear_global_control_raw(); break;
+      case 3: r->clear_bias_enable_raw(); break;
+      case 4: r->clear_bias_enabled(); break;
+      case 5: r->clear_busy_afe0(); break;
+      case 6: r->clear_busy_afe12(); break;
+      case 7: r->clear_busy_afe34(); break;
+      case 8: r->clear_power_state_bit(); break;
+      case 9: r->set_reset_asserted(true); break;
+      case 10: r->set_global_control_raw(34); break;
+      case 11: r->set_bias_enable_raw(3); break;
+      case 12: r->set_quality(daphne::MEASUREMENT_ERROR); break;
+      case 13: r->set_quality(daphne::MEASUREMENT_STALE); break;
+      case 14: r->set_quality(daphne::MEASUREMENT_UNAVAILABLE); break;
+      case 15: r->set_identity_bracket_verified(false); break;
+      case 16: r->set_source("private-invalid-source"); break;
+      case 17: r->clear_message(); break;
+      case 18: r->set_maximum_acquisition_ms(101); break;
+      case 19: r->set_acquisition_started_monotonic_ns(0); break;
+      case 20: r->set_acquisition_started_monotonic_ns(now - 1001); break;
+      case 21: r->set_acquisition_started_monotonic_ns(now - 399); break;
+      case 22: r->set_observed_monotonic_ns(now - 199); break;
+      case 23: id->clear_acquisition_started_monotonic_ns(); break;
+      case 24: id->set_matches_admitted_profile(false); break;
+      case 25: id->clear_matches_admitted_profile(); break;
+      case 26: id->set_quality(daphne::MEASUREMENT_ERROR); break;
+      case 27: id->set_magic(0); break;
+      case 28: id->set_abi(0x20003); break;
+      case 29: id->set_variant(3); break;
+      case 30: id->set_build_id(0xf1234567); break;
+      case 31: id->set_observed_monotonic_ns(now + 1); break;
+      case 32: p->set_manager_state("write"); break;
+      case 33: p->set_manager_error_raw(0); break;
+      case 34: p->set_configuration_status_raw(0x16907ffd); break;
+      case 35: p->clear_configuration_status_raw(); break;
+      case 36: p->set_manager_observed_monotonic_ns(now - 201); break;
+      case 37: p->set_configuration_observed_monotonic_ns(now - 1); break;
+      case 38: p->set_configuration_observed_monotonic_ns(now + 1); break;
+      case 39: s.set_success(false); break;
+    }
+    const auto health = assess_fpga_health(s, good_network(), now);
+    require(check(health, "afe_reset_released") == daphne::HEALTH_CHECK_UNKNOWN);
+    require(health.SerializeAsString().find("private-invalid-source") == std::string::npos);
+  }
+  auto s = good_status();
+  const auto sample = s.afe_global().observed_monotonic_ns();
+  require(check(assess_fpga_health(s, {}, sample + 5000000000), "afe_reset_released") == daphne::HEALTH_CHECK_PASS);
+  require(check(assess_fpga_health(s, {}, sample + 5000000001), "afe_reset_released") == daphne::HEALTH_CHECK_UNKNOWN);
+  s.mutable_gateware_identity()->set_acquisition_started_monotonic_ns(now - 200000000);
+  s.mutable_afe_global()->set_acquisition_started_monotonic_ns(sample - 100000000);
+  require(check(assess_fpga_health(s, {}, now), "afe_reset_released") == daphne::HEALTH_CHECK_PASS);
+  s.mutable_afe_global()->set_acquisition_started_monotonic_ns(sample - 100000001);
+  require(check(assess_fpga_health(s, {}, now), "afe_reset_released") == daphne::HEALTH_CHECK_UNKNOWN);
+}
 void write(const fs::path& path, const std::string& bytes) {
   fs::create_directories(path.parent_path());
   std::ofstream f(path, std::ios::binary);
@@ -164,6 +258,7 @@ void collector_tests() {
 }
 
 int main() {
+  afe_reset_tests();
   using namespace daphne_sc;
   collector_tests();
   require(fpga_status_mmio_prerequisites(good_programming(), now));
@@ -187,13 +282,13 @@ int main() {
   auto status = good_status();
   const auto network = good_network();
   auto health = assess_fpga_health(status, network, now);
-  require(health.checks_size() == 15 && health.state() == daphne::FPGA_HEALTH_UNKNOWN);
+  require(health.checks_size() == 16 && health.state() == daphne::FPGA_HEALTH_UNKNOWN);
   unsigned passes = 0, unknowns = 0;
   for (const auto& c : health.checks()) {
     passes += c.state() == daphne::HEALTH_CHECK_PASS;
     unknowns += c.state() == daphne::HEALTH_CHECK_UNKNOWN;
   }
-  require(passes == 12 && unknowns == 3);
+  require(passes == 13 && unknowns == 3);
   for (auto abi : {kGatewareAbiV21, kGatewareAbiV22}) for (bool advancing : {false, true}) {
     auto native = good_status(); native_progress(native, advancing);
     native.mutable_gateware_identity()->set_abi(abi);
