@@ -20,6 +20,8 @@ constexpr uint64_t kGatewareIdentityBuildAddress = 0x940000FCULL;
 constexpr uint32_t kGatewareIdentityMagic = 0x44415048U;
 constexpr uint32_t kGatewareAbiV2 = 0x00020000U;
 constexpr uint32_t kGatewareAbiV21 = 0x00020001U;
+constexpr uint32_t kGatewareAbiV22 = 0x00020002U;
+bool supports_protocol_error_history(uint32_t abi) noexcept;
 bool supports_gateware_abi(uint32_t abi) noexcept;
 bool supports_live_timestamp(uint32_t abi) noexcept;
 constexpr uint32_t kGatewareBuildIdUpperNibbleMask = 0xF0000000U;

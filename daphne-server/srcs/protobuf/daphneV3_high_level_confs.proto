@@ -379,6 +379,54 @@ message NativeTimestampObservation {
   optional uint32 timeout_cycles_after = 14;
 }
 
+// Passive receive-parser history, not physical/link bit errors or a reset epoch.
+enum ProtocolErrorScope {
+  PROTOCOL_ERROR_SCOPE_UNSPECIFIED = 0;
+  PROTOCOL_ERROR_RX_PARSER_EPISODES = 1;
+}
+enum ProtocolErrorLifetime {
+  PROTOCOL_ERROR_LIFETIME_UNSPECIFIED = 0;
+  PROTOCOL_ERROR_PLATFORM_RESET = 1; // Common AXI reset; NOT endpoint/parser recovery.
+}
+message ProtocolErrorAttempt {
+  MeasurementQuality quality = 1;
+  optional uint32 sequence_before = 2;
+  optional uint32 request_status_raw = 3;
+  optional uint32 sequence_first = 4;
+  optional uint32 status_raw = 5;
+  optional uint32 count_raw = 6;
+  optional uint32 detail_raw = 7;
+  optional uint32 sequence_after = 8;
+  uint32 attempt_index = 9; // 1..maximum_attempts, only conflicts are retried.
+  uint64 acquisition_started_monotonic_ns = 10;
+  uint64 observed_monotonic_ns = 11;
+  string message = 12;
+}
+message ProtocolErrorObservation {
+  MeasurementQuality quality = 1; // Quality of history, NOT current endpoint health.
+  optional uint32 feature_abi = 2;
+  optional uint32 timeout_cycles = 3;
+  repeated ProtocolErrorAttempt attempts = 4;
+  optional uint32 count = 5; // Present only for qualified history; zero is valid.
+  // 0 checksum, 1 async length, 2 sync length, 3 comma in sync, 4 buffer unavailable.
+  optional uint32 reasons_seen = 6;
+  optional bool saturated = 7;
+  optional bool overflowed = 8; // Additional episode(s) after saturation; multiplicity lost.
+  optional bool receiver_reset = 9; // State at native capture, not a counter clear.
+  uint32 counter_width_bits = 10;
+  ProtocolErrorScope counted_scope = 11;
+  ProtocolErrorLifetime lifetime = 12;
+  uint64 acquisition_started_monotonic_ns = 13;
+  uint64 observed_monotonic_ns = 14;
+  uint32 maximum_attempts = 15;
+  uint64 maximum_acquisition_ms = 16; // Checked after calls return; no MMIO interruption.
+  optional uint32 feature_abi_after = 17;
+  optional uint32 timeout_cycles_after = 18;
+  bool identity_bracket_verified = 19; // Only outer FPGA admission/programming checks set this.
+  bool reset_epoch_known = 20; // Always false for feature 1.0; never infer since-boot history.
+  string message = 21;
+}
+
 message EndpointStatus {
   bool   ready                            = 1;
   uint32 endpoint_status_raw              = 2;
@@ -407,6 +455,7 @@ message EndpointStatus {
   uint64 observed_monotonic_ns              = 21;
   optional uint32 endpoint_address          = 22; // ep_ctrl_reg[15:0], observed control value, NOT a DB assignment.
   NativeTimestampObservation live_timestamp = 23;
+  ProtocolErrorObservation protocol_errors = 24;
 }
 
 // Identity assignments are database/configuration evidence, NEVER hardware

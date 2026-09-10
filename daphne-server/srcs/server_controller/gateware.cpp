@@ -88,6 +88,9 @@ bool supports_gateware_abi(uint32_t abi) noexcept {
 bool supports_live_timestamp(uint32_t abi) noexcept {
   return abi == kGatewareAbiV21;
 }
+bool supports_protocol_error_history(uint32_t abi) noexcept {
+  return abi == kGatewareAbiV22;
+}
 bool same_gateware_identity(const GatewareIdentity& a, const GatewareIdentity& b) noexcept {
   return a.magic == b.magic && a.abi == b.abi && a.variant == b.variant && a.build_id == b.build_id;
 }

@@ -118,6 +118,7 @@ target_include_directories(daphne_proto PUBLIC
 target_link_libraries(daphne_proto PUBLIC protobuf::libprotobuf)
 
 add_library(daphne_telemetry_protocol
+  srcs/server_controller/protocol_errors.cpp
   srcs/server_controller/native_timestamp.cpp
   srcs/server_controller/regulator_monitor.cpp
   srcs/server_controller/regulator_linux.cpp
@@ -159,6 +160,10 @@ if(BUILD_TESTING)
   add_test(NAME fpga_status_unit COMMAND fpga_status_tests)
   set_tests_properties(fpga_status_unit PROPERTIES LABELS unit)
   add_executable(native_timestamp_tests tests/native_timestamp_tests.cpp)
+  add_executable(protocol_error_tests tests/protocol_error_tests.cpp)
+  target_link_libraries(protocol_error_tests PRIVATE daphne_telemetry_protocol)
+  add_test(NAME protocol_error_unit COMMAND protocol_error_tests)
+  set_tests_properties(protocol_error_unit PROPERTIES LABELS unit)
   target_link_libraries(native_timestamp_tests PRIVATE daphne_telemetry_protocol)
   add_test(NAME native_timestamp_unit COMMAND native_timestamp_tests)
   set_tests_properties(native_timestamp_unit PROPERTIES LABELS unit)
