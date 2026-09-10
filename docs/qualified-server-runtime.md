@@ -1,6 +1,48 @@
 # Qualified server runtime
 
-Current server: **3f636f4**, deployed on DAPHNE-015 with full live self-trigger
+Current server: **bffea24**, deployed on DAPHNE-015 with full live self-trigger
+ABI 2.0 regression; see [management-link qualification](management-link-verification.md).
+The matching image pin and complete userspace runtime retain ABI 0/1/2 minor
+capabilities, without claiming newer firmware or image qualification.
+
+On `np04-onl-004`:
+
+```bash
+cd "$HOME/daphne015-server-runtime-bffea24"
+sha256sum --check --strict SHA256SUMS
+```
+
+Owner-only directory, 20 payload files plus their checksum manifest. Runtime
+archive SHA-256:
+`ff956a4fc41dec8035c6a0cb8a857b4aa2256d01321a639548214458cb8c1dad`.
+Handoff `SHA256SUMS` digest:
+`aab55661b64181cb3a6ee29b27ab336a0e4858c08dd7f48142e5ac097a41b0d3`.
+It supplies the exact server/Hermes/private libraries, matching protoc-30.1
+Python bindings, redacted native/live evidence and privacy-filtered source
+exports. No private network/identity configuration or OS/firmware image.
+
+Server export base **bffea24**, OS integration base **214b676** (pin and tests).
+The file-by-file audit finds 1,185 / 1,350 unchanged regular files, 19 / 22
+redacted text files and one omitted serialized seed request per export; all
+13 changed Python/shell examples per export pass syntax checks. Production
+server/build sources remain unchanged. These modified exports exclude
+uncommitted work and are not exact Git snapshots or a general secret audit.
+Read `README.md`, `SOURCE-METADATA.txt` and the redaction manifests first.
+
+Verified: 27 host and 27 actual ARM suites, 144 Python tests with each binding,
+all 14 management-link observations, full zero-BIAS/all-channel regression,
+bookkeeping and six telemetry suites. The archive's native packaged-library
+loader/CLI smoke, actual staging and all **124 packaging tests** pass.
+Firmware stays **3f17f1b**, self-trigger ABI 2.0; private/network settings match.
+The initial post-reload/pre-FE policy guard failed, then passed unchanged after
+full zero-BIAS Configure. See the qualification report for the retained caveat.
+Health remains 11 PASS / 1 external-timing FAIL / 3 UNKNOWN, not overall OK.
+Routed newer firmware, full-stream, Hermes delivery, metrology and a full image
+remain unqualified. Previous handoffs below are retained with historical pins.
+
+## Previous handoff: 3f636f4
+
+Previous server: **3f636f4**, deployed on DAPHNE-015 with full live self-trigger
 ABI 2.0 regression; [qualification and current image contract](protocol-error-server-verification.md).
 Its complete runtime SHA-256 is
 `1af9600acbfb8e557bedde23bde93e13270ccf7b5439d8a4b9f6803e335d0497`;
@@ -17,7 +59,7 @@ changed Python/shell examples per export pass syntax checks. Production server/
 build sources are unchanged, but these modified exports are not exact Git snapshots
 or a general secret-audit guarantee. Uncommitted work is excluded.
 
-For the current handoff on ONL:
+For that historical handoff on ONL:
 
 ```bash
 cd "$HOME/daphne015-server-runtime-3f636f4"

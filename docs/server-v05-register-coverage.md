@@ -5,7 +5,8 @@ qualified dual-gateware release. The source workbook is
 `DAPHNE_Operations_Variable_Ownership_Draft_v0.5.xlsx`, SHA-256
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
 
-Current DAPHNE-015 server: `3f636f4`, with [native/live regression and handoff](protocol-error-server-verification.md), including
+Current DAPHNE-015 server: **bffea24**, with [deployed management-link telemetry and live regression](management-link-verification.md).
+The previous [3f636f4 regression and handoff](protocol-error-server-verification.md) qualified the inherited features, including
 [live host-resource observations](host-resource-verification.md),
 [onboard regulator telemetry](onboard-regulator-verification.md),
 [sampled FPGA health evidence](server-fpga-health.md),
@@ -21,8 +22,8 @@ offset-gain measurements below retain their original server provenance.
 
 ## Scope and provenance
 
-Newer source `bffea24` adds [management-link telemetry and stricter health](management-link-verification.md).
-It passes native board probe/testing but is **not deployed** in the server yet.
+Deployed source `bffea24` adds [management-link telemetry and stricter health](management-link-verification.md).
+Native tests/probes and full live self-trigger ABI 2.0 regression pass.
 
 The Server Platform tab contains 251 entries, including proposed interfaces
 and verification-pending inventory. This patch does not claim all 251 are
@@ -47,7 +48,7 @@ preserved history. Relevant prior work:
 
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
-| I071–I084, management Ethernet | Fourteen typed read-only Linux link metrics, individual quality/time, interface/state brackets; unknown operational state cannot pass health | 27 host/native ARM suites, 144 Python tests and two real board probes pass. Server/RPC deployment, full runtime regression and handoff pending; no Hermes delivery or counter-epoch claim |
+| I071–I084, management Ethernet | Fourteen typed read-only Linux link metrics, individual quality/time, interface/state brackets; unknown operational state cannot pass health | Deployed bffea24; 27 host/native ARM suites, 144 Python tests, native probes and live RPC/zero-bias/all-channel regression pass. Complete runtime native smoke/staging, 124 packaging tests and ONL handoff pass. No Hermes delivery or counter-epoch claim |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
 | I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Local sweep: x2/x1 slope ratios 1.934–2.062; 36/40 within 164 counts at all five points. Analog calibration unqualified |
 | Aggregate per-AFE BIAS | Every present AFE entry applies its BIAS code, including zero; order resolved by AFE ID | Two direct zero-only hardware configurations pass, without low-level workaround. Nonzero/mixed values tested with mocks; analog voltage unqualified |
