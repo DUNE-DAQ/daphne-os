@@ -22,6 +22,10 @@ offset-gain measurements below retain their original server provenance.
 
 ## Scope and provenance
 
+Follow-up candidate **eecff61** adds [compiled server/schema identity](software-build-verification.md).
+It passes native software qualification but is **not deployed**; the current
+runtime and image pin remain bffea24.
+
 Deployed source `bffea24` adds [management-link telemetry and stricter health](management-link-verification.md).
 Native tests/probes and full live self-trigger ABI 2.0 regression pass.
 
@@ -48,6 +52,7 @@ preserved history. Relevant prior work:
 
 | Workbook issue / path | Implemented behavior | Remaining qualification |
 | --- | --- | --- |
+| I143/I144, server/schema version | Candidate eecff61 embeds Git software version, source/tree/dirty provenance, exact schema hashes and the router's shared envelope-version constant; same metadata in system status and independent bookkeeping | 28 host/28 native ARM suites, 162 Python tests per binding and native compiled metadata/help pass. Not deployed. Hashes are not semantic compatibility or authentication; other service versions remain open |
 | I071–I084, management Ethernet | Fourteen typed read-only Linux link metrics, individual quality/time, interface/state brackets; unknown operational state cannot pass health | Deployed bffea24; 27 host/native ARM suites, 144 Python tests, native probes and live RPC/zero-bias/all-channel regression pass. Complete runtime native smoke/staging, 124 packaging tests and ONL handoff pass. No Hermes delivery or counter-epoch claim |
 | I306/C022, PGA gain | Aggregate configuration writes `PGA_GAIN_CONTROL`, register 51 bit 13, and checks returned readback | Register-level tests; not an analog amplitude calibration |
 | I315/C013, offset DAC gain | `ChannelConfig.gain` 1/2 selects AD5327 bit 13 = 0/1; 0 retains legacy x1. Explicit x1/x2 offset limits are 2700/1500 | Deployed; full Configure exercised on all 40 channels. Local sweep: x2/x1 slope ratios 1.934–2.062; 36/40 within 164 counts at all five points. Analog calibration unqualified |
