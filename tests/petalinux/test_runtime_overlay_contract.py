@@ -74,6 +74,15 @@ class RuntimeOverlayContractTests(unittest.TestCase):
             self.assertIn(prefix + "_ABI_MINOR", dependencies.split())
             self.assertIn(prefix + "_IDENTITY_SEALED", dependencies.split())
 
+    def test_prebuilt_timesync_user_requires_systemd_library_provider(self):
+        # Recipe-source regression only; an image build must still resolve and
+        # execute the target library. Do not bundle/replace the system copy.
+        depends = re.search(r'^DEPENDS \+= "([^"]+)"', self.recipe, re.M).group(1).split()
+        runtime = re.search(r'^RDEPENDS:\$\{PN\} \+= "([^"]+)"', self.recipe, re.M).group(1).split()
+        self.assertIn("systemd", depends)
+        self.assertIn("libsystemd", runtime)
+        self.assertNotIn("libsystemd.so", self.recipe)
+
     def test_original_runtime_with_two_legacy_overlays(self):
         self.use_legacy_contract()
         self.check()

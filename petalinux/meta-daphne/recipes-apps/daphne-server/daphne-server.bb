@@ -2,7 +2,8 @@ SUMMARY = "Prebuilt DAPHNE runtime payload"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
-DEPENDS += "patchelf-native"
+# Populate the shared-library provider before packaging the prebuilt sd-bus user.
+DEPENDS += "patchelf-native systemd"
 
 require daphne-server-contract.inc
 require daphne-server-version.inc
@@ -73,6 +74,7 @@ validate_daphne_server_runtime[vardeps] += " \
 
 RDEPENDS:${PN} += " \
     i2c-tools \
+    libsystemd \
     zlib \
 "
 

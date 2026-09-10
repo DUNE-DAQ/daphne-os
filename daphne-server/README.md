@@ -20,14 +20,16 @@ The project contains:
 - [ZeroMQ](https://zeromq.org/) runtime (`libzmq`) and the `cppzmq` headers.
 - [Protocol Buffers](https://protobuf.dev/) compiler and library.
 - [CLI11](https://github.com/CLIUtils/CLI11) headers (vendored under `third_party/CLI11/include`).
-- `libi2c` (optional; needed when using the I²C features of `daphneServer`).
+- Linux `libi2c` headers/library for the hardware layer.
+- Linux `libsystemd` headers/library for read-only timesync service reporting
+  (full server and protocol tests). A Python-only client does not need it.
 - OpenMP (optional; enabled automatically if available).
 
 On Ubuntu-like systems the following packages cover the essentials:
 
 ```bash
 sudo apt install build-essential cmake libzmq3-dev libprotobuf-dev protobuf-compiler \
-                 libi2c-dev
+                 libi2c-dev libsystemd-dev
 ```
 
 ## Building
@@ -42,8 +44,14 @@ ninja -C build
 # cmake --build build --parallel
 ```
 
-Note: on non-Linux hosts (e.g. macOS), the I²C/SPI backends are stubbed to allow compilation, but hardware access will
-not work at runtime. Build on (or for) Linux/Petalinux for deployment.
+Build the full server and protocol tests on (or for) Linux/PetaLinux. Some
+I²C/SPI backends have non-Linux stubs, but these do not replace the server's
+Linux host-monitoring dependencies. Python clients can run on other hosts.
+For cross-compilation, use target libraries, not the workstation's library:
+`DAPHNE_SYSTEMD_INCLUDE_DIR` selects the directory containing `systemd/sd-bus.h`,
+and `DAPHNE_SYSTEMD_LIBRARY` selects the target `libsystemd.so`/`libsystemd.so.0`.
+Keep the system copy outside the private `/usr/lib/daphne-server` bundle;
+qualify the candidate with the actual target loader before deployment.
 
 Minimal source set for building `daphneServer`:
 
