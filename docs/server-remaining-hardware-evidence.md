@@ -86,3 +86,10 @@ installed PCB revision. Qualify each path with narrowly targeted reads and
 explicit unavailable/error status. Do not infer module absence from an I2C
 failure, reset the shared mux, change TX-disable, or disturb the management SFP.
 U43 at `0x71` is the separate mezzanine mux, not this SFP mux.
+
+Live collector results: GTH0, TMG and GTR answer with valid EEPROM checksums;
+GTH1/GTH2/GTH3 do not answer A0 reads. All routes restore to `0x00`. The latter
+three are **unknown presence**, not verified absent or faulty. Operator cage
+population and installed PCB revision have been requested. TMG advertises TX
+disabled; TMG/GTR both report confirmed RX high-warning flags. No TX/power
+changes were made. See [qualification and limitations](sfp-diagnostics-verification.md).

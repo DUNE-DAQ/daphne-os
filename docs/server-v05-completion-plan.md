@@ -12,7 +12,7 @@ BIASCTRL, and the existing generator-enable policy. Commit in small steps.
 | Server bookkeeping | Independent heartbeat; observable configuration-in-progress; successful canonical applied-config hash, validity/invalidation, correlated last result; restart and failure tests | Implemented, native/ARM and live configuration tests passed; see bookkeeping qualification |
 | Database identity | Authoritative crate/slot/detector, management IP, timing address and per-Hermes MAC/IP; typed provenance/revision and unavailable handling; distinguish assigned from observed, never change network identity implicitly | Candidate DAPHNE-15 OKS placement/Hermes records located on ONL; timing assignment and source confirmation still needed |
 | Temperature alarms | Configurable high initial thresholds, Good/Warning/High/Critical/Missing/Invalid/Stale distinction, boundary/stale tests; observation only, no new shutdown policy | Implemented; 14 native/ARM suites and live normal-temperature/all-channel checks passed. High/fault cases synthetic, not physical trips |
-| SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Pending |
+| SFP diagnostics | Resolve all connector/mux wiring, especially the possibly unwired port; targeted EEPROM/DDM reads and calibration/status decoding, explicit unsupported/absent/error; no TX-disable changes | Implemented/deployed; 18 native/ARM suites and 53 Python tests pass. GTH0/TMG/GTR identified; 14 diagnostic values per acquisition. Three unanswered cages and installed PCB/wiring caveat remain unresolved; factory RX warnings retained |
 | FPGA health | Actual loaded/admitted FPGA identity, configuration state, clocks/reset/timing, transport/link observations and clear degraded/unknown reasons; no service-active shortcut | Pending |
 | Firmware-dependent gaps | Review live timestamp/decoder/error export needs against both ABIs; isolated Cooper build only for an evidenced necessary firmware change | Pending |
 | Qualification and handoff | Native/ARM tests, negative/stale/concurrency cases, live zero-BIAS/all-channel regression, both-ABI scope recorded, protocol clients/docs/wiki and ONL bundle | Pending |
@@ -38,7 +38,8 @@ Evidence found so far:
   has five differential DA/DB pairs, not the legacy default ten single-ended
   selections. All six SFP I2C routes are drawn; the installed-board wiring caveat
   still needs qualification. [Current ADC reads are now qualified](ads1261-readout-verification.md)
-  within the raw-readout scope; SFP hardware reads remain pending.
+  within the raw-readout scope. [SFP collection is implemented](sfp-diagnostics-verification.md);
+  unresponsive-cage population/wiring and approved Hermes associations remain open.
 - [Temperature alarm qualification](temperature-alarm-verification.md):
   provisional 85/95/105 C monitoring thresholds, configurable at startup and
   returned with each evaluation. No automatic protection action was added.
