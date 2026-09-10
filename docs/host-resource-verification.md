@@ -2,8 +2,8 @@
 
 Source `a9cac7d`, client/compatibility checks `3556811`, probe serialization
 `b4e50b8`. DAPHNE-015 now runs the clean ARM server built at `3556811`,
-with live self-trigger ABI 2.0 regression passing. The complete runtime archive
-and image-runtime pin remain at `13bc725`; updating those is still pending.
+with live self-trigger ABI 2.0 regression passing. The [complete runtime archive
+and image-runtime pin](qualified-server-runtime.md) now also use `3556811`.
 
 The v0.5 workbook SHA-256 is
 `7c58f7f469523b7dd69ff3836f43d1a59bffdae49e2925bb328ac182122d8fd8`.
@@ -132,5 +132,6 @@ deployment/guard/regression/audit scripts and individual result files.
 `qualification.json` SHA-256:
 `861828a4a61a1acc8ee3c918302d535ee54323ee752fa79262dccbaef907bfec`.
 This closes live deployment of the five workbook host-resource rows, not all
-251 rows. New complete-runtime packaging/image pinning, real ABI 2.1 firmware,
-full-stream hardware and full-image qualification remain pending.
+251 rows. Complete-runtime packaging/native smoke and matching image pinning
+are now verified separately; real ABI 2.1 firmware, full-stream hardware and
+full-image qualification remain pending.

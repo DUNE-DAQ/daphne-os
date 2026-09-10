@@ -1,95 +1,95 @@
-# Qualified server runtime: 13bc725
+# Qualified server runtime: 3556811
 
-This userspace archive contains the server already tested on DAPHNE-015.
-It is **not a new OS/firmware image** and contains no private identity,
-MAC/IP, network, analogue or service configuration.
+This userspace archive contains the exact server now running on DAPHNE-015.
+It is **not a new OS/firmware image**. No private identity, MAC/IP, network,
+analogue or service configuration is included.
 
-The board now runs the separately [live-qualified host-resource server `3556811`](host-resource-verification.md).
-This archived `13bc725` runtime remains valid as a previous-version handoff;
-it does not contain the new host-resource fields. The image contract still pins
-this archive's server while new complete-runtime packaging remains pending.
+## Pinned bytes and source
 
-## What is pinned
-
-- Source: `DUNE-DAQ/daphne-os@13bc7251b6a8dceedf4db3a8d6f91c4f4782c5e7`,
+- Server source: `DUNE-DAQ/daphne-os@3556811fbe5bf01b7c66c862a8a6e1821a4f6246`,
   directory `daphne-server/`, clean tree at build time.
+- Server source tree: `9d50e75e12a24721cb29deb9ded3c1b05d84abb4`.
 - Server SHA-256:
-  `281696155ed8c08aea5e7ef3976a0a4c47b56f5a9c8dfbfc19399d5d46df75d8`.
-- Archive SHA-256:
-  `a09d74ccaa9c0a3ce00818b93e73f7f7b7e2bd51d975610bcd3cd03a15613e1a`.
-- Hermes and Protobuf/UTF-8/ZeroMQ libraries: exact installed board bytes,
-  with hashes in `BUILD-METADATA.txt`. These remain legacy binary inputs;
-  they were not rebuilt. Their normalized bytes match the earlier runtime inputs.
+  `727b9187ec239f65d7e93740553be89acba606ef11a8a67ff2f068b8c64fa993`.
+- Runtime archive SHA-256:
+  `38f9a18f716e32b2c3d48b37ee2c1b6d65953ee411a45e56e26387f6a56a0b56`.
+- Image contract: server `3556811`, supported ABI minors **0 and 1**.
+  Pin update `e01af89`; source capability is not firmware qualification.
+- Hermes and Protobuf/UTF-8/ZeroMQ libraries: exact hash-verified copies of
+  the installed board bytes. These legacy binary dependencies were not rebuilt.
 - Server RUNPATH: `/usr/lib/daphne-server`. Retain the existing service's
   private-library search path for transitive dependencies.
 
-The archive includes nine executable/library entries, the required library
-aliases, and redacted qualification evidence with an internal checksum manifest.
-The source commit is an **OS-repository** revision, not a daphneZMQ commit.
+The archive has five regular runtime binaries/libraries, four library aliases
+and redacted qualification records with a checksum manifest. OS-provided
+libraries such as libc, libstdc++, OpenMP and libi2c remain prerequisites;
+this is not a self-contained root filesystem.
 
-## What passed—and what did not
+## Verified scope
 
-All 24 hardware-free C++ suites and the exact server's `--help` passed on the
-native AArch64 board. All 102 tracked Python tests passed against its generated
-bindings. The same server then passed the [live self-trigger ABI 2.0
-regression](native-timestamp-verification.md#live-self-trigger-abi-20-qualification),
-including zero-bias configuration, alignment, spy buffers and register collectors.
-The current board checks also identify the actual running Hermes payload,
-not just its Bash launcher.
+All **25 hardware-free ARM C++ suites**, exact candidate `--help` and **109
+Python tests** passed. Subsequent [live self-trigger ABI 2.0 qualification](host-resource-verification.md)
+covers the new host-resource fields, full zero-bias configuration/bookkeeping,
+five-AFE alignment, all 40 spybuffer channels, ADS1261, SFP, regulator,
+temperature/service, identity and FPGA-health reporting.
 
-Staging accepts explicit `execution_validation_kind=native-aarch64` with a
-passing `execution_validation` record; it no longer requires falsely labelling
-this work as QEMU execution. Legacy QEMU metadata remains supported. Missing,
-failed, duplicate or mixed execution records are rejected before staging changes.
+The complete archive then passed a fresh unprivileged native-board loader/CLI
+check. Loader tracing verifies that all three private dependencies resolve
+inside the extracted archive, rather than the installed library directory.
+Service instances/PIDs/restarts, boot, installed binaries/libraries, private
+identity and protected settings match before and after; no restart or hardware
+configuration is performed by that check.
 
-The reviewed source contract admits ABI minors `0 1`. This is a **software
-capability**, not qualification of new firmware. Both overlay minors are checked,
-including the inactive variant; ABI 2.1 still requires sealed identity metadata.
-The 101 PetaLinux tests and actual-runtime staging/recipe-guard check pass.
-The latter uses synthetic overlay declarations: it is not a BitBake/image test.
+All **101 PetaLinux tests** pass. The actual runtime also stages successfully
+and passes the actual recipe decision with both real-packager synthetic ABI 2.1
+overlay declarations. This fixture is **not deployable firmware or a BitBake/image
+test**. No private configuration is imported into it.
 
-Still pending: real ABI 2.1 routed firmware, full-stream and native-counter
-hardware tests, and a complete PetaLinux image build. Current health remains
-11 PASS / 1 external-timing FAIL / 3 UNKNOWN; no overall healthy-board claim.
-Metadata and evidence hashes are not authenticated signatures.
-
-The complete archive also passed a fresh native-board loader/CLI smoke with
-its own extracted private libraries. Service instances/PIDs/restarts, boot,
-installed binaries/libraries, private identity and protected settings matched
-before and after. The first attempt stopped before executable launch because
-the board lacks `timeout`; the passing script uses Python's subprocess timeout
-and BusyBox-compatible checksum options. No server or firmware was restarted.
+Remaining: real ABI 2.1 routed firmware/native-counter tests, full-stream hardware,
+Hermes delivery, analog calibration and a complete PetaLinux image build.
+The board remains at firmware `3f17f1b`, self-trigger ABI 2.0.
+FPGA health remains 11 PASS / 1 external-timing FAIL / 3 UNKNOWN.
+Evidence hashes are not authenticated signatures.
 
 ## ONL handoff
 
-Saved on `np04-onl-004` in the operator's home directory as
-`daphne015-server-runtime-13bc725`, with owner-only directory permissions.
-It contains the runtime, metadata, checksum manifest, prepared packaging/smoke
-scripts, smoke result and a clean OS source archive at `af3ae0f`. That snapshot's
-server subtree is identical to `13bc725`; unrelated uncommitted work is excluded.
-This is a userspace handoff, not a replacement whole-board flashing bundle.
+The updated handoff directory is `daphne015-server-runtime-3556811` in the
+operator's home on `np04-onl-004`, owner-only. It contains the archive, metadata,
+checksums, packaging/native-check scripts, native smoke result and clean source
+snapshots. Read its `README.md` and `SOURCE-METADATA.txt` before reuse.
+
+The exact server-source snapshot is from `3556811`. The newer OS integration
+snapshot includes the matching image contract and documentation, plus the
+probe-only TextFormat fix `b4e50b8`; that test change does not relabel the
+deployed binary's build source. Both snapshots exclude unrelated uncommitted work.
+Neither includes the external build toolchain or Git database.
+
+The previous `daphne015-server-runtime-13bc725` handoff is retained unchanged.
+Its runtime SHA-256 is
+`a09d74ccaa9c0a3ce00818b93e73f7f7b7e2bd51d975610bcd3cd03a15613e1a`;
+it supplies the previous server but lacks host-resource observations.
+The current image contract intentionally rejects that older source pin.
 
 ## Inspect and stage
 
-Keep the runtime tarball, `BUILD-METADATA.txt` and `SHA256SUMS` together.
-In the received runtime directory:
+On ONL:
 
 ```bash
+cd "$HOME/daphne015-server-runtime-3556811"
 sha256sum --check --strict SHA256SUMS
 runtime_inspect_dir=$(mktemp -d)
 tar -xzf daphne-server-runtime-minimal.tgz -C "$runtime_inspect_dir"
 (cd "$runtime_inspect_dir" && sha256sum --check --strict qualification/PAYLOAD-SHA256SUMS)
 ```
 
-From a current OS checkout with the updated source contract and native-aware
-stager, use your **project-owned** layer, refreshed from the same checkout:
+From the matching OS checkout, with its refreshed **project-owned** layer:
 
 ```bash
 ./scripts/petalinux/stage_runtime_into_project.sh \
   "$PETALINUX_PROJECT_DIR" "$RUNTIME_DIR/daphne-server-runtime-minimal.tgz"
 ```
 
-The script validates declarations/digests/ELF identity; it does not run tests,
-flash hardware or install the server. A stale project contract rejects the new
-pin; refresh the layer instead of editing metadata to impersonate the old pin.
-Only qualified real firmware bundles may be used for an eventual image build.
+The stager validates declarations, digests, ELF identity and explicit native
+execution evidence; it does not run tests, install, flash or authenticate a
+bundle. Old/missing/mixed execution metadata and stale source pins fail closed.
+Do not alter hashes or source metadata to impersonate the required pin.
