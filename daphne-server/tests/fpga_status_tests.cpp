@@ -10,7 +10,7 @@ struct Fixture {
   RuntimeState runtime{"instance", "boot", [] { return ObservationTime{monotonic_time_ns(), 1}; }};
   daphne::SystemStatusSnapshot status;
   GatewareIdentity identity{kGatewareIdentityMagic, kGatewareAbiV2, 1, 0x03f17f1b};
-  unsigned programs = 0, ids = 0, timings = 0, timestamps = 0;
+  unsigned programs = 0, ids = 0, timings = 0, timestamps = 0, histories = 0;
   unsigned fail_program = 0, change_id = 0, throw_id = 0, change_abi = 0;
   bool fail_timing = false, unknown_program = false, change_timing = false;
   FpgaStatusReaders readers;
@@ -53,7 +53,7 @@ struct Fixture {
     };
     readers.timestamp = [&](const GatewareIdentity& value) {
       ++timestamps;
-      require(value.abi == kGatewareAbiV21);
+      require(value.abi == kGatewareAbiV21 || value.abi == kGatewareAbiV22);
       daphne::NativeTimestampObservation observation;
       observation.set_quality(daphne::MEASUREMENT_GOOD);
       auto* sample = observation.add_samples();
@@ -61,6 +61,19 @@ struct Fixture {
       sample->set_timestamp_ticks(100);
       sample->set_source(daphne::NATIVE_TIMESTAMP_LOCAL_COUNTER);
       return observation; // Tests outer bracketing; raw pair validity has separate tests.
+    };
+    readers.protocol_errors = [&](const GatewareIdentity& value) {
+      ++histories;
+      require(value.abi == kGatewareAbiV22);
+      daphne::ProtocolErrorObservation observation;
+      observation.set_quality(daphne::MEASUREMENT_GOOD);
+      observation.set_count(7); observation.set_reasons_seen(1);
+      observation.set_saturated(false); observation.set_overflowed(false);
+      observation.set_receiver_reset(true);
+      auto* attempt = observation.add_attempts();
+      attempt->set_quality(daphne::MEASUREMENT_GOOD);
+      attempt->set_count_raw(7); attempt->set_detail_raw(129);
+      return observation; // Outer checks only; raw contract has dedicated tests.
     };
   }
   bool collect() {
@@ -70,18 +83,84 @@ struct Fixture {
 }
 
 int main() {
-  for (unsigned mode : {1, 2}) for (auto abi : {kGatewareAbiV2, kGatewareAbiV21}) {
+  for (unsigned mode : {1, 2}) for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, kGatewareAbiV22}) {
     Fixture f;
     f.identity.variant = mode;
     f.identity.abi = abi;
     require(f.collect());
-    require(f.programs == 2 && f.ids == 2 && f.timings == (abi == kGatewareAbiV21 ? 2 : 1));
-    require(f.timestamps == (abi == kGatewareAbiV21 ? 1 : 0));
-    require(f.status.endpoint().live_timestamp().identity_bracket_verified() == (abi == kGatewareAbiV21));
+    require(f.programs == 2 && f.ids == 2 && f.timings == (abi == kGatewareAbiV2 ? 1 : 2));
+    require(f.timestamps == (abi == kGatewareAbiV2 ? 0 : 1));
+    require(f.histories == (abi == kGatewareAbiV22 ? 1 : 0));
+    require(f.status.endpoint().live_timestamp().identity_bracket_verified() == (abi != kGatewareAbiV2));
+    require(f.status.endpoint().protocol_errors().identity_bracket_verified() == (abi == kGatewareAbiV22));
+    require(f.status.endpoint().protocol_errors().has_count() == (abi == kGatewareAbiV22));
+    require(!f.status.endpoint().protocol_errors().reset_epoch_known());
     require(f.runtime.snapshot().applied_configuration_valid());
     require(f.status.gateware_identity().matches_admitted_profile());
     require(f.status.gateware_identity().observed_monotonic_ns() >= f.status.endpoint().observed_monotonic_ns());
     require(!f.status.endpoint().ready());
+  }
+  // ABI 2.2 history must not be accessed before admission, and an outer failure
+  // must remove ALL usable fields while retaining evidence already acquired.
+  for (unsigned mode : {1, 2}) for (unsigned failure = 0; failure < 10; ++failure) {
+    Fixture f; f.identity.variant = mode; f.identity.abi = kGatewareAbiV22;
+    if (failure == 0) f.fail_program = 1;
+    if (failure == 1) f.fail_program = 2;
+    if (failure == 2) f.change_id = 1;
+    if (failure == 3) f.change_id = 2;
+    if (failure == 4) f.throw_id = 1;
+    if (failure == 5) f.throw_id = 2;
+    if (failure == 6) f.change_abi = 1;
+    if (failure == 7) f.change_abi = 2;
+    if (failure == 8) f.change_timing = true;
+    if (failure == 9) f.fail_timing = true;
+    require(!f.collect() && !f.runtime.snapshot().applied_configuration_valid());
+    const bool collected = failure == 1 || failure == 3 || failure == 5 || failure == 7;
+    require(f.histories == unsigned(collected));
+    const auto& r = f.status.endpoint().protocol_errors();
+    require(!r.has_count() && !r.has_reasons_seen() && !r.has_saturated() &&
+            !r.has_overflowed() && !r.has_receiver_reset() && !r.identity_bracket_verified());
+    if (collected) {
+      require(r.quality() == daphne::MEASUREMENT_ERROR && r.attempts_size() == 1);
+      require(r.attempts(0).quality() == daphne::MEASUREMENT_ERROR && r.attempts(0).count_raw() == 7);
+    }
+  }
+  for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, 0x00020003U}) {
+    bool rejected = false;
+    auto reader = default_fpga_status_readers();
+    try { reader.protocol_errors({kGatewareIdentityMagic, abi, 1, 1}); }
+    catch (const std::logic_error&) { rejected = true; }
+    require(rejected); // Guard fires before opening /dev/mem, no board required.
+  }
+  for (unsigned mode : {1, 2}) {
+    Fixture f; f.identity.variant = mode; f.identity.abi = kGatewareAbiV22;
+    require(!collect_fpga_status(f.status, static_cast<GatewareMode>(mode), std::nullopt, &f.runtime, f.readers));
+    require(f.ids == 0 && f.timings == 0 && f.timestamps == 0 && f.histories == 0);
+    require(f.runtime.snapshot().applied_configuration_valid());
+  }
+  for (auto quality : {daphne::MEASUREMENT_UNAVAILABLE, daphne::MEASUREMENT_ERROR, daphne::MEASUREMENT_STALE}) {
+    Fixture f; f.identity.abi = kGatewareAbiV22;
+    f.readers.protocol_errors = [quality](const GatewareIdentity&) {
+      daphne::ProtocolErrorObservation r; r.set_quality(quality); return r;
+    };
+    require(f.collect() && f.runtime.snapshot().applied_configuration_valid());
+    require(f.status.endpoint().protocol_errors().quality() == quality);
+    require(f.status.endpoint().protocol_errors().identity_bracket_verified());
+    // Timestamp unavailability is independent of valid parser history.
+    Fixture g; g.identity.abi = kGatewareAbiV22;
+    g.readers.timestamp = [quality](const GatewareIdentity&) {
+      daphne::NativeTimestampObservation r; r.set_quality(quality); return r;
+    };
+    require(g.collect() && g.histories == 1 && !g.status.endpoint().ready());
+    require(g.status.endpoint().protocol_errors().has_count() && g.runtime.snapshot().applied_configuration_valid());
+  }
+  {
+    Fixture f; f.identity.abi = kGatewareAbiV22;
+    f.readers.protocol_errors = [](const GatewareIdentity&) -> daphne::ProtocolErrorObservation {
+      throw std::runtime_error("injected history mapping failure");
+    };
+    require(!f.collect() && !f.runtime.snapshot().applied_configuration_valid());
+    require(!f.status.endpoint().protocol_errors().identity_bracket_verified());
   }
   {
     Fixture f;

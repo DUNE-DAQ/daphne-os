@@ -59,10 +59,13 @@ void add_register_capabilities(daphne::SystemStatusSnapshot& status, GatewareMod
       supports_trigger_counters(mode) ? "Use request 320; 40 self-trigger channels" : "Not present in full-stream mode");
   const bool native_timestamp = admitted_abi && supports_live_timestamp(*admitted_abi);
   add("LiveTimingTimestamp", native_timestamp, native_timestamp ?
-      "ABI 2.1 native-clock diagnostic snapshot/progress comparison; no acquisition alignment, epoch or frequency qualification. Inspect per-observation quality" :
-      "I273/TI001: exact ABI 2.1 required for native snapshots; no probes of aliased ABI 2.0 offsets. Capture-buffer words are not a live timestamp");
+      "ABI 2.1/2.2 native-clock diagnostic snapshot/progress comparison; no acquisition alignment, epoch or frequency qualification. Inspect per-observation quality" :
+      "I273/TI001: ABI 2.1/2.2 required for native snapshots; no probes of aliased ABI 2.0 offsets. Capture-buffer words are not a live timestamp");
   add("CommandDecoderMap", false, "I277: optical decoder wrapper output is not implemented");
-  add("ProtocolErrorCount", false, "I281: optical register is hardwired zero, not a measured counter");
+  const bool protocol_errors = admitted_abi && supports_protocol_error_history(*admitted_abi);
+  add("ProtocolErrorCount", protocol_errors, protocol_errors ?
+      "ABI 2.2 PS snapshot of saturating RX-parser error episodes since an unobserved common platform reset; inspect quality/scope, not current health. Optical 0x76 remains separate" :
+      "I281: exact ABI 2.2 required for PS parser history; no diagnostic probes. Legacy optical register is hardwired zero, not a measured counter");
   add("CrateSlotDetectorReadback", false, "I058/I059/I061: legacy addresses overlap ABI-2 self-trigger controls");
   add("ChannelConfig.gain", true,
       "I315/C013: offset DAC x1/x2 -> AD5327 bit 13 = 0/1; 0 retains legacy x1. "

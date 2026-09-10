@@ -3,6 +3,7 @@
 #include "server_controller/timing_status.hpp"
 #include "server_controller/board_monitor.hpp"
 #include "server_controller/native_timestamp.hpp"
+#include "server_controller/protocol_errors.hpp"
 #include <stdexcept>
 
 namespace daphne_sc {
@@ -13,9 +14,15 @@ FpgaStatusReaders default_fpga_status_readers() {
     [] { ReadOnlyMmio mmio(kTimingRegisterBase, 16); return read_timing_status(mmio); },
     [](const GatewareIdentity& admitted) {
       if (!supports_live_timestamp(admitted.abi))
-        throw std::logic_error("Snapshot mapping requested without ABI 2.1 admission");
+        throw std::logic_error("Snapshot mapping requested without ABI 2.1/2.2 admission");
       ReadOnlyMmio mmio(kTimingRegisterBase, kNativeTimestampWindowLength);
       return read_native_timestamp(mmio, admitted.abi, monotonic_time_ns);
+    },
+    [](const GatewareIdentity& admitted) {
+      if (!supports_protocol_error_history(admitted.abi))
+        throw std::logic_error("Parser-history mapping requested without exact ABI 2.2 admission");
+      ReadOnlyMmio mmio(kTimingRegisterBase, kProtocolErrorWindowLength);
+      return read_protocol_error_history(mmio, admitted.abi, monotonic_time_ns);
     }
   };
 }
@@ -91,13 +98,20 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
       endpoint->mutable_live_timestamp()->set_message(
           "Platform ABI 2.0 has no native timestamp snapshot; extension addresses were not accessed");
     }
-    // Check host programming state before the second MMIO access as well.
+    if (supports_protocol_error_history(before.abi)) {
+      *endpoint->mutable_protocol_errors() = read.protocol_errors(before);
+    } else {
+      endpoint->mutable_protocol_errors()->set_message(
+          "Parser history requires exact platform ABI 2.2; diagnostic addresses were not accessed");
+    }
+    // Recheck host programming state before closing the MMIO identity bracket.
     *p = read.programming();
     if (!fpga_status_mmio_prerequisites(*p, monotonic_time_ns()))
       throw std::runtime_error("FPGA programming prerequisites changed or became unavailable during timing observation");
     observe_identity(before);
     if (supports_live_timestamp(before.abi)) endpoint->mutable_live_timestamp()->set_identity_bracket_verified(true);
-    id->set_message("Matching complete admitted identity samples bracket timing/native timestamp reads; not a hardware latch or protection against identical reloads");
+    if (supports_protocol_error_history(before.abi)) endpoint->mutable_protocol_errors()->set_identity_bracket_verified(true);
+    id->set_message("Matching complete admitted identity samples bracket timing/native diagnostic reads; not a hardware latch or protection against identical reloads");
     return true;
   } catch (const std::exception&) {
     if (mmio_started && runtime) runtime->invalidate("FPGA status could not confirm a stable admitted fabric observation");
@@ -113,6 +127,10 @@ bool collect_fpga_status(daphne::SystemStatusSnapshot& status, GatewareMode mode
       invalidate_native_timestamp(*endpoint->mutable_live_timestamp(), daphne::MEASUREMENT_ERROR,
           "Native timestamp not qualified across FPGA admission/programming/timing checks");
       endpoint->set_live_timestamp_quality(daphne::MEASUREMENT_ERROR);
+    }
+    if (endpoint->has_protocol_errors()) {
+      invalidate_protocol_error_history(*endpoint->mutable_protocol_errors(), daphne::MEASUREMENT_ERROR,
+          "Parser history not qualified across FPGA admission/programming checks");
     }
     endpoint->set_ready(false);
     endpoint->set_message("Timing observation not qualified across FPGA admission checks");

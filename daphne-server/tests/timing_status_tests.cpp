@@ -82,11 +82,13 @@ int main() {
     require(status.capabilities(18).reason().find("I088/I101-I104") != std::string::npos);
   }
   char filename[] = "/tmp/daphne-readonly-mmio-XXXXXX";
-  for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, 0x00020002U}) {
+  for (auto abi : {kGatewareAbiV2, kGatewareAbiV21, kGatewareAbiV22, 0x00020003U}) {
     daphne::SystemStatusSnapshot status;
     add_register_capabilities(status, GatewareMode::kSelfTrigger, abi);
     require(status.capabilities(3).name() == "LiveTimingTimestamp");
-    require(status.capabilities(3).supported() == (abi == kGatewareAbiV21));
+    require(status.capabilities(3).supported() == (abi == kGatewareAbiV21 || abi == kGatewareAbiV22));
+    require(status.capabilities(5).name() == "ProtocolErrorCount");
+    require(status.capabilities(5).supported() == (abi == kGatewareAbiV22));
   }
   const int fd = mkstemp(filename);
   require(fd >= 0);

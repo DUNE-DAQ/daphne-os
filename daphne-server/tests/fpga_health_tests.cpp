@@ -180,11 +180,19 @@ int main() {
     unknowns += c.state() == daphne::HEALTH_CHECK_UNKNOWN;
   }
   require(passes == 12 && unknowns == 3);
-  for (bool advancing : {false, true}) {
+  for (auto abi : {kGatewareAbiV21, kGatewareAbiV22}) for (bool advancing : {false, true}) {
     auto native = good_status(); native_progress(native, advancing);
+    native.mutable_gateware_identity()->set_abi(abi);
     const auto measured = assess_fpga_health(native, network, now);
     require(check(measured, "live_timestamp_progress") == (advancing ? daphne::HEALTH_CHECK_PASS : daphne::HEALTH_CHECK_FAIL));
     require(measured.state() != daphne::FPGA_HEALTH_OBSERVED_OK); // Hermes and reset epoch remain unknown.
+    // Historical parser events are reported separately, not inferred to be a
+    // current failure (and a zero history is not a proof of current health).
+    for (uint32_t count : {0U, 7U, UINT32_MAX}) {
+      auto* history = native.mutable_endpoint()->mutable_protocol_errors();
+      history->set_quality(daphne::MEASUREMENT_GOOD); history->set_count(count);
+      require(assess_fpga_health(native, network, now).SerializeAsString() == measured.SerializeAsString());
+    }
   }
   for (unsigned mutation = 0; mutation < 11; ++mutation) {
     auto native = good_status(); native_progress(native);

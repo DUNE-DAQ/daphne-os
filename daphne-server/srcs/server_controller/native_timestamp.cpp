@@ -85,7 +85,7 @@ daphne::NativeTimestampObservation read_native_timestamp(
   result.set_maximum_acquisition_ms(kNativeTimestampMaximumAcquisitionMs);
   // Do not even probe the feature magic on a decoder with old address aliases.
   if (!supports_live_timestamp(admitted_abi)) {
-    result.set_message("Native live timestamp unavailable: exact platform ABI 2.1 required; no snapshot addresses read");
+    result.set_message("Native live timestamp unavailable: platform ABI 2.1 or 2.2 required; no snapshot addresses read");
     return result;
   }
   try {

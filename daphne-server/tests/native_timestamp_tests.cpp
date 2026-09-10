@@ -55,7 +55,7 @@ void no_usable_values(const daphne::NativeTimestampObservation& r) {
   for (const auto& sample : r.samples()) REQUIRE(!sample.has_timestamp_ticks());
 }
 void test_no_alias_probes() {
-  for (uint32_t abi : {kGatewareAbiV2, 0U, 0x00020002U, 0x00010000U, 0xffffffffU}) {
+  for (uint32_t abi : {kGatewareAbiV2, 0U, 0x00020003U, 0x00010000U, 0xffffffffU}) {
     Fixture f; auto result = f.run(abi);
     REQUIRE(result.quality() == daphne::MEASUREMENT_UNAVAILABLE);
     REQUIRE(f.reads == 0 && f.clock_reads == 0 && result.samples_size() == 0);
@@ -63,10 +63,10 @@ void test_no_alias_probes() {
   }
 }
 void test_valid_pairs() {
-  for (uint32_t status : {0x11U, 0x13U}) {
+  for (auto abi : {kGatewareAbiV21, kGatewareAbiV22}) for (uint32_t status : {0x11U, 0x13U}) {
     for (auto values : {std::pair<uint64_t, uint64_t>{0, 1}, {0xfffffff0ULL, 0x10000000fULL},
                         {UINT64_MAX - 4, 2}, {UINT64_MAX, 0}, {500, 500}, {500, 499}}) {
-      Fixture f; f.pair(values.first, values.second, status); auto r = f.run();
+      Fixture f; f.pair(values.first, values.second, status); auto r = f.run(abi);
       const auto delta = values.second - values.first;
       REQUIRE(r.quality() == daphne::MEASUREMENT_GOOD && r.samples_size() == 2);
       REQUIRE(f.reads == 18 && f.reads == f.script.size());
