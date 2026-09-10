@@ -13,6 +13,7 @@ import sys
 from native_timestamp import check_progress
 from protocol_errors import check_history
 from management_link import health_state as management_health
+from afe_global import reset_health_state
 
 
 def require(ok, reason):
@@ -72,6 +73,7 @@ def check_status(s, h, expected_build, variant, require_bench=False, expected_ab
         "admitted_gateware": outcome(fresh(i.quality, i.observed_monotonic_ns), i.matches_admitted_profile),
         "timing_clock_locks": outcome(timing_fresh, locks & 3 == 3),
         "timing_resets_released": outcome(timing_fresh, not control & 3 and not endpoint_control & 0x10000),
+        "afe_reset_released": reset_health_state(s, h, now),
         "external_timing_ready": outcome(timing_fresh, timing_ready),
         "front_end_configuration": outcome(runtime.success and fresh(h.MEASUREMENT_GOOD, runtime.observed_monotonic_ns),
                                            runtime.applied_configuration_valid and not runtime.configuration_in_progress
@@ -87,6 +89,9 @@ def check_status(s, h, expected_build, variant, require_bench=False, expected_ab
             "Missing/duplicate/unexpected health checks")
     for c in health.checks:
         require(c.state == expected[c.name] and c.message, "Incorrect health evaluation: " + c.name)
+        if c.name == "afe_reset_released":
+            require(c.observed_monotonic_ns == s.afe_global.observed_monotonic_ns,
+                    "AFE reset check timestamp differs from its source observation")
     overall = (h.FPGA_HEALTH_NOT_READY if failed in expected.values() else
                h.FPGA_HEALTH_UNKNOWN if unknown in expected.values() else h.FPGA_HEALTH_OBSERVED_OK)
     require(health.state == overall, "Overall health ignores failed/unknown evidence")

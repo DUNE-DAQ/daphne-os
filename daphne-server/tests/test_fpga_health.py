@@ -9,6 +9,7 @@ from verify_fpga_health import check_status
 from verify_board_identity import same_gateware_image
 from test_native_timestamp import native_fixture
 from test_protocol_errors import protocol_fixture
+from test_afe_global import fixture as afe_fixture
 
 
 class FpgaHealthTests(unittest.TestCase):
@@ -21,6 +22,8 @@ class FpgaHealthTests(unittest.TestCase):
         s.gateware_identity.CopyFrom(h.GatewareIdentityStatus(magic=0x44415048, abi=0x20000, variant=1,
             build_id=0x3f17f1b, quality=h.MEASUREMENT_GOOD, matches_admitted_profile=True,
             observed_monotonic_ns=190, acquisition_started_monotonic_ns=100))
+        s.afe_global.CopyFrom(afe_fixture(2, 1).afe_global)
+        s.afe_global.observed_monotonic_ns = 145
         s.endpoint.CopyFrom(h.EndpointStatus(observation_quality=h.MEASUREMENT_GOOD, observed_monotonic_ns=140,
                                             endpoint_clock_status_raw=3, endpoint_status_raw=6))
         s.server_state.CopyFrom(h.ServerState(success=True, observed_monotonic_ns=195,
@@ -46,6 +49,8 @@ class FpgaHealthTests(unittest.TestCase):
                      "pl_die_temperature", "management_interface", "management_identity"):
             s.fpga_health.checks.add(name=name, state=h.HEALTH_CHECK_PASS, message="scope")
         s.fpga_health.checks.add(name="external_timing_ready", state=h.HEALTH_CHECK_FAIL, message="bench")
+        s.fpga_health.checks.add(name="afe_reset_released", state=h.HEALTH_CHECK_PASS,
+                               message="sampled reset request", observed_monotonic_ns=145)
         for name in ("live_timestamp_progress", "hermes_data_path", "external_reset_epoch"):
             s.fpga_health.checks.add(name=name, state=h.HEALTH_CHECK_UNKNOWN, message="unavailable")
         return s
@@ -57,6 +62,34 @@ class FpgaHealthTests(unittest.TestCase):
         report = self.check(self.fixture())
         self.assertEqual(report["state"], "FPGA_HEALTH_NOT_READY")
         self.assertNotIn("secret-test-only", str(report))
+
+    def test_afe_reset_failure_unknown_and_timestamp_are_checked(self):
+        for mode in ("asserted", "missing", "stale", "corrupt"):
+            s = self.fixture()
+            if mode == "asserted":
+                s.afe_global.global_control_raw |= 1
+                s.afe_global.reset_asserted = True
+            elif mode == "missing":
+                s.ClearField("afe_global")
+            elif mode == "stale":
+                s.afe_global.quality = h.MEASUREMENT_STALE
+            else:
+                s.afe_global.reset_asserted = True  # Does not match raw word.
+            with self.assertRaises(RuntimeError):
+                check_status(s, h, 0x3f17f1b, 1)  # Incorrect server PASS rejected.
+            for check in s.fpga_health.checks:
+                if check.name == "afe_reset_released":
+                    check.state = h.HEALTH_CHECK_FAIL if mode == "asserted" else h.HEALTH_CHECK_UNKNOWN
+                    check.observed_monotonic_ns = s.afe_global.observed_monotonic_ns
+            report = check_status(s, h, 0x3f17f1b, 1)
+            self.assertEqual(report["checks"]["afe_reset_released"],
+                             "HEALTH_CHECK_FAIL" if mode == "asserted" else "HEALTH_CHECK_UNKNOWN")
+        s = self.fixture()
+        for check in s.fpga_health.checks:
+            if check.name == "afe_reset_released":
+                check.observed_monotonic_ns += 1
+        with self.assertRaises(RuntimeError):
+            self.check(s)
 
     def test_false_healthy_or_missing_checks_rejected(self):
         for mutate in (lambda s: setattr(s.fpga_health, "state", h.FPGA_HEALTH_OBSERVED_OK),
@@ -169,7 +202,7 @@ class FpgaHealthTests(unittest.TestCase):
             live.attempts[0].acquisition_started_monotonic_ns = live.attempts[0].observed_monotonic_ns = 149
             report = check_status(s, h, 0x3f17f1b, 1, require_bench=True, expected_abi=0x20002)
             self.assertEqual(report["protocol_errors"]["count"], count)
-            self.assertEqual(len(report["checks"]), 15)
+            self.assertEqual(len(report["checks"]), 16)
             self.assertEqual(report["checks"]["live_timestamp_progress"], "HEALTH_CHECK_PASS")
             self.assertNotIn("secret-test-only", str(report))
             with self.assertRaises(RuntimeError):

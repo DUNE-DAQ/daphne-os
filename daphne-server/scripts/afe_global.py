@@ -4,6 +4,15 @@ SOURCE = "FPGA:0x80000000,0x9400000C;sequential-read-only"
 FIELDS = ("power_state_bit", "reset_asserted", "busy_afe0", "busy_afe12", "busy_afe34", "bias_enabled")
 
 
+def reset_health_state(status, high, now_monotonic_ns):
+    """Conservative sampled reset prerequisite; no SC power/bias/busy policy."""
+    try:
+        observation = check_afe_global(status, high, now_monotonic_ns)
+    except RuntimeError:
+        return high.HEALTH_CHECK_UNKNOWN
+    return high.HEALTH_CHECK_FAIL if observation["reset_asserted"] else high.HEALTH_CHECK_PASS
+
+
 def require(ok, reason="Invalid AFE global observation"):
     if not ok:
         raise RuntimeError(reason)
