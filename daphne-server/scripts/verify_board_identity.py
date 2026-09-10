@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+from management_link import check_link
 
 
 def require(ok, reason):
@@ -22,7 +23,7 @@ def same_gateware_image(first, second):
                for field in ("magic", "abi", "variant", "build_id"))
 
 
-def check_status(status, artifact, artifact_sha, high, details):
+def check_status(status, artifact, artifact_sha, high, details, require_link=False):
     require(status.assignment_configured and status.assignment_artifact_sha256 == artifact_sha,
             "Missing/wrong configured identity artifact")
     require(status.source_revision_sha256 == artifact.assignments.source_revision_sha256,
@@ -57,6 +58,13 @@ def check_status(status, artifact, artifact_sha, high, details):
     require(0 < observed.acquisition_started_monotonic_ns <= observed.observed_monotonic_ns <= status.observed_monotonic_ns
             and status.observed_monotonic_ns - observed.observed_monotonic_ns <= 5_000_000_000
             and observed.observed_host_unix_ns, "Invalid/stale network acquisition times")
+    if require_link:
+        require(observed.HasField("link") and observed.link.HasField("interface_index")
+                and observed.link.interface_index == observed.interface_index
+                and observed.acquisition_started_monotonic_ns <= observed.link.acquisition_started_monotonic_ns
+                <= observed.link.observed_monotonic_ns <= observed.observed_monotonic_ns,
+                "Management-link observation is missing or outside its identity bracket")
+        check_link(observed.link, high, require_all_good=True)
 
 
 def main():
@@ -65,6 +73,7 @@ def main():
     parser.add_argument("--proto-dir", type=Path, required=True)
     parser.add_argument("--identity-file", type=Path, required=True)
     parser.add_argument("--expected-build-id", type=lambda value: int(value, 0), required=True)
+    parser.add_argument("--require-link-status", action="store_true", help="Require all 14 management-link metrics and up negotiation")
     args = parser.parse_args()
     sys.path.insert(0, str(args.proto_dir.resolve()))
     import daphneV3_high_level_confs_pb2 as high
@@ -105,7 +114,7 @@ def main():
             reply = call(high.MT2_READ_SYSTEM_STATUS_REQ, high.ReadSystemStatusRequest(include_identity_details=True), high.SystemStatusSnapshot)
             require(reply.success and not reply.sfps and same_gateware_image(reply.gateware_identity, ident),
                     "Unexpected snapshot, firmware drift or SFP access")
-            check_status(reply.board_identity, artifact, artifact_sha, high, True)
+            check_status(reply.board_identity, artifact, artifact_sha, high, True, args.require_link_status)
             require(reply.board_identity.observed_monotonic_ns > previous, "Repeated identity observation time")
             previous = reply.board_identity.observed_monotonic_ns
             require(reply.endpoint.observation_quality == high.MEASUREMENT_GOOD and reply.endpoint.HasField("endpoint_address")
