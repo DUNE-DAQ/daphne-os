@@ -73,6 +73,26 @@ counts happen to match. Counts are not additive across overlapping branches.
 | `marroyav/server_bringup_thresholds` | `aa2942a` | 3 |
 | `marroyav/server_threshold_xc` | `851430c` | 1 |
 
+### Three additional superseded branch names
+
+A comparison between archive branches, not just against `develop`, proves
+this ancestry chain (all names have the `archive/daphneZMQ/feature/` prefix):
+
+```text
+spybuffer-deduplication -> spybuffer_guards -> afe-delay-eye-sweep -> spy-trigger-control
+```
+
+The first three branch names are **deprecated as superseded**: all their
+commits are preserved by `spy-trigger-control@ffe3963`. Keep that final branch
+as the reference for this unmerged development line. This does not claim its
+changes have been integrated into the current server.
+
+In total, **19 of the 25 archive branch names are deprecated as redundant**:
+16 are contained in `develop`, and these three are contained in another
+archive branch. Six independent archive tips still need an equivalence or
+integration review. All 25 references remain intact pending a separate
+branch-name removal decision.
+
 ## Other legacy branches
 
 | Branch | Tip | Disposition |
@@ -102,6 +122,11 @@ git rev-list --count \
   origin/develop..origin/archive/daphneZMQ/bugfix/AlignmentFailure
 git merge-base --is-ancestor \
   origin/archive/daphneZMQ/bugfix/AlignmentFailure origin/develop
+
+# Find other remote branches that preserve an unmerged archive tip.
+git for-each-ref \
+  --contains origin/archive/daphneZMQ/feature/spybuffer-deduplication \
+  --format='%(refname:short)' refs/remotes/origin
 ```
 
 Before a separately approved branch-name removal, preserve its exact tip in a

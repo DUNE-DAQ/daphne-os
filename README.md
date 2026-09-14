@@ -54,9 +54,10 @@ Its original commits are retained, without squashing or rewriting. All 25
 source branches and 15 source tags are retained under `archive/daphneZMQ/`;
 they are historical references, not supported deployment branches.
 
-See the [branch lifecycle audit](docs/branch-lifecycle.md) for the 16 fully
-merged, deprecated server branches and the historical branches still carrying
-commits outside the active history. The v0.6 server checkpoint is on
+See the [branch lifecycle audit](docs/branch-lifecycle.md) for the 19 redundant,
+deprecated server branches: 16 are merged into `develop`, and three are
+contained in another archive branch. Six independent archive tips still need
+review. The v0.6 server checkpoint is on
 `fix/server-v05-register-coverage`, not yet merged into `develop` at that audit.
 
 See [the repository split and provenance](docs/repository-split.md) and
