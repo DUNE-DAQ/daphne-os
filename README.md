@@ -49,10 +49,15 @@ client protobuf generation, and installation boundaries.
 
 ## History and releases
 
-The active imported server is the dual-gateware-compatible `77b39b7` revision.
+The original server import was the dual-gateware-compatible `77b39b7` revision.
 Its original commits are retained, without squashing or rewriting. All 25
 source branches and 15 source tags are retained under `archive/daphneZMQ/`;
 they are historical references, not supported deployment branches.
+
+See the [branch lifecycle audit](docs/branch-lifecycle.md) for the 16 fully
+merged, deprecated server branches and the historical branches still carrying
+commits outside the active history. The v0.6 server checkpoint is on
+`fix/server-v05-register-coverage`, not yet merged into `develop` at that audit.
 
 See [the repository split and provenance](docs/repository-split.md) and
 [the credential audit](docs/security-audit.md). The original repositories and
