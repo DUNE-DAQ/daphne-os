@@ -62,6 +62,17 @@ set_tests_properties(
 find_package(PythonInterp QUIET)
 if(PYTHONINTERP_FOUND)
   add_test(
+    NAME afe_delay_sweep_analysis_unit
+    COMMAND
+      ${PYTHON_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test_afe_delay_sweep_analysis.py
+  )
+  set_tests_properties(
+    afe_delay_sweep_analysis_unit
+    PROPERTIES LABELS unit
+  )
+
+  add_test(
     NAME spybuffer_ramp_validation_unit
     COMMAND
       ${PYTHON_EXECUTABLE}

@@ -37,7 +37,17 @@ def main() -> int:
             )
             if result.returncode == 0:
                 if result.stdout.strip() != item["object"]:
-                    raise ValueError(f"Archived reference changed: {candidate}")
+                    # Branches may advance during migration, but must retain
+                    # their original history. Published tags remain exact.
+                    if not destination.startswith("refs/heads/"):
+                        raise ValueError(f"Archived tag changed: {candidate}")
+                    ancestry = subprocess.run(
+                        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor",
+                         item["object"], candidate],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+                    if ancestry.returncode != 0:
+                        raise ValueError(f"Archived branch lost original history: {candidate}")
                 actual_refs.append(candidate)
                 break
         else:

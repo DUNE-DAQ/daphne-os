@@ -41,6 +41,15 @@ repository layout; only the active OS tree places it under `daphne-server/`.
 The exact ref mapping and commit inventory are in
 [daphne-server-history.json](daphne-server-history.json).
 
+The inventory records the original migration snapshot. Archived branches may
+advance by fast-forward when importing later upstream work; the history checker
+requires their recorded tips to remain ancestors. Archived tags must still
+match their recorded objects exactly. The original inventory is not rewritten
+when a branch advances.
+
+The [spy-trigger integration](spy-trigger-control-integration.md) adds the
+source history through `f8f8016` to the active OS tree without squashing.
+
 For example, after fetching the OS repository:
 
 ```bash

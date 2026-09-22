@@ -1,8 +1,12 @@
 # Server development
 
 The server source is [daphne-server/](../daphne-server/). Its CMake project is
-self-contained in that directory. It is the unchanged source tree from
-`ecristal/daphneZMQ@77b39b7eb75204e1f2025f251a3a76ecf69d1d74` at import.
+self-contained in that directory. The original import came from
+`ecristal/daphneZMQ@77b39b7eb75204e1f2025f251a3a76ecf69d1d74`.
+The current source also integrates spybuffer trigger control, acquisition
+guards, AFE diagnostics, and calibration clients through `f8f8016` while
+retaining dual-gateware support. See the
+[integration verification record](spy-trigger-control-integration.md).
 
 ## Build inside DAPHNE
 
