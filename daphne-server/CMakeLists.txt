@@ -206,6 +206,7 @@ set(SOURCES
   srcs/Endpoint.cpp
   srcs/Dac.cpp
   srcs/Daphne.cpp
+  srcs/server_controller/afe_delay_sweep.cpp
   srcs/server_controller/handlers.cpp
   srcs/server_controller/devmem_mmio.cpp
   srcs/server_controller/monitoring.cpp

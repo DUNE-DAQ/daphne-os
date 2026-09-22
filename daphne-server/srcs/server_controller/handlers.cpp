@@ -10,6 +10,7 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -33,6 +34,7 @@
 #include "daphneV3_low_level_confs.pb.h"
 #include "reg.hpp"
 #include "server_controller/gateware.hpp"
+#include "server_controller/afe_delay_sweep.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -52,7 +54,11 @@ using daphne::GeneralInfo;
 using daphne::InfoRequest;
 using daphne::ReadTriggerCountersRequest;
 using daphne::ReadTriggerCountersResponse;
+using daphne::ReadSpyBufferTriggerSourceRequest;
+using daphne::ReadSpyBufferTriggerSourceResponse;
 using daphne::TestRegResponse;
+using daphne::WriteSpyBufferTriggerSourceRequest;
+using daphne::WriteSpyBufferTriggerSourceResponse;
 
 using daphne::cmd_alignAFEs;
 using daphne::cmd_alignAFEs_response;
@@ -1867,32 +1873,28 @@ bool dumpSpybuffer(const DumpSpyBuffersRequest& request,
     auto* data_field = response.mutable_data();
     uint32_t* data_ptr = data_field->mutable_data();
 
-    if (channel_list.size() == 1) {
-      uint32_t ch = channel_list[0];
+    std::vector<uint32_t> mapped_channels;
+    mapped_channels.reserve(static_cast<size_t>(channel_list.size()));
+    for (const auto ch : channel_list) {
       const uint32_t afe_block = afe_definitions::AFE_board2PL_map.at(ch / 8);
       const uint32_t afe_channel = ch % 8;
-      const uint32_t mapped_channel = afe_block * 8 + afe_channel;
-      for (uint32_t j = 0; j < number_of_waveforms; ++j) {
-        if (software_trigger) front_end->doTrigger();
-        uint32_t* waveform_start = data_ptr + number_of_samples * j;
-        spy_buffer->extractMappedDataBulkSIMD(waveform_start, number_of_samples, mapped_channel);
-      }
-    } else {
-      std::vector<uint32_t> mapped_channels;
-      mapped_channels.reserve(static_cast<size_t>(channel_list.size()));
-      for (const auto ch : channel_list) {
-        const uint32_t afe_block = afe_definitions::AFE_board2PL_map.at(ch / 8);
-        const uint32_t afe_channel = ch % 8;
-        mapped_channels.push_back(afe_block * 8 + afe_channel);
-      }
-      for (uint32_t j = 0; j < number_of_waveforms; ++j) {
-        if (software_trigger) front_end->doTrigger();
-        for (size_t i = 0; i < mapped_channels.size(); ++i) {
-          const uint32_t mapped_channel = mapped_channels[i];
-          uint32_t* waveform_start = data_ptr + number_of_samples * (j * mapped_channels.size() + i);
-          spy_buffer->extractMappedDataBulkSIMD(waveform_start, number_of_samples, mapped_channel);
-        }
-      }
+      mapped_channels.push_back(afe_block * 8 + afe_channel);
+    }
+
+    const std::function<void()> issue_trigger = software_trigger
+        ? std::function<void()>([front_end] { front_end->doTrigger(); })
+        : std::function<void()>{};
+
+    for (uint32_t j = 0; j < number_of_waveforms; ++j) {
+      uint32_t* waveform_start =
+          data_ptr + static_cast<size_t>(number_of_samples) * j *
+                         mapped_channels.size();
+      const auto timestamp = spy_buffer->acquireFreshMappedData(
+          waveform_start,
+          number_of_samples,
+          mapped_channels,
+          issue_trigger);
+      response.add_timestamps(SpyBuffer::packTimestamp(timestamp));
     }
 
     auto* resp_channel_list = response.mutable_channellist();
@@ -2919,6 +2921,55 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     out = serialize_or_empty(resp);
   };
 
+  handlers[daphne::MT2_WRITE_SPYBUFFER_TRIGGER_SOURCE_REQ] =
+      [](const std::string& in, std::string& out, Daphne& d) {
+    WriteSpyBufferTriggerSourceRequest req;
+    WriteSpyBufferTriggerSourceResponse resp;
+    if (!req.ParseFromString(in)) {
+      resp.set_success(false);
+      resp.set_message("Bad WriteSpyBufferTriggerSourceRequest payload");
+      out = serialize_or_empty(resp);
+      return;
+    }
+
+    try {
+      const auto source = static_cast<uint32_t>(req.source());
+      const uint32_t configured_source =
+          d.getSpyBuffer()->configureTriggerSource(source);
+      resp.set_success(true);
+      resp.set_message("OK");
+      resp.set_source(
+          static_cast<daphne::SpyBufferTriggerSource>(configured_source));
+    } catch (const std::exception& e) {
+      resp.set_success(false);
+      resp.set_message(e.what());
+    }
+    out = serialize_or_empty(resp);
+  };
+
+  handlers[daphne::MT2_READ_SPYBUFFER_TRIGGER_SOURCE_REQ] =
+      [](const std::string& in, std::string& out, Daphne& d) {
+    ReadSpyBufferTriggerSourceRequest req;
+    ReadSpyBufferTriggerSourceResponse resp;
+    if (!req.ParseFromString(in)) {
+      resp.set_success(false);
+      resp.set_message("Bad ReadSpyBufferTriggerSourceRequest payload");
+      out = serialize_or_empty(resp);
+      return;
+    }
+
+    try {
+      resp.set_source(static_cast<daphne::SpyBufferTriggerSource>(
+          d.getSpyBuffer()->getTriggerSource()));
+      resp.set_success(true);
+      resp.set_message("OK");
+    } catch (const std::exception& e) {
+      resp.set_success(false);
+      resp.set_message(e.what());
+    }
+    out = serialize_or_empty(resp);
+  };
+
   handlers[daphne::MT2_ALIGN_AFE_REQ] = [](const std::string& in, std::string& out, Daphne& d) {
     cmd_alignAFEs req;
     cmd_alignAFEs_response resp;
@@ -2929,6 +2980,24 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
 
     std::string msg;
     const bool ok = alignAFE(req, resp, d, msg);
+    resp.set_success(ok);
+    resp.set_message(msg);
+    out = serialize_or_empty(resp);
+  };
+
+  handlers[daphne::MT2_AFE_DELAY_SWEEP_REQ] =
+      [](const std::string& in, std::string& out, Daphne& d) {
+    daphne::AfeDelaySweepRequest req;
+    daphne::AfeDelaySweepResponse resp;
+    if (!req.ParseFromString(in)) {
+      resp.set_success(false);
+      resp.set_message("Bad AfeDelaySweepRequest payload");
+      out = serialize_or_empty(resp);
+      return;
+    }
+
+    std::string msg;
+    const bool ok = run_afe_delay_sweep(req, resp, d, msg);
     resp.set_success(ok);
     resp.set_message(msg);
     out = serialize_or_empty(resp);
