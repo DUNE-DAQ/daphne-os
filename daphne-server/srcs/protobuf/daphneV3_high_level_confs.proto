@@ -166,6 +166,26 @@ message AfeDelaySweepResponse {
   repeated AfeDelaySweepAfeResult afes = 4;
 }
 
+// Applies a persistent manual timing configuration to one AFE. AFE numbers
+// use board numbering; the server performs the board-to-PL mapping.
+message AfeTimingSetting {
+  uint32 afe     = 1;  // board numbering, 0..4
+  uint32 delay   = 2;  // IDELAY tap, 0..511
+  uint32 bitslip = 3;  // ISERDES word rotation, 0..15
+}
+
+message WriteAfeTimingRequest {
+  repeated AfeTimingSetting settings = 1;
+}
+
+message WriteAfeTimingResponse {
+  bool success = 1;
+  string message = 2;
+  repeated AfeTimingSetting applied = 3;
+  uint32 previousVtcEnable = 4;
+  uint32 currentVtcEnable = 5;
+}
+
 // ----------------- Info -----------------
 
 message InfoRequest { uint32 level = 1; }
@@ -349,6 +369,9 @@ enum MessageTypeV2 {
   // Global spybuffer trigger-source selector
   MT2_WRITE_SPYBUFFER_TRIGGER_SOURCE_REQ = 326; MT2_WRITE_SPYBUFFER_TRIGGER_SOURCE_RESP = 327;
   MT2_READ_SPYBUFFER_TRIGGER_SOURCE_REQ  = 328; MT2_READ_SPYBUFFER_TRIGGER_SOURCE_RESP  = 329;
+
+  // Persistent manual AFE timing configuration
+  MT2_WRITE_AFE_TIMING_REQ            = 330; MT2_WRITE_AFE_TIMING_RESP            = 331;
   
   // HD Mezzanine-specific commands
   MT2_SET_HDMEZZ_BLOCK_ENABLE_REQ   = 400;   MT2_SET_HDMEZZ_BLOCK_ENABLE_RESP = 401;

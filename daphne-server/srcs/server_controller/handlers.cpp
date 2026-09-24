@@ -17,6 +17,7 @@
 #include <memory>
 #include <mutex>
 #include <numeric>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -2340,6 +2341,150 @@ bool clearHDMezzAlertFlag(const cmd_clearHDMezzAlertFlag& request,
   }
 }
 
+struct SavedAfeTiming {
+  uint32_t board_afe;
+  uint32_t pl_afe;
+  uint32_t delay;
+  uint32_t bitslip;
+};
+
+bool writeAfeTiming(const daphne::WriteAfeTimingRequest& request,
+                    daphne::WriteAfeTimingResponse& response,
+                    Daphne& daphne,
+                    std::string& response_str) {
+  std::vector<SavedAfeTiming> saved;
+  uint32_t previous_vtc_enable = 0;
+  bool state_saved = false;
+
+  try {
+    if (request.settings_size() == 0) {
+      throw std::invalid_argument("At least one AFE timing setting is required");
+    }
+
+    std::set<uint32_t> seen_afes;
+    for (const auto& setting : request.settings()) {
+      if (setting.afe() > 4) {
+        throw std::invalid_argument("AFE out of range (0..4)");
+      }
+      if (setting.delay() > 511) {
+        throw std::invalid_argument("IDELAY tap out of range (0..511)");
+      }
+      if (setting.bitslip() > 15) {
+        throw std::invalid_argument("BITSLIP out of range (0..15)");
+      }
+      if (!seen_afes.insert(setting.afe()).second) {
+        throw std::invalid_argument("AFE timing request contains duplicates");
+      }
+    }
+
+    auto* front_end = daphne.getFrontEnd();
+    previous_vtc_enable = front_end->getEnableDelayVtc();
+    response.set_previousvtcenable(previous_vtc_enable);
+
+    saved.reserve(static_cast<size_t>(request.settings_size()));
+    for (const auto& setting : request.settings()) {
+      const uint32_t pl_afe =
+          afe_definitions::AFE_board2PL_map.at(setting.afe());
+      saved.push_back(SavedAfeTiming{
+          setting.afe(),
+          pl_afe,
+          front_end->getDelay(static_cast<uint8_t>(pl_afe)),
+          front_end->getBitslip(static_cast<uint8_t>(pl_afe)),
+      });
+    }
+    state_saved = true;
+
+    // Manual IDELAY values require VTC to remain disabled. This is an
+    // intentional persistent state change on success.
+    front_end->setEnableDelayVtc(0);
+    for (const auto& setting : request.settings()) {
+      const uint32_t pl_afe =
+          afe_definitions::AFE_board2PL_map.at(setting.afe());
+      front_end->setDelay(
+          static_cast<uint8_t>(pl_afe),
+          setting.delay());
+      front_end->setBitslip(
+          static_cast<uint8_t>(pl_afe),
+          setting.bitslip());
+
+      const uint32_t delay_readback =
+          front_end->getDelay(static_cast<uint8_t>(pl_afe));
+      const uint32_t bitslip_readback =
+          front_end->getBitslip(static_cast<uint8_t>(pl_afe));
+      if (delay_readback != setting.delay() ||
+          bitslip_readback != setting.bitslip()) {
+        throw std::runtime_error(
+            "AFE " + std::to_string(setting.afe()) +
+            " timing readback mismatch");
+      }
+
+      auto* applied = response.add_applied();
+      applied->set_afe(setting.afe());
+      applied->set_delay(delay_readback);
+      applied->set_bitslip(bitslip_readback);
+    }
+
+    const uint32_t current_vtc_enable = front_end->getEnableDelayVtc();
+    response.set_currentvtcenable(current_vtc_enable);
+    if (current_vtc_enable != 0) {
+      throw std::runtime_error(
+          "Delay VTC did not remain disabled after manual IDELAY writes");
+    }
+
+    response_str =
+        "AFE IDELAY and BITSLIP settings applied; delay VTC remains disabled";
+    return true;
+  } catch (const std::exception& error) {
+    std::string restore_errors;
+    auto append_restore_error =
+        [&restore_errors](const std::string& message) {
+          if (!restore_errors.empty()) restore_errors += "; ";
+          restore_errors += message;
+        };
+
+    if (state_saved) {
+      auto* front_end = daphne.getFrontEnd();
+      for (const auto& state : saved) {
+        try {
+          front_end->setDelay(
+              static_cast<uint8_t>(state.pl_afe),
+              state.delay);
+        } catch (const std::exception& restore_error) {
+          append_restore_error(
+              "AFE " + std::to_string(state.board_afe) +
+              " IDELAY: " + restore_error.what());
+        }
+        try {
+          front_end->setBitslip(
+              static_cast<uint8_t>(state.pl_afe),
+              state.bitslip);
+        } catch (const std::exception& restore_error) {
+          append_restore_error(
+              "AFE " + std::to_string(state.board_afe) +
+              " BITSLIP: " + restore_error.what());
+        }
+      }
+      try {
+        front_end->setEnableDelayVtc(previous_vtc_enable);
+      } catch (const std::exception& restore_error) {
+        append_restore_error(
+            std::string("VTC: ") + restore_error.what());
+      }
+      try {
+        response.set_currentvtcenable(front_end->getEnableDelayVtc());
+      } catch (...) {
+      }
+    }
+
+    response.clear_applied();
+    response_str = std::string("Could not apply AFE timing: ") + error.what();
+    if (!restore_errors.empty()) {
+      response_str += "; restore failures: " + restore_errors;
+    }
+    return false;
+  }
+}
+
 template <typename Msg>
 std::string serialize_or_empty(const Msg& msg) {
   std::string out;
@@ -2998,6 +3143,24 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
 
     std::string msg;
     const bool ok = run_afe_delay_sweep(req, resp, d, msg);
+    resp.set_success(ok);
+    resp.set_message(msg);
+    out = serialize_or_empty(resp);
+  };
+
+  handlers[daphne::MT2_WRITE_AFE_TIMING_REQ] =
+      [](const std::string& in, std::string& out, Daphne& d) {
+    daphne::WriteAfeTimingRequest req;
+    daphne::WriteAfeTimingResponse resp;
+    if (!req.ParseFromString(in)) {
+      resp.set_success(false);
+      resp.set_message("Bad WriteAfeTimingRequest payload");
+      out = serialize_or_empty(resp);
+      return;
+    }
+
+    std::string msg;
+    const bool ok = writeAfeTiming(req, resp, d, msg);
     resp.set_success(ok);
     resp.set_message(msg);
     out = serialize_or_empty(resp);

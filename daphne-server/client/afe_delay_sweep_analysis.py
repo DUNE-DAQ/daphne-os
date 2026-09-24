@@ -20,6 +20,13 @@ class AfeEyeSummary:
     common_window: TapWindow | None
 
 
+@dataclass(frozen=True)
+class PartialAfeWindow:
+    window: TapWindow
+    passing_lanes: tuple[int, ...]
+    excluded_lanes: tuple[int, ...]
+
+
 def _validate_inputs(
     taps: Sequence[int],
     failures: Sequence[int],
@@ -109,3 +116,66 @@ def summarize_afe_eye(
         max_error_rate=max_error_rate,
     )
     return AfeEyeSummary(channel_windows, common_window)
+
+def best_partial_passing_window(
+    taps: Sequence[int],
+    channel_failures: Sequence[Sequence[int]],
+    transitions: Sequence[int],
+    *,
+    max_error_rate: float = 0.0,
+) -> PartialAfeWindow | None:
+    """Find the widest window for the largest simultaneously passing subset."""
+
+    if not channel_failures:
+        raise ValueError("at least one channel is required")
+    for failures in channel_failures:
+        _validate_inputs(taps, failures, transitions)
+    if max_error_rate < 0.0 or max_error_rate > 1.0:
+        raise ValueError("max_error_rate must be in 0..1")
+
+    passing_masks = []
+    for point_index in range(len(taps)):
+        mask = 0
+        for lane, failures in enumerate(channel_failures):
+            if failures[point_index] / transitions[point_index] <= max_error_rate:
+                mask |= 1 << lane
+        passing_masks.append(mask)
+
+    best_score: tuple[int, int, int] | None = None
+    best_interval: tuple[int, int, int] | None = None
+    full_mask = (1 << len(channel_failures)) - 1
+    for first in range(len(taps)):
+        common_mask = full_mask
+        for last in range(first, len(taps)):
+            common_mask &= passing_masks[last]
+            if common_mask == 0:
+                break
+            score = (
+                bin(common_mask).count("1"),
+                int(taps[last]) - int(taps[first]),
+                last - first + 1,
+            )
+            if best_score is None or score > best_score:
+                best_score = score
+                best_interval = (first, last, common_mask)
+
+    if best_interval is None:
+        return None
+    first, last, mask = best_interval
+    midpoint = first + (last - first) // 2
+    passing_lanes = tuple(
+        lane for lane in range(len(channel_failures)) if mask & (1 << lane)
+    )
+    excluded_lanes = tuple(
+        lane for lane in range(len(channel_failures)) if not mask & (1 << lane)
+    )
+    return PartialAfeWindow(
+        window=TapWindow(
+            first_tap=int(taps[first]),
+            last_tap=int(taps[last]),
+            point_count=last - first + 1,
+            recommended_tap=int(taps[midpoint]),
+        ),
+        passing_lanes=passing_lanes,
+        excluded_lanes=excluded_lanes,
+    )

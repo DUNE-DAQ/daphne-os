@@ -77,6 +77,53 @@ software trigger at that tap. This is important because the spybuffer contains
 pre-trigger samples; sleeping only after a trigger would not make those samples
 represent the new delay.
 
+## Automatic scan and application
+
+`--auto` first scans the requested range with `--coarse-step` (10 by default).
+For each AFE it then refines, with an IDELAY step of 1, the expanded union of
+all taps that passed on any of its eight channels. If a channel has no coarse
+pass, or the refined interval yields no common eye, it safely falls back to a
+full unit-step scan. This discrete coarse-to-fine search is appropriate for a
+PASS/FAIL eye map; root-finding methods such as regula falsi assume a monotonic
+continuous function and do not apply here.
+
+`--apply_best` (also accepted as `--apply-best`) normally requires every
+requested AFE to have a common passing window across all eight channels. If
+that condition is not met, the client raises an alert, makes no timing change,
+and recommends `--accept_partial_config`.
+
+With explicit partial acceptance, each AFE is optimized independently. The
+client searches every contiguous interval and selects the window supporting
+the largest simultaneously passing channel subset; ties are resolved in favor
+of the widest window, and its midpoint is recommended. Thus an AFE with only
+one usable channel can still be configured for that channel. An AFE for which
+no channel passes at any tap is reported in bad state and left unchanged.
+Because IDELAY is shared by the eight channels, excluded channels cannot be
+given a different delay.
+
+The client sends one atomic timing-write request containing, for every AFE
+having at least one usable channel, the selected midpoint and the BITSLIP
+observed during the scan. The server validates all entries, disables delay VTC,
+writes IDELAY and BITSLIP using board-to-PL AFE mapping, verifies readback, and
+rolls back every AFE in the request plus VTC if any operation fails. On
+success, manual IDELAY values remain active and delay VTC remains disabled.
+
+For example, scan and configure all five AFEs:
+
+```bash
+DAPHNE_PROTO_PYTHON_DIR="$PWD/build-petalinux/srcs/protobuf" \
+python3 client/scan_afe_delay_eye.py \
+  --ip 193.206.157.36 --port 9876 --route mezz/0 \
+  --afes 0-4 --auto --coarse-step 10 --apply_best \
+  --waveforms 8 --samples 512 --timeout-ms 600000
+```
+
+To knowingly configure the best usable channel subset in each AFE, add
+`--accept_partial_config`. A partial run is recorded as `PARTIAL` in
+`summary.json`, including `channel_coverage`, excluded lanes, and any AFEs with
+no usable channel in `bad_afes`; it exits successfully after printing the
+limitation.
+
 ## Output
 
 Every completed scan creates a timestamped directory below
@@ -125,8 +172,10 @@ python3 client/scan_afe_delay_eye.py \
   --settle-us 10 --timeout-ms 600000
 ```
 
-The measured common midpoint is diagnostic only. This tool always restores the
-original delay and does not apply a new production alignment value.
+Without `--apply_best`, the measured common midpoint is diagnostic only and the
+server restores the original IDELAY and VTC state. With `--apply_best`, the
+common midpoint and existing BITSLIP are retained as the manual timing
+configuration described above.
 
 For a channel that has no clean tap while neighboring lanes have broad eyes,
 continue with `docs/afe-test-pattern-diagnostics.md`. Its custom walking-bit
