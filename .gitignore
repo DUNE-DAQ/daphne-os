@@ -1,6 +1,7 @@
 /build/
 /deploy/
 /evidence/
+/.vscode/
 /petalinux/output/*
 !/petalinux/output/.gitignore
 __pycache__/
