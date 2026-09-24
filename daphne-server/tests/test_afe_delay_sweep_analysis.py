@@ -203,6 +203,7 @@ class AfeDelaySweepAnalysisTests(unittest.TestCase):
     def make_save_args(output_dir, accept_partial_config):
         return SimpleNamespace(
             output_dir=output_dir,
+            summary=True,
             max_error_rate=0.0,
             apply_best=True,
             accept_partial_config=accept_partial_config,
@@ -233,7 +234,7 @@ class AfeDelaySweepAnalysisTests(unittest.TestCase):
                 ],
             }
             with (
-                patch.object(scan_client, "plot_heatmap"),
+                patch.object(scan_client, "plot_heatmap") as plot_mock,
                 patch.object(
                     scan_client,
                     "apply_timing_settings",
@@ -261,6 +262,8 @@ class AfeDelaySweepAnalysisTests(unittest.TestCase):
                     {"afe": 1, "delay": 1, "bitslip": 4},
                 ],
             )
+            self.assertTrue((run_dir / "delay_sweep.csv").is_file())
+            self.assertEqual(plot_mock.call_count, 2)
             summary = json.loads((run_dir / "summary.json").read_text())
             self.assertEqual(summary["result"], "PARTIAL")
             self.assertEqual(
@@ -274,24 +277,30 @@ class AfeDelaySweepAnalysisTests(unittest.TestCase):
     def test_partial_config_requires_explicit_acceptance(self):
         with tempfile.TemporaryDirectory() as directory:
             args = self.make_save_args(Path(directory), False)
+            args.summary = False
             with (
-                patch.object(scan_client, "plot_heatmap"),
+                patch.object(scan_client, "plot_heatmap") as plot_mock,
                 patch.object(
                     scan_client,
                     "apply_timing_settings",
                 ) as apply_mock,
             ):
-                _, all_pass, application_succeeded = scan_client.save_results(
-                    object(),
-                    self.make_response(),
-                    args,
-                    [0, 1],
-                    "external",
-                    None,
+                run_dir, all_pass, application_succeeded = (
+                    scan_client.save_results(
+                        object(),
+                        self.make_response(),
+                        args,
+                        [0, 1],
+                        "external",
+                        None,
+                    )
                 )
 
+            self.assertIsNone(run_dir)
+            self.assertEqual(list(Path(directory).iterdir()), [])
             self.assertFalse(all_pass)
             self.assertFalse(application_succeeded)
+            plot_mock.assert_not_called()
             apply_mock.assert_not_called()
 
 

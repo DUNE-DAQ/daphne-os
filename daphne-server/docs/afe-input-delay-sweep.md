@@ -119,15 +119,15 @@ python3 client/scan_afe_delay_eye.py \
 ```
 
 To knowingly configure the best usable channel subset in each AFE, add
-`--accept_partial_config`. A partial run is recorded as `PARTIAL` in
-`summary.json`, including `channel_coverage`, excluded lanes, and any AFEs with
-no usable channel in `bad_afes`; it exits successfully after printing the
-limitation.
+`--accept_partial_config`. When `--summary` is also enabled, a partial run is
+recorded as `PARTIAL` in `summary.json`, including `channel_coverage`, excluded
+lanes, and any AFEs with no usable channel in `bad_afes`; it exits successfully
+after printing the limitation.
 
 ## Output
 
-Every completed scan creates a timestamped directory below
-`afe_delay_sweep_results/` containing:
+By default the client produces no files or directories. Pass `--summary` to
+create a timestamped directory below `afe_delay_sweep_results/` containing:
 
 - `summary.json`: request parameters, original alignment values, per-channel
   passing windows, common eight-channel windows, and recommended midpoints;
@@ -136,6 +136,9 @@ Every completed scan creates a timestamped directory below
 - `afeN_delay_eye.png`: a channel-by-tap heatmap using
   `log10(failures + 1)`, with the common passing window and its midpoint marked
   when one exists.
+
+Without `--summary`, Matplotlib is not imported and none of these artifacts is
+created; console reporting and `--apply_best` behavior are unchanged.
 
 The console prints each channel's longest passing window separately and then
 the intersection valid for all eight channels of the AFE.

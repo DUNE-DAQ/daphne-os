@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from contextlib import nullcontext
 from dataclasses import asdict
 import importlib
 import json
@@ -632,12 +633,13 @@ def save_results(
     requested_afes: list[int],
     original_trigger_source: str,
     auto_metadata: dict | None,
-) -> tuple[Path, bool, bool]:
-    timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    run_dir = args.output_dir / f"{timestamp}_{uuid.uuid4().hex[:8]}"
-    run_dir.mkdir(parents=True, exist_ok=False)
+) -> tuple[Path | None, bool, bool]:
+    run_dir = None
+    if args.summary:
+        timestamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        run_dir = args.output_dir / f"{timestamp}_{uuid.uuid4().hex[:8]}"
+        run_dir.mkdir(parents=True, exist_ok=False)
 
-    csv_path = run_dir / "delay_sweep.csv"
     summaries = []
     recommendations_by_afe: dict[int, dict] = {}
     timing_choices_by_afe: dict[int, dict] = {}
@@ -654,20 +656,31 @@ def save_results(
             f"requested={requested_afes}, returned={returned_afes}"
         )
 
-    with csv_path.open("w", newline="", encoding="utf-8") as output_file:
-        writer = csv.DictWriter(
-            output_file,
-            fieldnames=(
-                "afe",
-                "channel",
-                "tap",
-                "failures",
-                "transitions",
-                "error_rate",
-                "passing",
-            ),
+    csv_context = (
+        (run_dir / "delay_sweep.csv").open(
+            "w",
+            newline="",
+            encoding="utf-8",
         )
-        writer.writeheader()
+        if run_dir is not None
+        else nullcontext()
+    )
+    with csv_context as output_file:
+        writer = None
+        if output_file is not None:
+            writer = csv.DictWriter(
+                output_file,
+                fieldnames=(
+                    "afe",
+                    "channel",
+                    "tap",
+                    "failures",
+                    "transitions",
+                    "error_rate",
+                    "passing",
+                ),
+            )
+            writer.writeheader()
 
         for afe_result in response.afes:
             afe = int(afe_result.afe)
@@ -762,28 +775,32 @@ def save_results(
                     taps, failures_by_tap, transitions
                 ):
                     error_rate = failures / total
-                    writer.writerow(
-                        {
-                            "afe": afe,
-                            "channel": afe * 8 + lane,
-                            "tap": tap,
-                            "failures": failures,
-                            "transitions": total,
-                            "error_rate": f"{error_rate:.12g}",
-                            "passing": int(error_rate <= args.max_error_rate),
-                        }
-                    )
+                    if writer is not None:
+                        writer.writerow(
+                            {
+                                "afe": afe,
+                                "channel": afe * 8 + lane,
+                                "tap": tap,
+                                "failures": failures,
+                                "transitions": total,
+                                "error_rate": f"{error_rate:.12g}",
+                                "passing": int(
+                                    error_rate <= args.max_error_rate
+                                ),
+                            }
+                        )
 
-            try:
-                plot_heatmap(
-                    run_dir,
-                    afe,
-                    taps,
-                    failure_matrix,
-                    eye.common_window,
-                )
-            except Exception as error:
-                plot_errors.append(f"AFE{afe}: {error}")
+            if args.summary:
+                try:
+                    plot_heatmap(
+                        run_dir,
+                        afe,
+                        taps,
+                        failure_matrix,
+                        eye.common_window,
+                    )
+                except Exception as error:
+                    plot_errors.append(f"AFE{afe}: {error}")
 
             summaries.append(
                 {
@@ -957,14 +974,16 @@ def save_results(
         "waveforms_per_tap": args.waveforms,
         "settle_time_us": args.settle_us,
         "maximum_passing_error_rate": args.max_error_rate,
+        "artifacts_generated": bool(args.summary),
         "afes": summaries,
         "timing_application": timing_application,
         "plot_errors": plot_errors,
     }
-    (run_dir / "summary.json").write_text(
-        json.dumps(summary, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    if run_dir is not None:
+        (run_dir / "summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     for error in plot_errors:
         print(f"[WARN] heatmap not generated: {error}")
     return run_dir, all_afes_pass, application_succeeded
@@ -1034,6 +1053,14 @@ def main() -> int:
         "--output-dir",
         type=Path,
         default=Path("afe_delay_sweep_results"),
+    )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help=(
+            "Create a result directory containing summary.json, CSV data, "
+            "and eye plots. By default no artifacts are generated."
+        ),
     )
     args = parser.parse_args()
 
@@ -1117,7 +1144,10 @@ def main() -> int:
             original_trigger_source,
             auto_metadata,
         )
-        print(f"[INFO] detailed results: {run_dir}")
+        if run_dir is not None:
+            print(f"[INFO] detailed results: {run_dir}")
+        else:
+            print("[INFO] no artifacts generated; use --summary to create them")
         if passed and application_succeeded:
             print("[PASS] every requested AFE has a common eight-channel eye")
             return 0
