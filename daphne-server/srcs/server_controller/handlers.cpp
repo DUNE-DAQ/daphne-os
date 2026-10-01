@@ -3108,7 +3108,8 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
         throw std::invalid_argument("Invalid runtime register request or gateware variant");
       // Window lifetime and all state are local to this one hardware access.
       const bool frontend=request.address()>=0x88000000 && request.address()<0x88001000;
-      DevMemWindowMmio32 mmio(frontend?0x88000000:0xA0010000,0x1000);
+      const bool control=request.address()>=0x94000000 && request.address()<0x94001000;
+      DevMemWindowMmio32 mmio(frontend?0x88000000:control?0x94000000:0xA0010000,0x1000);
       response.set_value(access_runtime_register(mmio,request.address(),request.write(),request.value()));
       response.set_success(true);
     } catch (const std::exception& error) { response.set_success(false); response.set_message(error.what()); }
