@@ -1,7 +1,9 @@
 #ifndef SPYBUFFER_HPP
 #define SPYBUFFER_HPP
 
+#if defined(__ARM_NEON)
 #include <arm_neon.h>
+#endif
 #include <cstdint>
 #include <cstddef>
 #include <string>

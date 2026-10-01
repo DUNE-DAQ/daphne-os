@@ -101,6 +101,7 @@ void SpyBuffer::extractMappedDataBulkSIMD(uint32_t* dst, uint32_t nSamples) {
     const uint32_t* src = channel_ptrs[this->current_channel_index];
     // Process 4 words at a time (8 samples)
     
+#if defined(__ARM_NEON)
     for (; i + 3 < wordCount; i += 4) {
         uint32x4_t words = vld1q_u32(src + i);
 
@@ -123,6 +124,7 @@ void SpyBuffer::extractMappedDataBulkSIMD(uint32_t* dst, uint32_t nSamples) {
 
         idx += 8;
     }
+#endif
     
     for (; i < wordCount; ++i) {
         uint32_t word = src[i];
@@ -182,6 +184,7 @@ void SpyBuffer::extractMappedDataBulkSIMD(uint32_t* dst, uint32_t nSamples, uint
     const uint32_t* src = channel_ptrs[channel_index];
 
     // SIMD: process in chunks of 4 words (8 samples)
+#if defined(__ARM_NEON)
     uint32_t simd_limit = (wordCount / 4) * 4;
 
     // Parallelize the SIMD section
@@ -207,6 +210,9 @@ void SpyBuffer::extractMappedDataBulkSIMD(uint32_t* dst, uint32_t nSamples, uint
         vst1q_lane_u32(dst + idx + 7, datah, 3);
     }
 
+#else
+    const uint32_t simd_limit = 0;
+#endif
     // Handle any leftovers (if wordCount not multiple of 4)
     uint32_t idx = simd_limit * 2;
     for (uint32_t i = simd_limit; i < wordCount; ++i) {
