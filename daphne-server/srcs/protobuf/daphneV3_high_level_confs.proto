@@ -275,6 +275,8 @@ enum MessageTypeV2 {
 
   MT2_READ_TRIGGER_COUNTERS_REQ      = 320; MT2_READ_TRIGGER_COUNTERS_RESP      = 321; 
 
+  MT2_RUNTIME_REGISTER_REQ = 330; MT2_RUNTIME_REGISTER_RESP = 331;
+
   // System / monitoring
   MT2_READ_GENERAL_INFO_REQ          = 322; MT2_READ_GENERAL_INFO_RESP          = 323;
   
@@ -311,3 +313,7 @@ message ControlEnvelope {
   MessageType type = 1;
   bytes       payload = 2;
 }
+
+// The SC/CCM owns sequencing, polling, arbitration and requested settings.
+message RuntimeRegisterRequest { uint64 address = 1; bool write = 2; uint32 value = 3; }
+message RuntimeRegisterResponse { bool success = 1; string message = 2; uint32 value = 3; }

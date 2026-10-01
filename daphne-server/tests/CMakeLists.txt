@@ -34,3 +34,8 @@ if(DAPHNE_ENABLE_HARDWARE_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     RUN_SERIAL TRUE
   )
 endif()
+
+add_executable(runtime_register_tests runtime_register_tests.cpp)
+target_link_libraries(runtime_register_tests PRIVATE daphne_gateware)
+add_test(NAME runtime_register_unit COMMAND runtime_register_tests)
+set_tests_properties(runtime_register_unit PROPERTIES LABELS unit)

@@ -61,6 +61,7 @@ endif()
 
 add_library(daphne_gateware
   srcs/server_controller/gateware.cpp
+  srcs/server_controller/runtime_registers.cpp
 )
 target_include_directories(daphne_gateware PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/srcs
