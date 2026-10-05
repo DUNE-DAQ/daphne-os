@@ -21,6 +21,24 @@ class SecretFindingReviewTests(unittest.TestCase):
     def test_unchanged_public_fixture_is_accepted(self) -> None:
         self.assertTrue(VERIFY.is_public_fixture(self.fixture_finding(), ROOT))
 
+    def test_historical_status_injection_fixture_is_byte_verified(self) -> None:
+        finding = {
+            "File": "tests/petalinux/test_daphne_service_status.py",
+            "RuleID": "daphne-literal-password", "StartLine": 55,
+            "Commit": "ba2c8bb9b7faeffdff4ebf58c089373103d0d506",
+        }
+        self.assertTrue(VERIFY.is_public_fixture(finding, ROOT))
+        finding["StartLine"] = 54
+        self.assertFalse(VERIFY.is_public_fixture(finding, ROOT))
+        finding["StartLine"] = 55
+        finding["Commit"] = ""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / finding["File"]
+            path.parent.mkdir(parents=True)
+            path.write_text("changed status fixture\n")
+            self.assertFalse(VERIFY.is_public_fixture(finding, root))
+
     def test_changed_fixture_is_not_path_allowlisted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

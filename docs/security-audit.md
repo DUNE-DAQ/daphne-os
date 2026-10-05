@@ -28,10 +28,18 @@ and [upstream transport test](https://github.com/zeromq/libzmq/blob/v4.3.4/tests
 These are not board, workstation, or service credentials. Never deploy the
 public example keys as real credentials.
 
-`scripts/security/verify_findings.py` permits only those exact file hashes,
+`scripts/security/verify_findings.py` permits only reviewed exact file hashes,
 rule IDs, and line locations. Changed content or any other finding blocks CI;
 there is no blanket third-party exclusion. The original server history was
 therefore preserved without redaction or hash rewriting.
+
+The historical notification-injection regression test
+`tests/petalinux/test_daphne_service_status.py` also deliberately supplied
+synthetic secret markers. Its literal-password finding at line 55 is accepted
+only for SHA-256
+`10aaedbc29768464224d982cd2c4b4af514857e1473c6c13d076b26ff6f31306`.
+The exception checks the historical blob, rule and line; it does not permit
+credentials in arbitrary test files or skip history scanning.
 
 ## Ongoing safeguards
 
