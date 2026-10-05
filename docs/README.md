@@ -11,7 +11,6 @@
 
 ## Developers and maintainers
 
-- [Follow-up work and qualification gates](TODO.md)
 - [On-board server builds and client protobuf generation](server-development.md)
 - [Server register/transport contract](server-contract.md)
 - [Repository ownership and preserved history](repository-split.md)
