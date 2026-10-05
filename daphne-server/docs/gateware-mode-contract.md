@@ -63,3 +63,7 @@ The protobuf schema contains `full_stream_channels`. `daphnemodules` 3.0.4
 serializes and validates the ordered list for full-stream operation; its empty
 list remains the explicit self-trigger selection. Earlier `daphnemodules`
 versions do not support full-stream selection.
+
+The stateless runtime-register bridge also permits read-only timing clock and
+endpoint status at `0x84000000/04/08/0C`. SC/CCM uses these for calibration
+preflight; writes through this bridge are rejected.

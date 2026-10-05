@@ -16,7 +16,7 @@ int main() {
     if (access_runtime_register(io,address,true,0x80000081)!=0x80000081) return 1;
     if (access_runtime_register(io,address,false,0)!=0x80000081) return 1;
   }
-  for (uint64_t address : {0xA0010F04ULL,0xA0010F08ULL,0xA0010F10ULL,0xA0010F14ULL,0x94000020ULL,0x94000024ULL,0x94000028ULL,0x88000034ULL}) {
+  for (uint64_t address : {0xA0010F04ULL,0xA0010F08ULL,0xA0010F10ULL,0xA0010F14ULL,0x94000020ULL,0x94000024ULL,0x94000028ULL,0x88000034ULL,0x84000000ULL,0x84000004ULL,0x84000008ULL,0x8400000CULL}) {
     io.registers[address]=7;
     if (access_runtime_register(io,address,false,0)!=7) return 1;
     try { access_runtime_register(io,address,true,9); return 1; } catch (const std::invalid_argument&) {}
