@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject secret findings except byte-verified public ZeroMQ test fixtures.
+"""Reject secret findings except byte-verified reviewed test fixtures.
 
 Never print matches, secret values, author details, or report payloads.
 """
@@ -14,6 +14,12 @@ import sys
 
 
 FIXTURES = {
+    # Deleted historical status-injection regression: PASSWORD is the same
+    # dummy sentinel asserted absent from status output, not a credential.
+    "tests/petalinux/test_daphne_service_status.py": (
+        "10aaedbc29768464224d982cd2c4b4af514857e1473c6c13d076b26ff6f31306",
+        {("daphne-literal-password", 55)},
+    ),
     "third_party/zeromq-4.3.4/doc/zmq_curve.7": (
         "82d8c7e238b0e820c1a7e16844074d073eafa633974ffd93cfa710a8fb5ad29a",
         {("generic-api-key", 63), ("generic-api-key", 81)},

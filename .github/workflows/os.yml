@@ -21,7 +21,7 @@ jobs:
       - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes device-tree-compiler python3-venv
+          sudo apt-get install --yes device-tree-compiler python3-venv unzip
           python3 -m venv /tmp/daphne-os-tests
           /tmp/daphne-os-tests/bin/python -m pip install 'jsonschema==4.25.1'
       - name: Check OS and deployment ownership

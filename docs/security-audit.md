@@ -28,7 +28,14 @@ and [upstream transport test](https://github.com/zeromq/libzmq/blob/v4.3.4/tests
 These are not board, workstation, or service credentials. Never deploy the
 public example keys as real credentials.
 
-`scripts/security/verify_findings.py` permits only those exact file hashes,
+The deleted OS status-injection test at
+`tests/petalinux/test_daphne_service_status.py` also contains a dummy password
+sentinel that the test checks is absent from status output. Its reviewed
+historical SHA-256 is
+`10aaedbc29768464224d982cd2c4b4af514857e1473c6c13d076b26ff6f31306`;
+only the `daphne-literal-password` finding at line 55 is permitted.
+
+`scripts/security/verify_findings.py` permits only these exact file hashes,
 rule IDs, and line locations. Changed content or any other finding blocks CI;
 there is no blanket third-party exclusion. The original server history was
 therefore preserved without redaction or hash rewriting.
