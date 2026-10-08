@@ -72,6 +72,12 @@ set_tests_properties(
 find_package(PythonInterp QUIET)
 if(PYTHONINTERP_FOUND)
   add_test(
+    NAME synthetic_sipm_client_unit
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_synthetic_sipm_client.py
+  )
+  set_tests_properties(synthetic_sipm_client_unit PROPERTIES LABELS unit)
+
+  add_test(
     NAME afe_delay_sweep_analysis_unit
     COMMAND
       ${PYTHON_EXECUTABLE}

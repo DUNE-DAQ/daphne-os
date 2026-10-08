@@ -65,6 +65,40 @@ operations issuing software triggers (including diagnostics) can excite the
 generator while it is enabled. The synthetic contribution begins three sample
 clocks (48 ns) after the synchronized trigger rising edge.
 
+## Python client
+
+`client/synthetic_sipm.py` uses the existing V2 transport and protobuf loader.
+Global connection options go before the subcommand. The default server port
+is 9876; use `--port` for a different deployed service endpoint.
+
+```sh
+# Set FBK amplitude 22.5 and enable accepting software events
+python3 daphne-server/client/synthetic_sipm.py --ip 192.168.1.10 \
+  configure --amplitude 22.5 --model fbk --enable
+
+# Stage HPK parameters, leaving injection disabled
+python3 daphne-server/client/synthetic_sipm.py --ip 192.168.1.10 \
+  configure --amplitude 22.5 --model hpk --disable
+
+# Read only, or disable using the currently read amplitude/model
+python3 daphne-server/client/synthetic_sipm.py --ip 192.168.1.10 read
+python3 daphne-server/client/synthetic_sipm.py --ip 192.168.1.10 disable
+```
+
+The client parses amplitudes as decimal values and rounds `A * 256` to the
+nearest integer, with ties upwards. Its JSON output reports the quantized
+amplitude, Q8 code, model, enable, and hexadecimal register value. It checks that
+returned fields agree with the register and, for configuration, with the request.
+Configuration relies on the server's verified writes. `disable` performs a read
+followed by a full configuration request; avoid concurrent writers between those
+requests. It also clears filter history.
+
+Regenerate bindings from the updated schema. Set `DAPHNE_PROTO_PYTHON_DIR` to
+the build's generated protobuf directory, for example
+`build/server-native/srcs/protobuf`. The loader skips stale candidates before
+importing them. Errors, unsupported firmware and timeouts exit with status 2.
+There are no automatic retries, software triggers or waveform acquisition.
+
 ## Validation
 
 `synthetic_sipm_unit` uses fake MMIO and acquisition-domain settling to check
@@ -78,3 +112,6 @@ ctest --test-dir build/server-native --output-on-failure -R synthetic_sipm_unit
 
 Regenerate C++ and Python protobuf bindings through the normal CMake build.
 These tests do not qualify a bitstream or demonstrate pulses on a board.
+`synthetic_sipm_client_unit` covers decimal quantization, required CLI fields,
+read-only requests, disable parameter preservation, readback checks, timeouts,
+and skipping stale bindings before import.

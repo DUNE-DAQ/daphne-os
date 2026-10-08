@@ -215,6 +215,8 @@ AFE0 CH0 synthetic SiPM configuration in `daphneServer` uses separate amplitude,
 model, and enable fields, with server-owned sequencing. See
 [`docs/synthetic-sipm-generator.md`](docs/synthetic-sipm-generator.md) for the V2
 RPC contract and optional firmware-profile behavior.
+Use `client/synthetic_sipm.py` to `configure --amplitude 22.5 --model fbk --enable`,
+`read`, or `disable`; put `--ip` and `--port` before the subcommand.
 
 ## ZeroMQ register server
 
