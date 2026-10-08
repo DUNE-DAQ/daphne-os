@@ -22,6 +22,16 @@ endif()
 add_test(NAME gateware_mode_unit COMMAND gateware_mode_tests)
 set_tests_properties(gateware_mode_unit PROPERTIES LABELS unit)
 
+add_executable(synthetic_sipm_tests synthetic_sipm_tests.cpp)
+target_link_libraries(synthetic_sipm_tests PRIVATE daphne_gateware Threads::Threads)
+if(MSVC)
+  target_compile_options(synthetic_sipm_tests PRIVATE /W4)
+else()
+  target_compile_options(synthetic_sipm_tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME synthetic_sipm_unit COMMAND synthetic_sipm_tests)
+set_tests_properties(synthetic_sipm_unit PROPERTIES LABELS unit)
+
 add_executable(fpga_reg_dict_tests
   fpga_reg_dict_tests.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../srcs/FpgaRegDict.cpp

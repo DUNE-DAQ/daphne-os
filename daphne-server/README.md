@@ -211,6 +211,11 @@ The independent selectors are `--offset`, `--trim`, `--bias`, `--vgain`, and
 configuration types are read. Only the RPCs required by the selected flags are
 issued.
 
+AFE0 CH0 synthetic SiPM configuration in `daphneServer` uses separate amplitude,
+model, and enable fields, with server-owned sequencing. See
+[`docs/synthetic-sipm-generator.md`](docs/synthetic-sipm-generator.md) for the V2
+RPC contract and optional firmware-profile behavior.
+
 ## ZeroMQ register server
 
 The server provides blocking request/reply access to AXI registers. It accepts the

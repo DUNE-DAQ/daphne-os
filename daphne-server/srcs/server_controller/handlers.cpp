@@ -36,6 +36,8 @@
 #include "reg.hpp"
 #include "server_controller/gateware.hpp"
 #include "server_controller/afe_delay_sweep.hpp"
+#include "server_controller/devmem_mmio.hpp"
+#include "server_controller/synthetic_sipm.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -2511,6 +2513,57 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
   }
 
   std::unordered_map<MessageTypeV2, V2Handler> handlers;
+
+  const auto set_synthetic_readback = [](daphne::SyntheticSipmConfigResponse& resp,
+                                        uint32_t value) {
+    resp.set_amplitude_q8(value & kSyntheticAmplitudeMask);
+    resp.set_model(static_cast<daphne::SyntheticSipmModel>(
+        (value & kSyntheticModelBit) != 0U ? 1 : 0));
+    resp.set_enable((value & kSyntheticEnableBit) != 0U);
+    resp.set_raw_register(value);
+    resp.set_success(true);
+    resp.set_message("OK (AXI readback)");
+  };
+
+  handlers[daphne::MT2_CONFIGURE_SYNTHETIC_SIPM_REQ] =
+      [set_synthetic_readback](const std::string& in, std::string& out, Daphne&) {
+    daphne::ConfigureSyntheticSipmRequest req;
+    daphne::SyntheticSipmConfigResponse resp;
+    if (!req.ParseFromString(in)) {
+      out = serialize_error_with_success_field(resp, "Bad ConfigureSyntheticSipmRequest payload");
+      return;
+    }
+    try {
+      // Validate before mapping /dev/mem; invalid requests never touch hardware.
+      const auto model = static_cast<uint32_t>(req.model());
+      encode_synthetic_config(req.amplitude_q8(), model, req.enable());
+      DevMemWindowMmio32 mmio(kSyntheticConfigAddress, sizeof(uint32_t));
+      set_synthetic_readback(resp, configure_synthetic_sipm(
+          mmio, req.amplitude_q8(), model, req.enable()));
+    } catch (const std::exception& e) {
+      resp.set_success(false);
+      resp.set_message(e.what());
+    }
+    out = serialize_or_empty(resp);
+  };
+
+  handlers[daphne::MT2_READ_SYNTHETIC_SIPM_CONFIG_REQ] =
+      [set_synthetic_readback](const std::string& in, std::string& out, Daphne&) {
+    daphne::ReadSyntheticSipmConfigRequest req;
+    daphne::SyntheticSipmConfigResponse resp;
+    if (!req.ParseFromString(in)) {
+      out = serialize_error_with_success_field(resp, "Bad ReadSyntheticSipmConfigRequest payload");
+      return;
+    }
+    try {
+      DevMemWindowMmio32 mmio(kSyntheticConfigAddress, sizeof(uint32_t));
+      set_synthetic_readback(resp, read_synthetic_config(mmio));
+    } catch (const std::exception& e) {
+      resp.set_success(false);
+      resp.set_message(e.what());
+    }
+    out = serialize_or_empty(resp);
+  };
 
   handlers[daphne::MT2_CONFIGURE_FE_REQ] =
       [mode, full_stream_mmio](const std::string& in, std::string& out, Daphne& d) {

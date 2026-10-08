@@ -128,6 +128,34 @@ message ReadSpyBufferTriggerSourceResponse {
   SpyBufferTriggerSource source  = 3;
 }
 
+// ----------------- AFE0 CH0 synthetic SiPM generator -----------------
+
+enum SyntheticSipmModel {
+  SYNTHETIC_SIPM_FBK = 0;
+  SYNTHETIC_SIPM_HPK = 1;
+}
+
+// Full configuration, not a patch. Reconfiguration clears filter history.
+// The server owns disable -> parameter write -> optional enable and settling.
+message ConfigureSyntheticSipmRequest {
+  uint32 amplitude_q8 = 1;  // round(A * 256), 256..2560000 (A=1..10000)
+  SyntheticSipmModel model = 2;
+  bool enable = 3;
+}
+
+message ReadSyntheticSipmConfigRequest {}
+
+// AXI register readback, not acquisition-domain status or pulse validation.
+// Fields are meaningful only when success is true.
+message SyntheticSipmConfigResponse {
+  bool success = 1;
+  string message = 2;
+  uint32 amplitude_q8 = 3;
+  SyntheticSipmModel model = 4;
+  bool enable = 5;
+  uint32 raw_register = 6;
+}
+
 // ----------------- AFE input-delay diagnostic -----------------
 
 // Sweeps the common IDELAY tap used by the frame clock and eight data lanes
@@ -372,6 +400,10 @@ enum MessageTypeV2 {
 
   // Persistent manual AFE timing configuration
   MT2_WRITE_AFE_TIMING_REQ            = 330; MT2_WRITE_AFE_TIMING_RESP            = 331;
+
+  // Optional generator in the afe0-synthetic firmware profile
+  MT2_CONFIGURE_SYNTHETIC_SIPM_REQ    = 332; MT2_CONFIGURE_SYNTHETIC_SIPM_RESP    = 333;
+  MT2_READ_SYNTHETIC_SIPM_CONFIG_REQ  = 334; MT2_READ_SYNTHETIC_SIPM_CONFIG_RESP  = 335;
   
   // HD Mezzanine-specific commands
   MT2_SET_HDMEZZ_BLOCK_ENABLE_REQ   = 400;   MT2_SET_HDMEZZ_BLOCK_ENABLE_RESP = 401;
