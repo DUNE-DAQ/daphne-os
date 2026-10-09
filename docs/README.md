@@ -13,6 +13,7 @@
 
 - [On-board server builds and client protobuf generation](server-development.md)
 - [Server register/transport contract](server-contract.md)
+- [Experimental raw DMA diagnostics and board qualification](raw-dma-diagnostics.md)
 - [Repository ownership and preserved history](repository-split.md)
 - [Credential audit and public upstream test fixtures](security-audit.md)
 - [Frozen dual-gateware RC1 record](releases/dual-gateware-2026.08.31-rc1.md)

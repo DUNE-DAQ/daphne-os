@@ -102,6 +102,14 @@ void TestIdentityAdmission() {
       [&] { validate_gateware_identity(identity, GatewareMode::kFullStream, 0x07654321U); },
       "build ID mismatch", "wrong build ID is rejected");
   Require(mmio.writes.empty(), "failed admission still performs no writes");
+
+  bad = identity;
+  bad.variant = 3;  // raw-dma has no spybuffer windows.
+  RequireThrows([&] { validate_gateware_identity(bad, GatewareMode::kSelfTrigger); },
+                "variant mismatch", "raw-dma rejected before spybuffer construction");
+  RequireThrows([&] { validate_gateware_identity(bad, GatewareMode::kFullStream); },
+                "variant mismatch", "raw-dma is not legacy full-stream");
+  Require(mmio.writes.empty(), "raw-dma rejection never programs legacy blocks");
 }
 
 void TestModeParsing() {

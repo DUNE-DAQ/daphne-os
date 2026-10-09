@@ -1,0 +1,5 @@
+config DAPHNE_DMA_DIAG
+	tristate "DAPHNE raw-dma diagnostic client"
+	depends on OF && DMA_ENGINE && XILINX_DMA
+	help
+	  Optional finite diagnostic S2MM captures. Does not acquire AFE samples.

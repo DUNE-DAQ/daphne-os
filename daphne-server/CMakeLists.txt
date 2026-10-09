@@ -34,6 +34,12 @@ option(DAPHNE_ENABLE_HARDWARE_TESTS "Enable tests that access real DAPHNE hardwa
 set(DAPHNE_DEPS_TARBALL_DIR "" CACHE PATH "Directory containing the pinned dependency tarball (see deps/deps.lock.cmake)")
 include(CTest)
 
+# Experimental diagnostic only; never linked into or selected by daphneServer.
+option(DAPHNE_BUILD_DMA_DIAG "Build the standalone raw-dma diagnostic" OFF)
+if(DAPHNE_BUILD_DMA_DIAG)
+  add_subdirectory(dma)
+endif()
+
 if(DAPHNE_DEPS_TARBALL_DIR AND NOT DAPHNE_DEPS_TARBALL_DIR STREQUAL "")
   include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/daphne_deps.cmake")
   daphne_use_locked_deps(TARBALL_DIR "${DAPHNE_DEPS_TARBALL_DIR}")

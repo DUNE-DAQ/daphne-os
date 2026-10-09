@@ -14,6 +14,8 @@ __pycache__/
 # C/C++ sources and headers
 *.cc
 *.h
+!kernel/daphne-dma-diag/daphne_dma_uapi.h
+!kernel/daphne-dma-diag/dma_layout.h
 
 # Protobuf definitions
 *.proto

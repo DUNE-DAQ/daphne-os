@@ -1,0 +1,7 @@
+# Append only to the local.conf of a separate experimental developer project.
+# Do not include this in production/default image configuration.
+DAPHNE_ENABLE_RAW_DMA_DIAG = "1"
+DAPHNE_DMA_SOURCE_DIR = "/path/to/pinned/daphne-os/daphne-server/kernel/daphne-dma-diag"
+IMAGE_INSTALL:append = " kernel-module-xilinx-dma kernel-module-daphne-dma-diag"
+# For native module rebuilds on DAPHNE (requires substantial rootfs space):
+IMAGE_INSTALL:append = " kernel-devsrc"
