@@ -642,7 +642,7 @@ static const struct file_operations path_fops = {
  .open = path_open, .release = path_release,
  .unlocked_ioctl = path_ioctl,
  .compat_ioctl = compat_ptr_ioctl,
- .read = path_read, .poll = path_poll, .llseek = no_llseek,
+ .read = path_read, .poll = path_poll,
 };
 
 static int validate_dt(struct platform_device *pdev, u32 path)
