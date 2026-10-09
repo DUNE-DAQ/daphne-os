@@ -1,0 +1,16 @@
+# Client transport and protobuf runtime/compiler. Install together so pip
+# resolves a protobuf runtime compatible with grpcio-tools' bundled protoc.
+pyzmq
+protobuf
+grpcio-tools
+
+# Waveform acquisition, analysis, and plotting (including dynamic_range_led).
+numpy
+scipy
+matplotlib
+pandas
+tqdm
+
+# Desktop oscilloscope (osc.py).
+PyQt6
+pyqtgraph
