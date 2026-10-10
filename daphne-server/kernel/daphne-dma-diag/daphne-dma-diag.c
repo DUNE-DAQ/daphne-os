@@ -65,7 +65,7 @@ struct dma_path {
  struct work_struct completion_work;
  struct delayed_work timeout_work;
  wait_queue_head_t wait;
- void __iomem *producer, *identity, *monitor;
+ void __iomem *producer, *identity, *monitor, *capture_controller;
  struct dma_chan *chan;
  struct capture_block *buffer;
  struct scatterlist *sg;
@@ -124,8 +124,14 @@ static int identify(struct dma_path *p)
  if (p->status.magic != 0x44415048 ||
      p->status.gateware_abi != 0x00020000 ||
      p->status.variant != 3 || (p->status.build_id & 0xf0000000) ||
-     p->status.capabilities != 0x00000520)
+     (p->status.capabilities & ~BIT(4)) != 0x00000520)
   return -EPROTO;
+ if (p->status.capabilities & BIT(4)) {
+  if (!p->capture_controller)
+   return -EPROTO;
+  if (readl(p->capture_controller + 0x0c) != 0)
+   return -EBUSY; /* Shared mux belongs to a physical acquisition. */
+ }
  if (readl(p->producer + P_MAGIC) != 0x444d4150 ||
      readl(p->producer + P_ABI) != 1 ||
      readl(p->producer + P_PATH) != p->status.path)
@@ -736,6 +742,21 @@ static int path_probe(struct platform_device *pdev)
   goto fail;
  }
  p->identity = devm_ioremap(&pdev->dev, r->start, resource_size(r));
+ {
+  struct device_node *capture = of_parse_phandle(pdev->dev.of_node, "daphne,capture-controller", 0);
+  if (capture) {
+   struct resource control;
+   err = of_address_to_resource(capture, 0, &control);
+   of_node_put(capture);
+   if (err || control.start != 0xb0080000ULL || resource_size(&control) != 0x1000) {
+    err = -EINVAL;
+    goto fail;
+   }
+   /* Shared controller is read-only here; its physical client owns writes. */
+   p->capture_controller = devm_ioremap(&pdev->dev, control.start, resource_size(&control));
+   if (!p->capture_controller) {err = -ENOMEM; goto fail;}
+  }
+ }
  r = platform_get_resource_byname(pdev, IORESOURCE_MEM, "dma-monitor");
  if (!r || r->start != 0xb0020030ULL + (u64)path * 0x20000 || resource_size(r) != 8) {
   err = -EINVAL;

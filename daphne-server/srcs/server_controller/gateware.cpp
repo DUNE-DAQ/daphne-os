@@ -82,7 +82,8 @@ GatewareIdentity probe_gateware_identity(Mmio32& mmio) {
   identity.abi = mmio.read32(kGatewareIdentityAbiAddress);
   identity.variant = mmio.read32(kGatewareIdentityVariantAddress);
   identity.build_id = mmio.read32(kGatewareIdentityBuildAddress);
-  if (identity.variant == static_cast<uint32_t>(GatewareMode::kRawDma))
+  if (identity.magic == kGatewareIdentityMagic && identity.abi == kGatewareAbiV2 &&
+      identity.variant == static_cast<uint32_t>(GatewareMode::kRawDma))
     identity.capabilities = mmio.read32(kGatewareCapabilitiesAddress);
   return identity;
 }

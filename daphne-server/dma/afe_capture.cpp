@@ -78,7 +78,7 @@ void abort_and_prove_halt(int fd) {
     throw std::runtime_error("DMA_QUARANTINED: do not unload the FPGA overlay");
   for (size_t r = 0; r < 3; ++r)
     if (!(s.dma_status[r] & 1U) || (s.dma_control[r] & 5U))
-      throw std::runtime_error("DMA halt unproven: do not unload the FPGA overlay");
+      throw std::runtime_error("DMA_QUARANTINED: halt unproven; do not unload the FPGA overlay");
 }
 class LinuxAfeEngine final : public AfeCaptureEngine {
  public:
@@ -140,9 +140,9 @@ class LinuxAfeEngine final : public AfeCaptureEngine {
       std::string message = error.what();
       if (prepared) {
         try { checked_ioctl(fd, DAPHNE_AFE_ABORT); }
-        catch (const std::exception& abort_error) { message += "; ABORT: "; message += abort_error.what(); }
+        catch (const std::exception& abort_error) { message += "; DMA_QUARANTINED: ABORT failed: "; message += abort_error.what(); }
         try { if (status(fd).state == DAPHNE_AFE_QUARANTINED) message += "; DMA_QUARANTINED: do not unload overlay"; }
-        catch (...) { message += "; DMA status unavailable"; }
+        catch (...) { message += "; DMA_QUARANTINED: status unavailable"; }
       }
       ::close(fd); // The driver retains quarantined buffers independently.
       throw std::runtime_error(message);
@@ -156,5 +156,19 @@ class LinuxAfeEngine final : public AfeCaptureEngine {
 
 std::unique_ptr<AfeCaptureEngine> make_linux_afe_engine(uint64_t bytes, const std::string& device) {
   return std::make_unique<LinuxAfeEngine>(bytes, device);
+}
+void verify_linux_afe_idle(const std::string& device) {
+  const int fd = ::open(device.c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd < 0) throw std::runtime_error("DMA idle not proven: driver unavailable or owned");
+  try {
+    const auto s = status(fd);
+    if (s.abi != 1 || s.state == DAPHNE_AFE_QUARANTINED || s.state == DAPHNE_AFE_RUNNING ||
+        s.state == DAPHNE_AFE_PREPARED || (s.hardware_status & 1))
+      throw std::runtime_error("DMA_QUARANTINED: idle not proven; keep overlay loaded");
+    for (size_t r = 0; r < 3; ++r)
+      if (!(s.dma_status[r] & 1) || (s.dma_control[r] & 5))
+        throw std::runtime_error("DMA_QUARANTINED: halt not proven; keep overlay loaded");
+  } catch (...) { ::close(fd); throw; }
+  ::close(fd);
 }
 } // namespace daphne_dma

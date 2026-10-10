@@ -10,8 +10,8 @@
 namespace daphne_sc {
 namespace {
 
-void i2c_2_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
-  while (true) {
+void i2c_2_monitor_thread(Daphne& daphne, std::chrono::milliseconds period, const std::atomic<bool>* stop) {
+  while (!stop || !stop->load()) {
     try {
       std::unique_lock<std::mutex> i2c2_lock(daphne.i2c_2_mutex, std::try_to_lock);
       if (!i2c2_lock.owns_lock()) {
@@ -66,9 +66,9 @@ void i2c_2_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
   }
 }
 
-void i2c_1_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
+void i2c_1_monitor_thread(Daphne& daphne, std::chrono::milliseconds period, const std::atomic<bool>* stop) {
   bool warned_missing_adc = false;
-  while (true) {
+  while (!stop || !stop->load()) {
     try {
       std::unique_lock<std::mutex> i2c1_lock(daphne.i2c_1_mutex, std::try_to_lock);
       if (!i2c1_lock.owns_lock()) {
@@ -121,8 +121,8 @@ void i2c_1_monitor_thread(Daphne& daphne, std::chrono::milliseconds period) {
 
 std::vector<std::thread> start_monitoring(Daphne& daphne, const MonitoringOptions& options) {
   std::vector<std::thread> threads;
-  threads.emplace_back(i2c_1_monitor_thread, std::ref(daphne), options.period);
-  threads.emplace_back(i2c_2_monitor_thread, std::ref(daphne), options.period);
+  threads.emplace_back(i2c_1_monitor_thread, std::ref(daphne), options.period, options.stop);
+  threads.emplace_back(i2c_2_monitor_thread, std::ref(daphne), options.period, options.stop);
   return threads;
 }
 

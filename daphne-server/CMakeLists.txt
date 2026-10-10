@@ -217,6 +217,8 @@ set(SOURCES
   srcs/server_controller/handlers.cpp
   srcs/server_controller/devmem_mmio.cpp
   srcs/server_controller/hardware_admission.cpp
+  srcs/server_controller/dma_service_hardware.cpp
+  srcs/server_controller/dma_eye_scan.cpp
   srcs/server_controller/monitoring.cpp
   srcs/server_controller/spybuffer_chunker.cpp
   srcs/server_controller/router_server.cpp
@@ -234,8 +236,25 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     PROPERTIES COMPILE_OPTIONS "-Wno-deprecated-declarations"
   )
 endif()
+add_library(daphne_dma_jobs srcs/server_controller/dma_service.cpp)
+target_include_directories(daphne_dma_jobs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_link_libraries(daphne_dma_jobs PUBLIC daphne_proto daphne_afe_dma Threads::Threads)
+if(BUILD_TESTING)
+  add_executable(dma_service_tests tests/dma_service_tests.cpp)
+  target_link_libraries(dma_service_tests PRIVATE daphne_dma_jobs)
+  add_test(NAME dma_service_unit COMMAND dma_service_tests)
+
+endif()
 
 add_executable(daphneServer ${SOURCES})
+if(NOT TARGET daphne_afe_dma)
+  add_library(daphne_afe_dma dma/afe_capture.cpp)
+  target_include_directories(daphne_afe_dma PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/dma)
+endif()
+add_executable(daphne-afe-dma-quiesce srcs/server_controller/dma_quiesce.cpp
+  srcs/server_controller/hardware_admission.cpp srcs/server_controller/devmem_mmio.cpp srcs/DevMem.cpp)
+target_include_directories(daphne-afe-dma-quiesce PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/srcs)
+target_link_libraries(daphne-afe-dma-quiesce PRIVATE daphne_afe_dma daphne_gateware)
 target_include_directories(daphneServer PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/srcs
@@ -248,6 +267,8 @@ target_link_libraries(daphneServer PRIVATE
   daphne_i2c_hw
   daphne_gateware
   daphne_proto
+  daphne_afe_dma
+  daphne_dma_jobs
   cppzmq
   ${DAPHNE_ZMQ_TARGET}
   CLI11::CLI11

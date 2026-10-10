@@ -1,4 +1,6 @@
 #include <cstdlib>
+#include <csignal>
+#include <atomic>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
@@ -18,6 +20,13 @@
 #include "server_controller/handlers.hpp"
 #include "server_controller/monitoring.hpp"
 #include "server_controller/router_server.hpp"
+#include "server_controller/dma_service.hpp"
+
+namespace {
+std::atomic<bool> stopping{false};
+static_assert(std::atomic<bool>::is_always_lock_free, "signal-safe stop flag");
+void request_stop(int) { stopping.store(true); }
+}
 
 int main(int argc, char* argv[]) {
   CLI::App app{"daphneServer"};
@@ -111,11 +120,16 @@ int main(int argc, char* argv[]) {
   zmq::context_t context(1);
   daphne_sc::set_raw_dma_register_policy(dma);
   Daphne daphne(!dma);
+  std::unique_ptr<daphne_sc::DmaService> dma_service;
+  if (dma) dma_service = std::make_unique<daphne_sc::DmaService>(daphne, identity);
+  server_opts.dma = dma_service.get(); server_opts.stop = &stopping;
+  std::signal(SIGINT, request_stop); std::signal(SIGTERM, request_stop);
 
   std::vector<std::thread> monitor_threads;
   if (!disable_monitoring) {
     daphne_sc::MonitoringOptions opts;
     opts.period = std::chrono::milliseconds(monitor_period_ms);
+    opts.stop = &stopping;
     monitor_threads = daphne_sc::start_monitoring(daphne, opts);
   }
 
@@ -131,7 +145,10 @@ int main(int argc, char* argv[]) {
   }
 
   const auto handlers = daphne_sc::make_v2_handlers(gateware_mode, full_stream_mmio);
-  daphne_sc::run_router_server(context, bind_endpoint, daphne, handlers, server_opts);
+  try { daphne_sc::run_router_server(context, bind_endpoint, daphne, handlers, server_opts); }
+  catch (const std::exception& e) { std::cerr << "Router stopped: " << e.what() << '\n'; }
+  stopping.store(true);
+  if (dma_service) dma_service->shutdown();
 
   for (auto& t : monitor_threads) {
     if (t.joinable()) t.join();

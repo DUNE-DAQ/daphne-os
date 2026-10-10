@@ -9,6 +9,8 @@
 #include "daphneV3_high_level_confs.pb.h"
 #include "server_controller/spybuffer_chunker.hpp"
 #include "server_controller/v2_envelope.hpp"
+#include "server_controller/dma_service.hpp"
+#include "server_controller/hardware_admission.hpp"
 
 namespace daphne_sc {
 namespace {
@@ -43,9 +45,20 @@ void run_router_server(zmq::context_t& ctx,
   router.set(zmq::sockopt::rcvhwm, options.rcvhwm);
   router.set(zmq::sockopt::sndbuf, options.sndbuf);
   router.set(zmq::sockopt::immediate, options.immediate ? 1 : 0);
+  if (options.dma) {
+    router.set(zmq::sockopt::sndtimeo, 100);
+    router.set(zmq::sockopt::sndhwm, 8);
+    router.set(zmq::sockopt::rcvhwm, 64);
+    router.set(zmq::sockopt::maxmsgsize, static_cast<int64_t>(options.max_envelope_bytes));
+  }
   router.bind(bind_endpoint);
 
-  while (true) {
+  while (!options.stop || !options.stop->load()) {
+    if (options.dma) options.dma->expire();
+    zmq::pollitem_t item{router.handle(), 0, ZMQ_POLLIN, 0};
+    try { zmq::poll(&item, 1, std::chrono::milliseconds(50)); }
+    catch (const zmq::error_t& e) { if (e.num() == EINTR) continue; throw; }
+    if (!(item.revents & ZMQ_POLLIN)) continue;
     std::vector<zmq::message_t> frames;
     if (!recv_multipart(router, frames)) continue;
     if (frames.size() < 2) continue;
@@ -70,6 +83,45 @@ void run_router_server(zmq::context_t& ctx,
     }
 
     if (req.version() != 2 || req.dir() != daphne::DIR_REQUEST) {
+      continue;
+    }
+
+    if (options.dma) {
+      std::string response;
+      if (options.dma->dispatch(req, client_id, response)) {
+        send_to(router, client_id, v2::make_response(req, v2::response_type(req.type()), std::move(response)).SerializeAsString());
+        continue;
+      }
+      // Controls share one hardware owner with acquisition and calibration.
+      if (options.dma->busy()) {
+        send_to(router, client_id, v2::make_response(req, v2::response_type(req.type()),
+                control_error_payload(req.type(), "BUSY: DMA owns the hardware")).SerializeAsString());
+        continue;
+      }
+      try { options.dma->verify_live(); }
+      catch (const std::exception& e) {
+        options.dma->invalidate(true);
+        send_to(router, client_id, v2::make_response(req, v2::response_type(req.type()),
+                control_error_payload(req.type(), e.what())).SerializeAsString());
+        continue;
+      }
+      const int t = static_cast<int>(req.type());
+      // All writes, resets, clocks, power and manual timing invalidate evidence,
+      // including requests that fail after a partial hardware update.
+      const bool read_only = (t >= 224 && t <= 246) || t == 304 || t == 322 || t == 404 || t == 408;
+      if (!read_only) options.dma->invalidate();
+    } else if (req.type() == daphne::MT2_ACQUISITION_CAPABILITIES_REQ) {
+      daphne::AcquisitionCapabilitiesResponse response;
+      response.set_success(true); response.set_protocol_revision(1);
+      response.set_backend(daphne::ACQUISITION_SPYBUFFER);
+      response.add_available_backends(daphne::ACQUISITION_SPYBUFFER);
+      response.set_maximum_samples(2048);
+      send_to(router, client_id, v2::make_response(req, daphne::MT2_ACQUISITION_CAPABILITIES_RESP,
+              response.SerializeAsString()).SerializeAsString());
+      continue;
+    } else if (static_cast<int>(req.type()) >= 338 && static_cast<int>(req.type()) <= 346) {
+      send_to(router, client_id, v2::make_response(req, v2::response_type(req.type()),
+              control_error_payload(req.type(), "BACKEND_MISMATCH: server has no DMA backend")).SerializeAsString());
       continue;
     }
 
@@ -121,6 +173,12 @@ void run_router_server(zmq::context_t& ctx,
     std::string resp_payload;
     try {
       it->second(req.payload(), resp_payload, daphne);
+      if (options.dma && req.type() == daphne::MT2_CONFIGURE_FE_REQ) {
+        daphne::ConfigureResponse response;
+        daphne::ConfigureRequest configuration;
+        if (response.ParseFromString(resp_payload) && response.success() && configuration.ParseFromString(req.payload()))
+          options.dma->configured(configuration);
+      }
     } catch (const std::exception& e) {
       std::cerr << "Handler threw exception: " << e.what() << std::endl;
       const auto env = v2::make_response(req, v2::response_type(req.type()), std::string{});
