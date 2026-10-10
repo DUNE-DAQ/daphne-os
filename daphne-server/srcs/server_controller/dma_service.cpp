@@ -23,17 +23,19 @@ bool DmaService::busy() const {
   std::lock_guard<std::mutex> lock(mutex_);
   return state_ == daphne::DMA_JOB_RUNNING || quarantine_;
 }
-void DmaService::invalidate(bool unconfigured) {
+void DmaService::invalidate(bool unconfigured, uint32_t afe_mask) {
   std::lock_guard<std::mutex> lock(mutex_);
-  ++generation_;
-  approved_.fill(0);
-  for (auto& state : states_)
+  for (uint32_t a = 0; a < 5; ++a) if (afe_mask & (1U << a)) {
+    ++generations_[a]; approved_[a] = 0;
+    auto& state = states_[a];
     state = unconfigured ? daphne::FRONTEND_UNCONFIGURED :
         (state == daphne::FRONTEND_UNCONFIGURED ? state : daphne::FRONTEND_CONFIGURED_UNALIGNED);
+  }
 }
 void DmaService::configured(const daphne::ConfigureRequest& req) {
   std::lock_guard<std::mutex> lock(mutex_);
-  ++generation_; approved_.fill(0); states_.fill(daphne::FRONTEND_UNCONFIGURED);
+  for (auto& generation : generations_) ++generation;
+  approved_.fill(0); states_.fill(daphne::FRONTEND_UNCONFIGURED);
   for (const auto& afe : req.afes()) states_.at(afe.id()) = daphne::FRONTEND_CONFIGURED_UNALIGNED;
 }
 daphne::AcquisitionCapabilitiesResponse DmaService::capabilities() const {
@@ -54,7 +56,7 @@ daphne::AcquisitionCapabilitiesResponse DmaService::capabilities() const {
   r.set_message("Software trigger = one START per waveform; external/timing/self/all require future trigger firmware. No pretrigger.");
   for (uint32_t a = 0; a < 5; ++a) {
     auto* s = r.add_afes(); s->set_afe(a); s->set_state(states_[a]);
-    s->set_approved_lane_mask(approved_[a]); s->set_configuration_generation(generation_);
+    s->set_approved_lane_mask(approved_[a]); s->set_configuration_generation(generations_[a]);
   }
   return r;
 }

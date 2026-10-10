@@ -1,4 +1,5 @@
 #include "server_controller/dma_service.hpp"
+#include "server_controller/dma_control_policy.hpp"
 #include <cstdlib>
 #include <iostream>
 
@@ -60,6 +61,16 @@ int main() {
   acquire.set_trigger_source(DMA_TRIGGER_EXTERNAL); guards = 0;
   require(!rpc(service, MT2_DMA_ACQUIRE_REQ, acquire).success() && guards == 0 && fake->starts == 0);
   acquire.set_trigger_source(DMA_TRIGGER_SOFTWARE);
+  cmd_writeTrim_singleChannel trim; trim.set_trimchannel(39);
+  require(affected_afe_mask(MT2_WRITE_TRIM_CH_REQ, trim.SerializeAsString()) == 16);
+  service.invalidate(false, 16);
+  auto caps = service.capabilities();
+  require(caps.afes(0).state() == FRONTEND_ALIGNED && caps.afes(4).state() == FRONTEND_CONFIGURED_UNALIGNED);
+  require(!rpc(service, MT2_DMA_ACQUIRE_REQ, acquire).success());
+  job = rpc(service, MT2_DMA_SCAN_REQ, scan); require(job.success());
+  require(wait_ready(service, job.job_id()).state() == DMA_JOB_READY);
+  control.set_job_id(job.job_id());
+  require(rpc(service, MT2_DMA_CONTROL_REQ, control).success());
   job = rpc(service, MT2_DMA_ACQUIRE_REQ, acquire); require(job.success());
   auto ready = wait_ready(service, job.job_id()); require(ready.completed_waveforms() == 3 && fake->starts == 3);
   control.set_job_id(job.job_id());

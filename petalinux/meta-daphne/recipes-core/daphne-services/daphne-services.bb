@@ -17,6 +17,7 @@ SRC_URI += " \
   file://daphne-gateware \
   file://daphne-gateware-self-trigger.conf \
   file://daphne-gateware-full-stream.conf \
+  file://daphne-gateware-raw-dma.conf \
   file://daphne-gateware-default-profile \
   file://daphne-fw.sh \
   file://daphne-fw-stop.sh \
@@ -60,6 +61,8 @@ do_install() {
         ${D}${sysconfdir}/daphne-gateware/profiles/self-trigger.conf
     install -m 0644 ${WORKDIR}/daphne-gateware-full-stream.conf \
         ${D}${sysconfdir}/daphne-gateware/profiles/full-stream.conf
+    install -m 0644 ${WORKDIR}/daphne-gateware-raw-dma.conf \
+        ${D}${sysconfdir}/daphne-gateware/profiles/raw-dma.conf
     install -m 0755 ${WORKDIR}/daphne-gateware \
         ${D}${sbindir}/daphne-gateware
 
@@ -99,6 +102,7 @@ FILES:${PN} += " \
     ${sysconfdir}/daphne-gateware/default-profile \
     ${sysconfdir}/daphne-gateware/profiles/self-trigger.conf \
     ${sysconfdir}/daphne-gateware/profiles/full-stream.conf \
+    ${sysconfdir}/daphne-gateware/profiles/raw-dma.conf \
 "
 
 CONFFILES:${PN} += " \
@@ -106,4 +110,5 @@ CONFFILES:${PN} += " \
     ${sysconfdir}/daphne-gateware/default-profile \
     ${sysconfdir}/daphne-gateware/profiles/self-trigger.conf \
     ${sysconfdir}/daphne-gateware/profiles/full-stream.conf \
+    ${sysconfdir}/daphne-gateware/profiles/raw-dma.conf \
 "

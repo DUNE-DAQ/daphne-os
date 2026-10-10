@@ -164,8 +164,11 @@ class DmaClient:
                 "build_id": c.gateware_build_id, "channels": list(channels), "samples": samples,
                 "waveforms": metadata, "trigger_source": trigger_source,
                 "independent_software_triggers": True, "continuous": False, "pretrigger_samples": 0}
-        except BaseException:
-            self.cancel()
+        except BaseException as error:
+            try:
+                self.cancel()
+            except Exception as cleanup:
+                raise RuntimeError(f"{error}; DMA cleanup unconfirmed: {cleanup}; keep the overlay loaded until idle is proven") from error
             raise
 
     def scan(self, request):
@@ -179,8 +182,11 @@ class DmaClient:
             if not ready.HasField("scan_result") or ready.scan_result.backend != p.ACQUISITION_DMA:
                 raise RuntimeError("Missing DMA scan result")
             return ready.scan_result
-        except BaseException:
-            self.cancel()
+        except BaseException as error:
+            try:
+                self.cancel()
+            except Exception as cleanup:
+                raise RuntimeError(f"{error}; DMA cleanup unconfirmed: {cleanup}; keep the overlay loaded until idle is proven") from error
             raise
 
 

@@ -39,7 +39,7 @@ class DmaService {
   void shutdown();
   bool busy() const;
   void verify_live() const;
-  void invalidate(bool unconfigured = false);
+  void invalidate(bool unconfigured = false, uint32_t afe_mask = 31);
   void configured(const daphne::ConfigureRequest&);
   daphne::AcquisitionCapabilitiesResponse capabilities() const;
  private:
@@ -64,7 +64,8 @@ class DmaService {
   std::atomic<bool> cancel_{false};
   std::array<daphne::FrontendState, 5> states_{};
   std::array<uint32_t, 5> approved_{};
-  uint64_t generation_ = 0, job_id_ = 0;
+  std::array<uint64_t, 5> generations_{};
+  uint64_t job_id_ = 0;
   std::string owner_, message_;
   daphne::DmaJobState state_ = daphne::DMA_JOB_IDLE;
   uint32_t samples_ = 0, expected_ = 0, completed_ = 0, read_sequence_ = 0;

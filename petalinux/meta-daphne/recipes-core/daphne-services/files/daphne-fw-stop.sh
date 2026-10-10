@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# A server-only stop does not unload PL. Firmware stop must independently prove
+# that the qualified driver released all channels and no quarantine remains.
+if grep -qx 'GATEWARE_MODE=raw-dma' "${DAPHNE_GATEWARE_RUN_DIR:-/run/daphne-gateware}/active.env" 2>/dev/null; then
+  /usr/bin/daphne-afe-dma-quiesce
+fi
+
 start_dfx_mgr() {
   for unit in dfx-mgr.service dfx-mgrd.service; do
     if systemctl list-unit-files "$unit" 2>/dev/null | awk '{print $1}' | grep -qx "$unit"; then

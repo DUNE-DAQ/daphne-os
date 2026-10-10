@@ -117,6 +117,12 @@ do_install() {
         ${D}${bindir}/hermes_udp_srv
     install -m 0755 "${runtime_root}/home/petalinux/daphne-server/build-petalinux/daphneServer" \
         ${D}${bindir}/daphneServer
+    # Legacy runtime bundles remain installable. A DMA runtime bundle must
+    # include the unload guard; raw profiles fail closed if it is absent.
+    if [ -f "${runtime_root}/home/petalinux/daphne-server/build-petalinux/daphne-afe-dma-quiesce" ]; then
+        install -m 0755 "${runtime_root}/home/petalinux/daphne-server/build-petalinux/daphne-afe-dma-quiesce" \
+            ${D}${bindir}/daphne-afe-dma-quiesce
+    fi
 
     for lib in \
         libprotobuf.so \
@@ -141,6 +147,7 @@ do_install() {
 
 FILES:${PN} += " \
     ${bindir}/daphneServer \
+    ${bindir}/daphne-afe-dma-quiesce \
     ${bindir}/hermes_udp_srv \
     ${libdir}/daphne-server/* \
     ${datadir}/daphne-server/README.server \

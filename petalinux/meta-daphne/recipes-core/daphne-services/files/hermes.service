@@ -7,6 +7,8 @@ PartOf=firmware.service daphne-runtime.target
 [Service]
 Type=simple
 WorkingDirectory=/
+EnvironmentFile=/run/daphne-gateware/active.env
+ExecCondition=/bin/sh -c '[ "${GATEWARE_MODE}" != raw-dma ]'
 ExecStartPre=/bin/echo "Starting Hermes IPBus UDP server (daphne mode)"
 ExecStart=/bin/sh -c '/usr/bin/hermes_udp_srv -d daphne -c true \
   2>/var/log/hermes_udp_srv.err >/var/log/hermes_udp_srv.log'

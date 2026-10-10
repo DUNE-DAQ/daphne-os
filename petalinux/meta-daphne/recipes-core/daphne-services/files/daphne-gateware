@@ -33,6 +33,7 @@ COMMON_ABI_MINOR = 0
 PROFILE_VARIANTS = {
     "self-trigger": 1,
     "full-stream": 2,
+    "raw-dma": 3,
 }
 PROFILE_KEYS = {
     "PROFILE",
@@ -372,8 +373,10 @@ def stop_runtime() -> None:
 def start_runtime() -> None:
     systemctl("start", RUNTIME_TARGET)
     checks, interval = runtime_stability_settings()
+    raw = load_active_profile().gateware_mode == "raw-dma"
+    health_units = tuple(unit for unit in HEALTH_UNITS if not (raw and unit == "hermes.service"))
     for sample in range(checks):
-        unhealthy = [unit for unit in HEALTH_UNITS if not unit_is_active(unit)]
+        unhealthy = [unit for unit in health_units if not unit_is_active(unit)]
         if unhealthy:
             raise GatewareError(
                 "runtime dependency chain became unhealthy during the "
@@ -410,6 +413,13 @@ def probe_identity() -> dict[str, int]:
 
 
 def verify_profile(profile: Profile, emit: bool = True) -> dict[str, int]:
+    if profile.gateware_mode == "raw-dma":
+        # Raw identity may be read only while the dynamic PL address map exists.
+        if Path("/sys/class/fpga_manager/fpga0/state").read_text().strip() != "operating":
+            raise GatewareError("FPGA manager not operating; raw DMA MMIO refused")
+        overlays = Path("/sys/kernel/config/device-tree/overlays")
+        if not overlays.is_dir() or not any((p / "status").is_file() and (p / "status").read_text().strip() == "applied" for p in overlays.iterdir()):
+            raise GatewareError("No applied overlay; raw DMA MMIO refused")
     expected_id = expected_build_id(profile)
     observed = probe_identity()
     expected = {
@@ -427,6 +437,8 @@ def verify_profile(profile: Profile, emit: bool = True) -> dict[str, int]:
         raise GatewareError(
             f"identity mismatch for {profile.name}: " + "; ".join(mismatches)
         )
+    if profile.gateware_mode == "raw-dma" and not (read_word(0x940000E0) & 16):
+        raise GatewareError("raw-dma profile requires physical AFE DMA capability")
     if emit:
         print(
             f"identity ok: profile={profile.name} ABI={profile.abi_major}.{profile.abi_minor} "
@@ -439,6 +451,9 @@ def quiesce_active() -> None:
     """Gate full-stream output before a server-only stop or FPGA unload."""
     require_root()
     profile = load_active_profile()
+    if profile.gateware_mode == "raw-dma":
+        run_command(["/usr/bin/daphne-afe-dma-quiesce"])
+        return
     if profile.gateware_mode != "full-stream":
         return
 

@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
 
   daphne_sc::GatewareIdentity identity;
   try {
-    daphne_sc::require_applied_overlay();
+    if (dma) daphne_sc::require_applied_overlay();
     constexpr size_t kIdentityWindowLength =
         daphne_sc::kGatewareIdentityBuildAddress -
         daphne_sc::kGatewareCapabilitiesAddress + sizeof(uint32_t);

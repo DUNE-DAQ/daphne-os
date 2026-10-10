@@ -10,6 +10,7 @@
 #include "server_controller/spybuffer_chunker.hpp"
 #include "server_controller/v2_envelope.hpp"
 #include "server_controller/dma_service.hpp"
+#include "server_controller/dma_control_policy.hpp"
 #include "server_controller/hardware_admission.hpp"
 
 namespace daphne_sc {
@@ -109,7 +110,8 @@ void run_router_server(zmq::context_t& ctx,
       // All writes, resets, clocks, power and manual timing invalidate evidence,
       // including requests that fail after a partial hardware update.
       const bool read_only = (t >= 224 && t <= 246) || t == 304 || t == 322 || t == 404 || t == 408;
-      if (!read_only) options.dma->invalidate();
+      if (!read_only) options.dma->invalidate(t == 200 || t == 248 || t == 250 || t == 252,
+                                             affected_afe_mask(req.type(), req.payload()));
     } else if (req.type() == daphne::MT2_ACQUISITION_CAPABILITIES_REQ) {
       daphne::AcquisitionCapabilitiesResponse response;
       response.set_success(true); response.set_protocol_revision(1);
