@@ -1000,7 +1000,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=9876)
     parser.add_argument("--route", default="mezz/0")
     parser.add_argument("--dma", action="store_true", help="Scan all bitslips using physical raw DMA ramp captures")
-    parser.add_argument("--verification-samples", type=int, default=32768)
+    parser.add_argument("--verification-samples", type=int, default=1048576,
+                        help="DMA final ramp verification length (default 1048576; minimum 32768)")
     parser.add_argument("--afes", default="0,1,2,3,4" if "--dma" in sys.argv else "0,3,4")
     parser.add_argument("--first-tap", type=int, default=0)
     parser.add_argument("--last-tap", type=int, default=511)
@@ -1019,7 +1020,7 @@ def main() -> int:
         dest="coarse_step",
         type=int,
         default=16 if "--dma" in sys.argv else 10,
-        help="Initial IDELAY step used by --auto (default: 10).",
+        help="Initial IDELAY step (DMA default 16, legacy --auto default 10).",
     )
     parser.add_argument(
         "--apply-best",
@@ -1041,7 +1042,8 @@ def main() -> int:
             "simultaneously passing channel subset in each AFE."
         ),
     )
-    parser.add_argument("--samples", type=int, default=32768 if "--dma" in sys.argv else 512)
+    parser.add_argument("--samples", type=int, default=2048 if "--dma" in sys.argv else 512,
+                        help="Samples per search point (DMA default 2048, legacy default 512)")
     parser.add_argument("--waveforms", type=int, default=1 if "--dma" in sys.argv else 8)
     parser.add_argument("--settle-us", type=int, default=10)
     parser.add_argument("--timeout-ms", type=int, default=600000)
