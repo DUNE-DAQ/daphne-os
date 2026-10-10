@@ -1,0 +1,26 @@
+Subject: [PATCH] dmaengine: xilinx_dma: bound zero-delay atomic polling
+
+Linux 6.18 atomic polling with delay_us=0 consumes one nominal nanosecond
+per iteration. A 1000000-us Xilinx timeout can therefore busy-loop through
+about one billion MMIO reads. DAPHNE S2MM abort on an incomplete packet took
+34.95 seconds and raised a soft lockup in xilinx_dma_stop_transfer.
+
+Use a minimum 1-us retry delay for this driver wrapper. The first condition
+check remains immediate. Stop, reset and start polling share the same fix;
+existing explicitly nonzero delays are preserved. The isolated provider
+built from the exact deployed source completed active abort in 1.295 seconds
+and passed STOP, timeout, SIGTERM, SIGKILL and reopen on all three S2MM paths.
+
+Upstream-Status: Pending
+
+--- a/drivers/dma/xilinx/xilinx_dma.c
++++ b/drivers/dma/xilinx/xilinx_dma.c
+@@ -531,7 +531,7 @@
+ 	container_of(tx, struct xilinx_dma_tx_descriptor, async_tx)
+ #define xilinx_dma_poll_timeout(chan, reg, val, cond, delay_us, timeout_us) \
+ 	readl_poll_timeout_atomic(chan->xdev->regs + chan->ctrl_offset + reg, \
+-				  val, cond, delay_us, timeout_us)
++				  val, cond, max_t(unsigned long, delay_us, 1), timeout_us)
+ 
+ /* IO accessors */
+ static inline u32 dma_read(struct xilinx_dma_chan *chan, u32 reg)

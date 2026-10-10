@@ -5,3 +5,7 @@ DAPHNE_DMA_SOURCE_DIR = "/path/to/pinned/daphne-os/daphne-server/kernel/daphne-d
 IMAGE_INSTALL:append = " kernel-module-xilinx-dma kernel-module-daphne-dma-diag"
 # For native module rebuilds on DAPHNE (requires substantial rootfs space):
 IMAGE_INSTALL:append = " kernel-devsrc"
+
+# Point 4, opt-in finite AFE capture. Defaults and spybuffer stay unchanged.
+DAPHNE_AFE_DMA_SOURCE_DIR = "/path/to/pinned/daphne-os/daphne-server/kernel/daphne-afe-dma"
+IMAGE_INSTALL:append = " kernel-module-daphne-afe-dma"

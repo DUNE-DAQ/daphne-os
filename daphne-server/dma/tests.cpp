@@ -31,6 +31,7 @@ std::vector<uint8_t> pattern(uint32_t path, const daphne_dma_config& c, uint32_t
 }
 struct Trace {
   std::vector<std::string> events;
+  uint32_t capabilities = 0x520;
   int fail_prepare = -1, fail_start = -1, fail_status = -1;
   bool corrupt = false, short_read = false, bad_guard = false, hang = false;
 };
@@ -44,7 +45,7 @@ class Fake final : public Backend {
     s_ = {};
     s_.abi = DAPHNE_DMA_ABI; s_.path = path_; s_.state = DAPHNE_DMA_PREPARED;
     s_.magic = 0x44415048; s_.gateware_abi = 0x20000; s_.variant = 3;
-    s_.build_id = c.expected_build_id; s_.capabilities = 0x520;
+    s_.build_id = c.expected_build_id; s_.capabilities = trace_.capabilities;
     s_.blocks = c.packets;
     s_.requested_bytes = uint64_t(c.beats) * 16 * c.packets;
     s_.allocated_bytes = s_.requested_bytes + 128 * c.packets;
@@ -138,6 +139,10 @@ int main() {
     require(results.size() == 3 && results[2].verified, "all three routes verified");
     require(trace.events[2] == "prepare2" && trace.events[3] == "start0",
       "all allocations precede every producer start");
+    Trace capture_cap; capture_cap.capabilities = 0x530;
+    require(run(Method::Diagnostic, requests, factory(capture_cap)).size() == 3, "capture capability preserves diagnostic ABI");
+    Trace unknown_cap; unknown_cap.capabilities = 0x540;
+    fails([&] { run(Method::Diagnostic, requests, factory(unknown_cap)); });
     for (uint32_t p = 0; p < 3; ++p) {
       auto data = pattern(p, config(), 3);
       PatternChecker checker(p, config().beats, config().seed);

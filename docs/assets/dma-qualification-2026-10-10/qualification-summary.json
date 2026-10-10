@@ -1,0 +1,60 @@
+{
+  "throughput_GB_s": {
+    "5/8 no load": {
+      "min": 4.43709308106,
+      "mean": 4.4396756487280005,
+      "max": 4.4417197258500005,
+      "n": 5
+    },
+    "5/8 loaded": {
+      "min": 3.9741201577800003,
+      "mean": 4.051494500978,
+      "max": 4.11891776504,
+      "n": 5
+    },
+    "3/4 no load": {
+      "min": 5.2711344336199994,
+      "mean": 5.27274175376,
+      "max": 5.274677569560001,
+      "n": 3
+    },
+    "3/4 loaded": {
+      "min": 4.52623419668,
+      "mean": 4.6348028285666665,
+      "max": 4.77382533063,
+      "n": 3
+    },
+    "1/1 no load": {
+      "min": 6.8854311148,
+      "mean": 6.887913875306666,
+      "max": 6.892088079640001,
+      "n": 3
+    },
+    "1/1 loaded": {
+      "min": 5.86452588303,
+      "mean": 6.001708513686667,
+      "max": 6.13113744693,
+      "n": 3
+    }
+  },
+  "abort_seconds": {
+    "original": 34.95254886,
+    "fixed": 1.29480935
+  },
+  "verified_route_captures": 372,
+  "verified_bytes": 12323858816,
+  "dma_address_range": {
+    "min": 1610219584,
+    "max": 34599092288,
+    "above_4GiB_observed": true
+  },
+  "pool": {
+    "parameter_mib": 448,
+    "verified_payload_mib": 384,
+    "failed_payload_mib": 432
+  },
+  "production_kernel_replaced": false,
+  "point3_status": "closed_corrected_diagnostic_scope",
+  "closure_basis": "user accepted existing hardware qualification plus minimal checks",
+  "deployment_requires_patched_kernel": true
+}

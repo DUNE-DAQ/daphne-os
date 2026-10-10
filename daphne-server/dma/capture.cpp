@@ -73,7 +73,7 @@ struct Session {
 };
 void validate_status(const Request& r, const daphne_dma_status& s) {
   if (s.abi != DAPHNE_DMA_ABI || s.path != r.path || s.magic != 0x44415048 ||
-      s.gateware_abi != 0x00020000 || s.variant != 3 || s.capabilities != 0x520 ||
+      s.gateware_abi != 0x00020000 || s.variant != 3 || (s.capabilities & ~0x10U) != 0x520 ||
       s.build_id != r.config.expected_build_id)
     throw std::runtime_error("DMA identity or API mismatch");
 }
