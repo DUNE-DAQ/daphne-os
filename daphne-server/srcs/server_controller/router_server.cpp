@@ -74,6 +74,14 @@ void run_router_server(zmq::context_t& ctx,
     }
 
     if (req.type() == daphne::MT2_DUMP_SPYBUFFER_CHUNK_REQ) {
+      if (!daphne.hasSpyBuffer()) {
+        daphne::DumpSpyBuffersChunkResponse response;
+        response.set_success(false); response.set_isfinal(true);
+        response.set_message("SPYBUFFER_UNAVAILABLE: raw-dma backend");
+        send_to(router, client_id, v2::make_response(req, daphne::MT2_DUMP_SPYBUFFER_CHUNK_RESP,
+                response.SerializeAsString()).SerializeAsString());
+        continue;
+      }
       daphne::DumpSpyBuffersChunkRequest chunk_req;
       if (!chunk_req.ParseFromString(req.payload())) {
         daphne::DumpSpyBuffersChunkResponse chunk_resp;

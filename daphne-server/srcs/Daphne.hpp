@@ -32,7 +32,7 @@ class Daphne {
 public:
     // Constructor
 
-    Daphne();
+    explicit Daphne(bool enable_spybuffer = true);
 
     // Destructor
     ~Daphne();
@@ -41,6 +41,7 @@ public:
     Dac* getDac();
     FrontEnd* getFrontEnd();
     SpyBuffer* getSpyBuffer();
+    bool hasSpyBuffer() const noexcept { return bool(spyBuffer); }
     I2CMezzDrivers::HDMezzDriver* getHDMezzDriver();
     I2CRegulatorsDrivers::PJT004A0X43_SRZ_Driver* getRegulatorsDriver();
     I2CADCsDrivers::ADS7138_Driver* getADS7138_Driver_addr_0x10();

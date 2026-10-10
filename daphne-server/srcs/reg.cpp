@@ -1,6 +1,7 @@
 #include "reg.hpp"
 #include "DevMem.hpp"
 #include "FpgaRegDict.hpp"
+#include "server_controller/hardware_admission.hpp"
 
 #include <utility>
 
@@ -19,6 +20,7 @@ std::tuple<uint32_t,int,int> reg::GetRegister(const std::string& RegName, const 
 		const auto reg_ = this->regDict.getRegisterMap().find(RegName);
 		//std::cout << "Found Key: " << reg_->first << " with address: 0x" << std::hex << reg_->second.first <<std::endl;
 		uint32_t RegAddr = reg_->second.first;
+        daphne_sc::validate_legacy_register_address(this->BaseAddr + RegAddr);
         auto bitField = reg_->second.second;
         if(bitField.find(BitName) != bitField.end()){
         	auto foundBitField = bitField.find(BitName);
@@ -40,6 +42,7 @@ uint32_t reg::GetRegister(const std::string& RegName){
 	if (this->regDict.hasKey(RegName)){
 		auto reg_ = this->regDict.getRegisterMap().find(RegName);
 		//std::cout << "Found Key: " << reg_->first << " with address: 0x" << std::hex << reg_->second.first <<std::endl;
+		daphne_sc::validate_legacy_register_address(this->BaseAddr + reg_->second.first);
 		return reg_->second.first;
 	}else{
 		std::cout << "RegName : " << RegName << " not found." << std::endl;;
@@ -198,6 +201,7 @@ void reg::GetFieldMeta_(const std::string& regName, const std::string& bitName) 
         throw std::invalid_argument("Register mapping not found for: " + regName);
     }
 
+    daphne_sc::validate_legacy_register_address(this->BaseAddr + regIt->second.first);
     const auto& bitFieldMap = regIt->second.second;
     auto bitIt = bitFieldMap.find(bitName);
     if (bitIt == bitFieldMap.end()) {

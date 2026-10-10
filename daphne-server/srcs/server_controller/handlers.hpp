@@ -11,6 +11,7 @@
 class Daphne;
 
 namespace daphne_sc {
+std::string control_error_payload(daphne::MessageTypeV2 type, const std::string& message);
 
 using V2Handler = std::function<void(const std::string& req_payload, std::string& resp_payload, Daphne& daphne)>;
 

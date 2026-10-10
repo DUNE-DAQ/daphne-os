@@ -216,6 +216,7 @@ set(SOURCES
   srcs/server_controller/afe_delay_sweep.cpp
   srcs/server_controller/handlers.cpp
   srcs/server_controller/devmem_mmio.cpp
+  srcs/server_controller/hardware_admission.cpp
   srcs/server_controller/monitoring.cpp
   srcs/server_controller/spybuffer_chunker.cpp
   srcs/server_controller/router_server.cpp

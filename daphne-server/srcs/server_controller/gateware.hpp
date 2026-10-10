@@ -11,12 +11,15 @@ namespace daphne_sc {
 enum class GatewareMode : uint32_t {
   kSelfTrigger = 1,
   kFullStream = 2,
+  kRawDma = 3,
 };
 
 constexpr uint64_t kGatewareIdentityMagicAddress = 0x940000F0ULL;
 constexpr uint64_t kGatewareIdentityAbiAddress = 0x940000F4ULL;
 constexpr uint64_t kGatewareIdentityVariantAddress = 0x940000F8ULL;
 constexpr uint64_t kGatewareIdentityBuildAddress = 0x940000FCULL;
+constexpr uint64_t kGatewareCapabilitiesAddress = 0x940000E0ULL;
+constexpr uint32_t kGatewareAfeDmaCapability = 1U << 4;
 constexpr uint32_t kGatewareIdentityMagic = 0x44415048U;
 constexpr uint32_t kGatewareAbiV2 = 0x00020000U;
 constexpr uint32_t kGatewareBuildIdUpperNibbleMask = 0xF0000000U;
@@ -44,6 +47,7 @@ struct GatewareIdentity {
   uint32_t abi = 0;
   uint32_t variant = 0;
   uint32_t build_id = 0;
+  uint32_t capabilities = 0;
 };
 
 struct RegisterWrite {

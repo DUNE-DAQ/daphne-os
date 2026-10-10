@@ -43,8 +43,9 @@ void wait_for_full_stream_active(Mmio32& mmio, bool expected_active) {
 GatewareMode parse_gateware_mode(const std::string& value) {
   if (value == "self-trigger") return GatewareMode::kSelfTrigger;
   if (value == "full-stream") return GatewareMode::kFullStream;
+  if (value == "raw-dma") return GatewareMode::kRawDma;
   throw std::invalid_argument(
-      "Invalid gateware mode '" + value + "' (expected self-trigger or full-stream)");
+      "Invalid gateware mode '" + value + "' (expected self-trigger, full-stream or raw-dma)");
 }
 
 uint32_t parse_gateware_build_id(const std::string& value) {
@@ -69,6 +70,8 @@ const char* gateware_mode_name(GatewareMode mode) noexcept {
       return "self-trigger";
     case GatewareMode::kFullStream:
       return "full-stream";
+    case GatewareMode::kRawDma:
+      return "raw-dma";
   }
   return "unknown";
 }
@@ -79,6 +82,8 @@ GatewareIdentity probe_gateware_identity(Mmio32& mmio) {
   identity.abi = mmio.read32(kGatewareIdentityAbiAddress);
   identity.variant = mmio.read32(kGatewareIdentityVariantAddress);
   identity.build_id = mmio.read32(kGatewareIdentityBuildAddress);
+  if (identity.variant == static_cast<uint32_t>(GatewareMode::kRawDma))
+    identity.capabilities = mmio.read32(kGatewareCapabilitiesAddress);
   return identity;
 }
 
@@ -117,6 +122,9 @@ void validate_gateware_identity(const GatewareIdentity& identity,
                              hex32(*expected_build_id) + ", read " +
                              hex32(identity.build_id));
   }
+  if (expected_mode == GatewareMode::kRawDma &&
+      !(identity.capabilities & kGatewareAfeDmaCapability))
+    throw std::runtime_error("Raw-DMA firmware lacks the physical AFE capture capability");
 }
 
 uint32_t encode_full_stream_channel(uint32_t channel) {
@@ -161,10 +169,10 @@ std::vector<RegisterWrite> make_full_stream_mux_plan(const std::vector<uint32_t>
 std::vector<RegisterWrite> make_mode_register_plan(
     GatewareMode mode,
     const std::vector<uint32_t>& full_stream_channels) {
-  if (mode == GatewareMode::kSelfTrigger) {
+  if (mode == GatewareMode::kSelfTrigger || mode == GatewareMode::kRawDma) {
     if (!full_stream_channels.empty()) {
       throw std::invalid_argument(
-          "full_stream_channels must be empty in self-trigger gateware mode");
+          "full_stream_channels must be empty outside full-stream gateware mode");
     }
     return {};
   }

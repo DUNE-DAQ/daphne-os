@@ -14,6 +14,7 @@
 #include "Daphne.hpp"
 #include "server_controller/devmem_mmio.hpp"
 #include "server_controller/gateware.hpp"
+#include "server_controller/hardware_admission.hpp"
 #include "server_controller/handlers.hpp"
 #include "server_controller/monitoring.hpp"
 #include "server_controller/router_server.hpp"
@@ -25,17 +26,19 @@ int main(int argc, char* argv[]) {
   std::string gateware_mode_value;
   std::string expected_gateware_build_id_value;
   bool disable_monitoring = false;
+  bool dma = false;
   int monitor_period_ms = 200;
 
   daphne_sc::RouterServerOptions server_opts;
 
   app.add_option("--bind", bind_endpoint, "ZeroMQ bind endpoint")->default_val(bind_endpoint);
   app.add_option("--gateware-mode", gateware_mode_value,
-                 "Expected gateware variant: self-trigger or full-stream")
+                 "Expected gateware variant: self-trigger, full-stream or raw-dma")
       ->required();
   app.add_option("--expected-gateware-build-id", expected_gateware_build_id_value,
                  "Optional expected 32-bit gateware build ID (decimal or 0x-prefixed hex)");
   app.add_flag("--disable-monitoring", disable_monitoring, "Disable background I2C monitoring threads");
+  app.add_flag("--dma", dma, "Explicitly select raw-DMA acquisition (requires raw-dma gateware)");
   app.add_option("--monitor-period-ms", monitor_period_ms, "Monitoring period in milliseconds")
       ->default_val(monitor_period_ms);
 
@@ -56,6 +59,8 @@ int main(int argc, char* argv[]) {
   std::optional<uint32_t> expected_gateware_build_id;
   try {
     gateware_mode = daphne_sc::parse_gateware_mode(gateware_mode_value);
+    if (dma != (gateware_mode == daphne_sc::GatewareMode::kRawDma))
+      throw std::invalid_argument("BACKEND_MISMATCH: raw-dma requires --dma; other modes must omit it");
     if (!expected_gateware_build_id_value.empty()) {
       expected_gateware_build_id =
           daphne_sc::parse_gateware_build_id(expected_gateware_build_id_value);
@@ -67,11 +72,12 @@ int main(int argc, char* argv[]) {
 
   daphne_sc::GatewareIdentity identity;
   try {
+    daphne_sc::require_applied_overlay();
     constexpr size_t kIdentityWindowLength =
         daphne_sc::kGatewareIdentityBuildAddress -
-        daphne_sc::kGatewareIdentityMagicAddress + sizeof(uint32_t);
+        daphne_sc::kGatewareCapabilitiesAddress + sizeof(uint32_t);
     daphne_sc::DevMemWindowMmio32 identity_mmio(
-        daphne_sc::kGatewareIdentityMagicAddress, kIdentityWindowLength);
+        daphne_sc::kGatewareCapabilitiesAddress, kIdentityWindowLength);
     identity = daphne_sc::probe_gateware_identity(identity_mmio);
     daphne_sc::validate_gateware_identity(identity, gateware_mode, expected_gateware_build_id);
   } catch (const std::exception& e) {
@@ -103,7 +109,8 @@ int main(int argc, char* argv[]) {
   }
 
   zmq::context_t context(1);
-  Daphne daphne;
+  daphne_sc::set_raw_dma_register_policy(dma);
+  Daphne daphne(!dma);
 
   std::vector<std::thread> monitor_threads;
   if (!disable_monitoring) {

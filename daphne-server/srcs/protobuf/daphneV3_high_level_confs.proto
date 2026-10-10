@@ -31,7 +31,7 @@ message AFEConfig {
 }
 
 message ADCConfig      { bool resolution=1; bool output_format=2; bool sb_first=3; }
-message PGAConfig      { uint32 lpf_cut_frequency=1; bool integrator_disable=2; bool gain=3; }
+message PGAConfig      { uint32 lpf_cut_frequency=1; bool integrator_disable=2; bool gain=3; optional uint32 clamp=4; }
 message LNAConfig      { uint32 clamp=1; uint32 gain=2; bool integrator_disable=3; }
 
 message ConfigureRequest {
@@ -52,8 +52,15 @@ message ConfigureRequest {
 
   // Present in ZMQ; keep it so both sides can filter FS channels consistently
   repeated uint32 full_stream_channels = 12;
+  AcquisitionBackend backend = 13; // omitted = existing spybuffer path
+  AlignmentPolicy alignment_policy = 14;
 }
-message ConfigureResponse { bool success = 1; string message = 2; }
+message ConfigureResponse {
+  bool success = 1; string message = 2;
+  bool configured = 3;
+  bool alignment_required = 4;
+  AcquisitionBackend backend = 5;
+}
 
 // ----------------- Scrap -----------------
 
@@ -170,6 +177,12 @@ message AfeDelaySweepRequest {
   uint32 numberOfSamples     = 5;  // 2..2048
   uint32 numberOfWaveforms   = 6;  // greater than zero
   uint32 settleTimeUs        = 7;  // delay-to-trigger settling time
+  AcquisitionBackend backend = 8;
+  bool apply_best = 9;
+  bool accept_partial_config = 10;
+  uint32 coarse_step = 11;
+  uint32 verification_samples = 12;
+  uint32 timeout_ms = 13;
 }
 
 message AfeDelaySweepPoint {
@@ -178,6 +191,10 @@ message AfeDelaySweepPoint {
   // Exactly eight entries in board-channel order. A failure is a transition
   // whose 14-bit modular delta differs from the expected ramp delta of +1.
   repeated uint64 channelFailures = 3 [packed = true];
+  uint32 bitslip = 4;
+  repeated uint64 low_bit_failures = 5 [packed = true];
+  repeated uint64 boundary_failures = 6 [packed = true];
+  uint64 boundary_transitions_per_channel = 7;
 }
 
 message AfeDelaySweepAfeResult {
@@ -185,6 +202,11 @@ message AfeDelaySweepAfeResult {
   uint32 originalDelay   = 2;
   uint32 bitslip         = 3;
   repeated AfeDelaySweepPoint points = 4;
+  uint32 selected_delay = 5;
+  uint32 approved_lane_mask = 6;
+  uint32 first_passing_tap = 7;
+  uint32 last_passing_tap = 8;
+  bool applied = 9;
 }
 
 message AfeDelaySweepResponse {
@@ -192,7 +214,69 @@ message AfeDelaySweepResponse {
   string message = 2;
   uint32 originalVtcEnable = 3;
   repeated AfeDelaySweepAfeResult afes = 4;
+  AcquisitionBackend backend = 5;
 }
+
+// DMA is additive. No legacy dump/trigger RPC changes its meaning.
+enum AcquisitionBackend { ACQUISITION_SPYBUFFER = 0; ACQUISITION_DMA = 1; }
+enum AlignmentPolicy { ALIGNMENT_LEGACY_AUTO = 0; ALIGNMENT_SKIP = 1; }
+enum DmaTriggerSource {
+  DMA_TRIGGER_SOFTWARE = 0; DMA_TRIGGER_EXTERNAL = 1; DMA_TRIGGER_TIMING = 2;
+  DMA_TRIGGER_ALL = 3; DMA_TRIGGER_SELF = 4;
+}
+enum FrontendState {
+  FRONTEND_UNCONFIGURED = 0; FRONTEND_CONFIGURED_UNALIGNED = 1;
+  FRONTEND_CALIBRATING = 2; FRONTEND_ALIGNED = 3; FRONTEND_FAILED = 4;
+}
+message AfeAcquisitionState {
+  uint32 afe = 1; FrontendState state = 2; uint32 approved_lane_mask = 3;
+  uint64 configuration_generation = 4;
+}
+message AcquisitionCapabilitiesRequest {}
+message AcquisitionCapabilitiesResponse {
+  bool success = 1; uint32 protocol_revision = 2; AcquisitionBackend backend = 3;
+  repeated AcquisitionBackend available_backends = 4;
+  repeated DmaTriggerSource dma_trigger_sources = 5;
+  uint32 gateware_build_id = 6; uint32 gateware_abi = 7;
+  uint32 gateware_capabilities = 8; uint32 sample_format = 9;
+  uint64 maximum_job_bytes = 10; uint32 maximum_samples = 11;
+  uint32 maximum_waveforms = 12; uint32 maximum_fragment_bytes = 13;
+  repeated AfeAcquisitionState afes = 14;
+  string message = 15; bool timestamp_available = 16;
+  bool dma_available = 17; uint64 maximum_scan_ticks = 18;
+}
+enum DmaJobState {
+  DMA_JOB_IDLE = 0; DMA_JOB_RUNNING = 1; DMA_JOB_READY = 2;
+  DMA_JOB_CANCELLED = 3; DMA_JOB_FAILED = 4;
+}
+message DmaAcquireRequest {
+  AcquisitionBackend backend = 1; repeated uint32 channels = 2;
+  uint32 samples = 3; uint32 waveforms = 4;
+  DmaTriggerSource trigger_source = 5; uint32 timeout_ms = 6;
+}
+message DmaJobRequest { uint64 job_id = 1; }
+message DmaJobResponse {
+  bool success = 1; string message = 2; uint64 job_id = 3; DmaJobState state = 4;
+  uint32 completed_waveforms = 5; uint32 expected_waveforms = 6;
+  AcquisitionBackend backend = 7; AfeDelaySweepResponse scan_result = 8;
+}
+message DmaReadRequest {
+  uint64 job_id = 1; uint32 waveform = 2; uint32 route = 3;
+  uint32 tick_offset = 4; uint32 maximum_bytes = 5;
+}
+message DmaReadResponse {
+  bool success = 1; string message = 2; uint64 job_id = 3;
+  uint32 waveform = 4; uint32 route = 5; uint32 sequence = 6;
+  repeated uint32 channels = 7; uint32 samples = 8;
+  uint32 expected_waveforms = 9; uint32 tick_offset = 10; uint32 tick_count = 11;
+  bytes raw16_le = 12; bool final_route = 13; bool final_waveform = 14;
+  bool final_job = 15; AcquisitionBackend backend = 16;
+  uint32 gateware_build_id = 17; uint32 sample_format = 18;
+  uint64 timestamp = 19; bool timestamp_valid = 20;
+  bool independently_software_triggered = 21;
+}
+enum DmaControlAction { DMA_CANCEL = 0; DMA_ACK = 1; DMA_KEEPALIVE = 2; }
+message DmaControlRequest { uint64 job_id = 1; DmaControlAction action = 2; }
 
 // Applies a persistent manual timing configuration to one AFE. AFE numbers
 // use board numbering; the server performs the board-to-PL mapping.
@@ -404,6 +488,12 @@ enum MessageTypeV2 {
   // Optional generator in the afe0-synthetic firmware profile
   MT2_CONFIGURE_SYNTHETIC_SIPM_REQ    = 332; MT2_CONFIGURE_SYNTHETIC_SIPM_RESP    = 333;
   MT2_READ_SYNTHETIC_SIPM_CONFIG_REQ  = 334; MT2_READ_SYNTHETIC_SIPM_CONFIG_RESP  = 335;
+  MT2_ACQUISITION_CAPABILITIES_REQ = 336; MT2_ACQUISITION_CAPABILITIES_RESP = 337;
+  MT2_DMA_ACQUIRE_REQ = 338; MT2_DMA_ACQUIRE_RESP = 339;
+  MT2_DMA_STATUS_REQ = 340; MT2_DMA_STATUS_RESP = 341;
+  MT2_DMA_READ_REQ = 342; MT2_DMA_READ_RESP = 343;
+  MT2_DMA_CONTROL_REQ = 344; MT2_DMA_CONTROL_RESP = 345;
+  MT2_DMA_SCAN_REQ = 346; MT2_DMA_SCAN_RESP = 347;
   
   // HD Mezzanine-specific commands
   MT2_SET_HDMEZZ_BLOCK_ENABLE_REQ   = 400;   MT2_SET_HDMEZZ_BLOCK_ENABLE_RESP = 401;

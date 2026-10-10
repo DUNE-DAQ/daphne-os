@@ -114,6 +114,13 @@ void TestIdentityAdmission() {
 
 void TestModeParsing() {
   using namespace daphne_sc;
+  Require(parse_gateware_mode("raw-dma") == GatewareMode::kRawDma, "raw DMA parses");
+  GatewareIdentity raw{kGatewareIdentityMagic, kGatewareAbiV2, 3, 0x1234567, kGatewareAfeDmaCapability};
+  validate_gateware_identity(raw, GatewareMode::kRawDma);
+  raw.build_id = 0x7654321;
+  validate_gateware_identity(raw, GatewareMode::kRawDma);
+  raw.capabilities = 0;
+  RequireThrows([&] { validate_gateware_identity(raw, GatewareMode::kRawDma); }, "AFE", "pattern-only DMA is rejected");
   Require(parse_gateware_mode("self-trigger") == GatewareMode::kSelfTrigger,
           "self-trigger mode parses");
   Require(parse_gateware_mode("full-stream") == GatewareMode::kFullStream,
@@ -289,3 +296,4 @@ int main() {
   std::cout << "gateware mode tests passed\n";
   return 0;
 }
+

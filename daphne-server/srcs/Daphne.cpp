@@ -3,11 +3,11 @@
 #include <thread>
 #include <chrono>
 
-Daphne::Daphne()
+Daphne::Daphne(bool enable_spybuffer)
 	: afe(std::make_unique<Afe>()),
 	  dac(std::make_unique<Dac>()),
 	  frontend(std::make_unique<FrontEnd>()),
-	  spyBuffer(std::make_unique<SpyBuffer>())
+	  spyBuffer(enable_spybuffer ? std::make_unique<SpyBuffer>() : nullptr)
 	{
 		this->initRegDictHistory();
 
@@ -80,7 +80,7 @@ FrontEnd* Daphne::getFrontEnd(){
 }
 
 SpyBuffer* Daphne::getSpyBuffer(){
-
+	if (!this->spyBuffer) throw std::runtime_error("SPYBUFFER_UNAVAILABLE in raw-dma mode");
 	return this->spyBuffer.get();
 }
 

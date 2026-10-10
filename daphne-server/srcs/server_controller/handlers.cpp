@@ -742,6 +742,33 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
     std::ostringstream out;
     bool ok_all = true;
 
+    if (mode == GatewareMode::kRawDma) {
+      if (requested_cfg.backend() != daphne::ACQUISITION_DMA)
+        throw std::invalid_argument("BACKEND_MISMATCH: select DMA explicitly");
+      if (requested_cfg.alignment_policy() != daphne::ALIGNMENT_SKIP)
+        throw std::invalid_argument("ALIGNMENT_BACKEND_UNSUPPORTED: use --dma --skip-alignment, then scan_afe_delay_eye.py --dma --apply_best");
+      if (requested_cfg.afes_size() == 0 || requested_cfg.channels_size() == 0)
+        throw std::invalid_argument("DMA configuration requires AFE and channel settings");
+      std::set<uint32_t> afes, channels;
+      for (const auto& a : requested_cfg.afes()) {
+        if (a.id() >= 5 || !afes.insert(a.id()).second || a.attenuators() > 4095 || a.v_bias() > 4095 ||
+            a.pga().lpf_cut_frequency() > 4 || a.pga().lpf_cut_frequency() == 1 ||
+            (a.pga().has_clamp() && a.pga().clamp() != 0 && a.pga().clamp() != 2 && a.pga().clamp() != 4 && a.pga().clamp() != 6) ||
+            a.lna().clamp() > 3 || a.lna().gain() > 2)
+          throw std::invalid_argument("Invalid or duplicate DMA AFE configuration");
+        if (a.adc().resolution() || a.adc().output_format() || a.adc().sb_first())
+          throw std::invalid_argument("DMA_FORMAT_UNSUPPORTED: use ADC14 unsigned LSB-first (--adc_resolution 0)");
+      }
+      for (const auto& c : requested_cfg.channels()) {
+        if (c.id() >= 40 || !channels.insert(c.id()).second || c.trim() > 4095 || c.offset() > 4095 || !afes.count(c.id() / 8))
+          throw std::invalid_argument("Invalid or duplicate DMA channel configuration");
+      }
+      if (requested_cfg.biasctrl() > 4095)
+        throw std::invalid_argument("DMA biasctrl out of range");
+    } else if (requested_cfg.backend() != daphne::ACQUISITION_SPYBUFFER) {
+      throw std::invalid_argument("BACKEND_MISMATCH: this server profile does not provide DMA");
+    }
+
     const std::vector<uint32_t> full_stream_channels(
         requested_cfg.full_stream_channels().begin(),
         requested_cfg.full_stream_channels().end());
@@ -788,6 +815,8 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
         out << "[SELF_TRIGGER_CONTROL]\n" << st_msg;
       }
     }
+    if (mode == GatewareMode::kRawDma)
+      out << "[SELF_TRIGGER_CONTROL] inactive/ignored for raw DMA: thresholds, tp_conf, compensator and inverters.\n";
 
     for (const ChannelConfig& ch_config : requested_cfg.channels()) {
       const uint32_t ch = ch_config.id();
@@ -870,12 +899,17 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
       r = daphne.getAfe()->setAFEFunction(afe_pl, "LPF_PROGRAMMABILITY", afe_config.pga().lpf_cut_frequency());
       out << "Function LPF_PROGRAMMABILITY in AFE " << afe_board << " configured correctly.\nReturned value: " << r
           << "\n";
+      if (mode == GatewareMode::kRawDma) {
+        r = daphne.getAfe()->setAFEFunction(afe_pl, "PGA_GAIN_CONTROL", afe_config.pga().gain() ? 1U : 0U);
+        if (r != (afe_config.pga().gain() ? 1U : 0U)) throw std::runtime_error("DMA PGA gain readback mismatch");
+      }
       r = daphne.getAfe()->setAFEFunction(afe_pl,
                                           "PGA_INTEGRATOR_DISABLE",
                                           afe_config.pga().integrator_disable() ? 1u : 0u);
       out << "Function PGA_INTEGRATOR_DISABLE in AFE " << afe_board << " configured correctly.\nReturned value: " << r
           << "\n";
-      r = daphne.getAfe()->setAFEFunction(afe_pl, "PGA_CLAMP_LEVEL", 2u);
+      const uint32_t pga_clamp = mode == GatewareMode::kRawDma && afe_config.pga().has_clamp() ? afe_config.pga().clamp() : 2u;
+      r = daphne.getAfe()->setAFEFunction(afe_pl, "PGA_CLAMP_LEVEL", pga_clamp);
       out << "Function PGA_CLAMP_LEVEL in AFE " << afe_board << " configured correctly.\nReturned value: " << r << "\n";
       r = daphne.getAfe()->setAFEFunction(afe_pl, "ACTIVE_TERMINATION_ENABLE", 0u);
       out << "Function ACTIVE_TERMINATION_ENABLE in AFE " << afe_board << " configured correctly.\nReturned value: " << r
@@ -893,17 +927,39 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
           << "\n";
     }
 
-    if (config_resets_enabled()) {
+    if (mode == GatewareMode::kRawDma) {
+      for (const auto& a : requested_cfg.afes()) {
+        const auto pl = afe_definitions::AFE_board2PL_map.at(a.id());
+        for (const char* name : {"ADC_COMPLETE_PDN", "LVDS_OUTPUT_DISABLE", "ADC_PDN_CH", "PARTIAL_PDN", "POWER-DOWN_LVDS", "TEST_PATTERN_MODES", "SYNC_PATTERN"})
+          if (daphne.getAfe()->setAFEFunction(pl, name, 0) != 0)
+            throw std::runtime_error(std::string("DMA AFE readback mismatch: ") + name);
+        const std::vector<std::pair<std::string, uint32_t>> checks = {
+          {"SERIALIZED_DATA_RATE", 1}, {"ADC_RESOLUTION_RESET", 0}, {"ADC_OUTPUT_FORMAT", 0}, {"LSB_MSB_FIRST", 0},
+          {"LPF_PROGRAMMABILITY", a.pga().lpf_cut_frequency()}, {"PGA_GAIN_CONTROL", a.pga().gain() ? 1U : 0U},
+          {"PGA_INTEGRATOR_DISABLE", a.pga().integrator_disable() ? 1U : 0U},
+          {"PGA_CLAMP_LEVEL", a.pga().has_clamp() ? a.pga().clamp() : 2U}, {"ACTIVE_TERMINATION_ENABLE", 0},
+          {"LNA_INPUT_CLAMP_SETTING", a.lna().clamp()}, {"LNA_GAIN", a.lna().gain()},
+          {"LNA_INTEGRATOR_DISABLE", a.lna().integrator_disable() ? 1U : 0U}};
+        for (const auto& c : checks) if (daphne.getAfe()->getAFEFunction(pl, c.first) != c.second)
+          throw std::runtime_error("DMA AFE readback mismatch: " + c.first);
+      }
+      daphne.getAfe()->setPowerState(1);
+      daphne.getFrontEnd()->doResetDelayCtrl();
+      daphne.getFrontEnd()->doResetSerDesCtrl();
+      if (!daphne.getFrontEnd()->waitForDelayCtrlReady()) throw std::runtime_error("IDELAY not ready");
+    } else if (config_resets_enabled()) {
       daphne.getAfe()->setPowerState(1);
     }
 
-    if (ok_all && auto_align_enabled()) {
+    if (ok_all && auto_align_enabled() && mode != GatewareMode::kRawDma) {
       cmd_alignAFEs align_request;
       cmd_alignAFEs_response align_response;
       std::string align_msg;
       const bool align_ok = alignAFE(align_request, align_response, daphne, align_msg);
       out << "\n[ALIGN_AFE]\n" << align_msg;
       ok_all = ok_all && align_ok;
+    } else if (mode == GatewareMode::kRawDma) {
+      out << "\n[ALIGN_AFE] required: run scan_afe_delay_eye.py --dma --apply_best";
     } else if (!auto_align_enabled()) {
       out << "\n[ALIGN_AFE] skipped (DAPHNE_SKIP_ALIGN_AFTER_CONFIGURE set)";
     }
@@ -2581,6 +2637,11 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
 
     resp.set_success(ok);
     resp.set_message(msg);
+    resp.set_backend(req.backend());
+    if (mode == GatewareMode::kRawDma) {
+      resp.set_configured(ok);
+      resp.set_alignment_required(ok);
+    }
     out = serialize_or_empty(resp);
   };
 
@@ -3384,7 +3445,32 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     out = serialize_or_empty(resp);
   };
 
+  if (mode == GatewareMode::kRawDma) {
+    for (const auto type : {daphne::MT2_DUMP_SPYBUFFER_REQ, daphne::MT2_ALIGN_AFE_REQ,
+         daphne::MT2_AFE_DELAY_SWEEP_REQ, daphne::MT2_DO_SOFTWARE_TRIGGER_REQ,
+         daphne::MT2_WRITE_SPYBUFFER_TRIGGER_SOURCE_REQ, daphne::MT2_READ_SPYBUFFER_TRIGGER_SOURCE_REQ,
+         daphne::MT2_READ_TRIGGER_COUNTERS_REQ, daphne::MT2_CONFIGURE_SYNTHETIC_SIPM_REQ,
+         daphne::MT2_READ_SYNTHETIC_SIPM_CONFIG_REQ}) {
+      handlers[type] = [type](const std::string&, std::string& out, Daphne&) {
+        out = control_error_payload(type, "BACKEND_UNSUPPORTED: legacy spybuffer/self-trigger RPC is unavailable in raw-dma; use DMA RPCs");
+      };
+    }
+  }
   return handlers;
+}
+
+std::string control_error_payload(daphne::MessageTypeV2 type, const std::string& message) {
+  if (type == daphne::MT2_DUMP_SPYBUFFER_REQ) {
+    daphne::DumpSpyBuffersResponse r; r.set_success(false); r.set_message(message); return r.SerializeAsString();
+  }
+  if (type == daphne::MT2_DUMP_SPYBUFFER_CHUNK_REQ) {
+    daphne::DumpSpyBuffersChunkResponse r; r.set_success(false); r.set_message(message); r.set_isfinal(true); return r.SerializeAsString();
+  }
+  if (type == daphne::MT2_ALIGN_AFE_REQ) {
+    daphne::cmd_alignAFEs_response r; r.set_success(false); r.set_message(message); return r.SerializeAsString();
+  }
+  // Other control responses share success=1/message=2 wire fields.
+  daphne::ConfigureResponse r; r.set_success(false); r.set_message(message); return r.SerializeAsString();
 }
 
 }  // namespace daphne_sc
