@@ -243,6 +243,13 @@ if(BUILD_TESTING)
   add_executable(dma_service_tests tests/dma_service_tests.cpp)
   target_link_libraries(dma_service_tests PRIVATE daphne_dma_jobs)
   add_test(NAME dma_service_unit COMMAND dma_service_tests)
+  find_package(PythonInterp QUIET)
+  if(PYTHONINTERP_FOUND AND DAPHNE_BUILD_PY_PROTO)
+    add_test(NAME dma_client_unit COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_dma_client.py)
+    set_tests_properties(dma_client_unit PROPERTIES ENVIRONMENT "DAPHNE_PROTO_PYTHON_DIR=${CMAKE_CURRENT_BINARY_DIR}/srcs/protobuf")
+    add_test(NAME dma_osc_unit COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_dma_osc.py)
+    set_tests_properties(dma_osc_unit PROPERTIES ENVIRONMENT "DAPHNE_PROTO_PYTHON_DIR=${CMAKE_CURRENT_BINARY_DIR}/srcs/protobuf;QT_QPA_PLATFORM=offscreen")
+  endif()
 
 endif()
 

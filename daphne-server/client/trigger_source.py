@@ -13,14 +13,14 @@ _SOURCE_ENUM_NAMES = {
 }
 
 
-def add_trigger_source_arguments(parser, default="external"):
+def add_trigger_source_arguments(parser, default="external", include_self=False):
     parser.add_argument(
         "-trigger_source",
         "--trigger-source",
-        choices=TRIGGER_SOURCE_CHOICES,
+        choices=TRIGGER_SOURCE_CHOICES + (("self",) if include_self else ()),
         default=None,
         help=(
-            "Global spybuffer trigger source: software, external, timing, or "
+            ("Acquisition trigger source: software, external, timing, self, or " if include_self else "Global spybuffer trigger source: software, external, timing, or ") +
             f"all (default: {default})."
         ),
     )

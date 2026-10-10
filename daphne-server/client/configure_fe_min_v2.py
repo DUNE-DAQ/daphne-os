@@ -21,10 +21,8 @@ import random
 import json
 from datetime import datetime, timezone
 
-# Import generated protos
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from srcs.protobuf import daphneV3_high_level_confs_pb2 as pb_high
-from srcs.protobuf import daphneV3_low_level_confs_pb2 as pb_low
+from protobuf_loader import load_protobuf_modules
+pb_high, pb_low = load_protobuf_modules(require_dma="--dma" in sys.argv)
 from client_dictionaries import (
     lpf_dict,
     pga_clamp_level_dict,
@@ -264,6 +262,8 @@ def main():
         default=None,
         help="ConfigureRequest.timeout_ms sent to server (default: use --timeout)",
     )
+    ap.add_argument("--dma", action="store_true", help="Configure the raw DMA backend")
+    ap.add_argument("--skip-alignment", action="store_true", help="Configure DMA without legacy alignment; run the DMA eye scan separately")
     ap.add_argument("--full", action="store_true", help="Print full ConfigureResponse message")
     ap.add_argument("--json", action="store_true", help="Emit a JSON summary to stdout at the end")
     ap.add_argument("-vgain", type=int, default=1600, help="AFE attenuator code (default 1600)")
@@ -274,7 +274,7 @@ def main():
     ap.add_argument("-pga_gain_control", type=str, choices=pga_gain_control_dict.keys(), default="24 dB")
     ap.add_argument("-lna_gain_control", type=str, choices=lna_gain_control_dict.keys(), default="12 dB")
     ap.add_argument("-lna_input_clamp", type=str, choices=lna_input_clamp_dict.keys(), default="auto")
-    ap.add_argument("--adc_resolution", type=int, choices=[0, 1], default=1, help="ADC resolution bit (0/1)")
+    ap.add_argument("--adc_resolution", type=int, choices=[0, 1], default=None, help="ADC resolution bit (default DMA: 0, legacy: 1)")
     ap.add_argument(
         "--biasctrl-dac",
         type=int,
@@ -309,6 +309,19 @@ def main():
         help="Per-channel trim DAC override (repeatable or CSV), e.g. --ch-trim 12:1000 --ch-trim 13:1200",
     )
     args = ap.parse_args()
+    if args.dma and (not args.skip_alignment or args.align_afes):
+        ap.error("--dma requires --skip-alignment; use scan_afe_delay_eye.py --dma --apply_best afterwards")
+    if args.skip_alignment and not args.dma:
+        ap.error("--skip-alignment requires --dma")
+    if args.adc_resolution is None:
+        args.adc_resolution = 0 if args.dma else 1
+    if args.dma and args.adc_resolution != 0:
+        ap.error("raw DMA requires ADC14 unsigned (--adc_resolution 0)")
+    if args.dma:
+        from v2_client import V2Client
+        from dma_client import DmaClient
+        with V2Client(pb_high, args.host, args.port, timeout_ms=args.timeout) as transport:
+            DmaClient(pb_high, transport.rpc).probe()
 
     endpoint = f"tcp://{args.host}:{args.port}"
     ctx = zmq.Context.instance()
@@ -364,6 +377,12 @@ def main():
     for afe in cfg.afes:
         if hasattr(afe.adc, "resolution"):
             afe.adc.resolution = bool(args.adc_resolution)
+    if args.dma:
+        cfg.backend = pb_high.ACQUISITION_DMA
+        cfg.alignment_policy = pb_high.ALIGNMENT_SKIP
+        for afe in cfg.afes:
+            set_adc_fields(afe.adc, resolution=False, output_format=False, sb_first=False)
+            afe.pga.clamp = pga_clamp_val
     req = build_configure_v2_envelope(cfg, route=args.route)
 
     # Client timestamps & send
@@ -428,6 +447,9 @@ def main():
 
     summarize_configure_response(out, full=args.full)
 
+    if args.dma and (not out.success or not out.configured or out.backend != pb_high.ACQUISITION_DMA):
+        print("DMA configuration failed; no bias follow-ups sent")
+        return 1
     explicit_bias_writes_json = []
     if afe_bias_overrides:
         print("[BIAS_WRITEBACK]")

@@ -31,10 +31,11 @@ from trigger_source import (
     configure_trigger_source,
     resolve_trigger_source,
 )
+from dma_client import DmaClient, link_rpc
 from waveparse import parse_dump_response
 
 
-pb_high, _pb_low = load_protobuf_modules(require_trigger_source=True)
+pb_high, _pb_low = load_protobuf_modules(require_trigger_source=True, require_dma="--dma" in sys.argv)
 
 
 # ---------------------- Window functions ----------------------
@@ -190,7 +191,12 @@ class WaveformDiskWriter(threading.Thread):
                     if item is self._sentinel:
                         break
 
-                    yk = item
+                    receipt = None
+                    metadata = None
+                    if isinstance(item, tuple):
+                        yk, receipt, metadata = item
+                    else:
+                        yk = item
                     if yk.ndim != 2 or yk.shape[0] != len(self.channels):
                         raise ValueError(
                             f"Invalid frame shape {yk.shape}, expected ({len(self.channels)}, N)"
@@ -207,9 +213,14 @@ class WaveformDiskWriter(threading.Thread):
                         self._bytes_written += local_bytes
                         written = self._written_frames
 
-                    if written % self.flush_every == 0:
+                    if receipt is not None or written % self.flush_every == 0:
                         for handle in files.values():
                             handle.flush()
+                    if receipt is not None:
+                        with (self.save_dir / "dma_waveforms.jsonl").open("a", encoding="utf-8") as metadata_file:
+                            metadata_file.write(json.dumps(metadata) + "\n")
+                            metadata_file.flush()
+                        receipt.set()
                 except Exception as exc:
                     with self._lock:
                         self._error = f"writer runtime failed: {exc}"
@@ -272,6 +283,8 @@ class AcquisitionWorker(QtCore.QObject):
         save_queue=None,
         save_health_checker=None,
         fft_config=None,
+        dma=False,
+        dma_trigger_source="software",
     ):
         super().__init__()
         self.endpoint = endpoint
@@ -279,6 +292,9 @@ class AcquisitionWorker(QtCore.QObject):
         self.identity = identity
         self.timeout_ms = max(1, int(timeout_ms))
         self.req = req
+        self.dma = dma
+        self.dma_trigger_source = dma_trigger_source
+        self._dma_client = None
         self.period_ms = max(1, int(period_ms))
         self.max_waveforms = max(0, int(max_waveforms))
 
@@ -423,7 +439,7 @@ class AcquisitionWorker(QtCore.QObject):
         self._stop_evt.clear()
 
         self._timer = QtCore.QTimer()
-        self._timer.setInterval(self.period_ms)
+        self._timer.setInterval(0 if self.dma else self.period_ms)
         self._timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
         self._timer.timeout.connect(self._poll_once)
         self._timer.start()
@@ -440,6 +456,12 @@ class AcquisitionWorker(QtCore.QObject):
         self._close_link()
 
     def _close_link(self):
+        if self._dma_client is not None:
+            try:
+                self._dma_client.cancel()
+            except Exception as exc:
+                self.status.emit(f"[DMA cancellation] {exc}")
+            self._dma_client = None
         if self._link is not None:
             try:
                 self._link.close()
@@ -451,27 +473,46 @@ class AcquisitionWorker(QtCore.QObject):
         if self._link is not None:
             return
         self._link = V2Link(self.endpoint, self.identity.encode(), self.timeout_ms)
+        if self.dma:
+            self._dma_client = DmaClient(pb_high, link_rpc(pb_high, self._link, self.route), self._stop_evt.is_set)
+            self._dma_client.probe(self.dma_trigger_source)
         self.status.emit(f"Connected to {self.endpoint}")
 
-    def _push_save_frame(self, yk):
+    def _push_save_frame(self, yk, metadata=None):
         if self.save_queue is None:
             return
 
         frame_copy = yk.copy()
+        receipt = threading.Event() if self.dma else None
+        if receipt is not None:
+            frame_copy = (frame_copy, receipt, metadata)
         while not self._stop_evt.is_set():
             try:
                 self.save_queue.put(frame_copy, timeout=0.05)
+                if receipt is not None:
+                    deadline = time.monotonic() + 30
+                    while not receipt.wait(.05):
+                        if self._stop_evt.is_set():
+                            raise InterruptedError("Stopped while writing DMA frame")
+                        error = self.save_health_checker() if self.save_health_checker else ""
+                        if error or time.monotonic() > deadline:
+                            raise RuntimeError(error or "DMA disk writer deadline expired")
+                        self._dma_client.keepalive()
                 return
             except queue.Full:
                 if self.save_health_checker is not None:
                     writer_error = self.save_health_checker()
                     if writer_error:
+                        if self.dma:
+                            raise RuntimeError(writer_error)
                         self.status.emit(f"[writer disabled] {writer_error}")
                         self.save_queue = None
                         return
                 self._save_backpressure += 1
                 if self._save_backpressure % 20 == 0:
                     self.status.emit("[writer backlog] waiting for disk queue")
+        if self.dma:
+            raise InterruptedError("DMA stopped before the requested disk write")
 
     def _emit_telemetry(self, force=False):
         now_s = time.monotonic()
@@ -495,37 +536,51 @@ class AcquisitionWorker(QtCore.QObject):
         try:
             self._ensure_link()
 
-            payload = self.req.SerializeToString()
-            _, rep_env, rtt_ms = self._link.request(
-                pb_high.MT2_DUMP_SPYBUFFER_REQ,
-                payload,
-                route=self.route,
-                stop_checker=self._stop_evt.is_set,
-            )
+            metadata = None
+            if self.dma:
+                t0 = time.monotonic()
+                y_all, metadata = self._dma_client.acquire(list(self.req.channelList), self.req.numberOfSamples,
+                    1, self.dma_trigger_source, timeout_ms=10000)
+                rtt_ms = (time.monotonic() - t0) * 1000
+                yk = np.ascontiguousarray(y_all[0])
+            else:
+                payload = self.req.SerializeToString()
+                _, rep_env, rtt_ms = self._link.request(
+                    pb_high.MT2_DUMP_SPYBUFFER_REQ,
+                    payload,
+                    route=self.route,
+                    stop_checker=self._stop_evt.is_set,
+                )
 
-            if rep_env.type != pb_high.MT2_DUMP_SPYBUFFER_RESP:
-                raise RuntimeError(f"Unexpected V2 type {rep_env.type}")
+                if rep_env.type != pb_high.MT2_DUMP_SPYBUFFER_RESP:
+                    raise RuntimeError(f"Unexpected V2 type {rep_env.type}")
 
-            resp = pb_high.DumpSpyBuffersResponse()
-            resp.ParseFromString(rep_env.payload)
+                resp = pb_high.DumpSpyBuffersResponse()
+                resp.ParseFromString(rep_env.payload)
 
-            if not resp.success:
-                self.status.emit(f"[server] {resp.message}")
-                return
+                if not resp.success:
+                    self.status.emit(f"[server] {resp.message}")
+                    return
 
-            y_all, _meta = parse_dump_response(resp)
-            yk = np.ascontiguousarray(y_all[0])
+                y_all, _meta = parse_dump_response(resp)
+                yk = np.ascontiguousarray(y_all[0])
 
             self._frames_acquired += 1
             self._update_fft(yk)
             self.plot_update.emit(yk, float(rtt_ms), int(self._frames_acquired), time.time_ns())
-            self._push_save_frame(yk)
+            self._push_save_frame(yk, metadata)
+            if self.dma:
+                self._dma_client.acknowledge()
             if self.max_waveforms > 0 and self._frames_acquired >= self.max_waveforms:
                 self._finish_acquisition(f"[done] acquired {self._frames_acquired} waveforms")
                 return
 
         except InterruptedError:
-            pass
+            if self.dma and self._dma_client is not None:
+                try:
+                    self._dma_client.cancel()
+                except Exception as exc:
+                    self.status.emit(f"[DMA cancellation] {exc}")
         except zmq.Again:
             self._timeouts += 1
             self.status.emit("[timeout] No response")
@@ -607,6 +662,8 @@ class DaphneOscApp(QtWidgets.QWidget):
             self.writer.wait_ready(timeout_s=2.0)
             writer_init_error = self.writer.snapshot()["error"]
             if writer_init_error:
+                if args.dma:
+                    raise RuntimeError(writer_init_error)
                 self._latest_worker_msg = f"[writer disabled] {writer_init_error}"
                 self.writer = None
             else:
@@ -651,6 +708,8 @@ class DaphneOscApp(QtWidgets.QWidget):
             max_waveforms=args.max_waveforms,
             save_queue=self.save_queue,
             save_health_checker=self._writer_error_text,
+            dma=args.dma,
+            dma_trigger_source=args.trigger_source,
             fft_config={
                 "enabled": self.enable_fft,
                 "channel_index": self.fft_channel_index,
@@ -689,6 +748,10 @@ class DaphneOscApp(QtWidgets.QWidget):
             "route": self.route,
             "channels": self.channels,
             "samples_per_waveform": self.n_samples,
+            "backend": "dma" if args.dma else "spybuffer",
+            "wire_format": "raw16_le" if args.dma else "legacy",
+            "independent_software_triggers": bool(args.dma),
+            "continuous": False,
             "trigger_source": self.trigger_source,
             "software_trigger": bool(self.software_trigger),
             "acq_period_ms": int(args.period_ms),
@@ -757,6 +820,9 @@ class DaphneOscApp(QtWidgets.QWidget):
         self.curves = []
         for i, ch in enumerate(self.channels):
             c = self.plot_wf.plot(pen=pens[i % len(pens)], name=f"ch {ch}")
+            if args.dma:
+                c.setDownsampling(auto=True, method="peak")
+                c.setClipToView(True)
             self.curves.append(c)
 
         self.rms_text = pg.TextItem(
@@ -1390,10 +1456,11 @@ def main():
     parser.add_argument("--channels", type=str, default="", help="CSV/range of channels, e.g. '0,8,16' or '0-7'")
 
     parser.add_argument("-L", type=int, required=True, help="Samples per waveform (<= 2048)")
-    add_trigger_source_arguments(parser)
+    parser.add_argument("--dma", action="store_true", help="Acquire long waveforms through raw DMA")
+    add_trigger_source_arguments(parser, include_self="--dma" in sys.argv)
 
     parser.add_argument("-enable_fft", "--enable_fft", action="store_true", help="Show statistically averaged FFT plot")
-    parser.add_argument("-fft_avg_waves", type=int, default=2000, help="Averages for FFT")
+    parser.add_argument("-fft_avg_waves", type=int, default=16 if "--dma" in sys.argv else 2000, help="Averages for FFT")
     parser.add_argument(
         "-fft_window_function",
         type=str,
@@ -1455,7 +1522,7 @@ def main():
         print("Channels must be in [0..39]")
         return 2
 
-    if not (1 <= args.L <= 2048):
+    if args.L < 1 or (not args.dma and args.L > 2048):
         print("L must be in [1..2048]")
         return 2
 
@@ -1503,12 +1570,17 @@ def main():
             )
             return reply.type, reply.payload
 
-        configure_trigger_source(
-            pb_high,
-            send_trigger_source_request,
-            args.trigger_source,
-        )
-        print(f"Configured spybuffer trigger source: {args.trigger_source}")
+        if args.dma:
+            client = DmaClient(pb_high, link_rpc(pb_high, config_link, args.route))
+            client.probe(args.trigger_source)
+            client.batch_limit(args.channels, args.L)
+            if args.enable_fft and args.fft_avg_waves * (args.L // 2 + 1) * 8 > 64 * 1024 * 1024:
+                raise ValueError("DMA FFT average exceeds 64 MiB; reduce -fft_avg_waves")
+            args.save_queue_frames = min(args.save_queue_frames, max(1, 64 * 1024 * 1024 // (2 * len(args.channels) * args.L)))
+            print("DMA software trigger: independent START per waveform")
+        else:
+            configure_trigger_source(pb_high, send_trigger_source_request, args.trigger_source)
+            print(f"Configured spybuffer trigger source: {args.trigger_source}")
     except Exception as exc:
         print(f"Could not configure trigger source: {exc}", file=sys.stderr)
         return 2

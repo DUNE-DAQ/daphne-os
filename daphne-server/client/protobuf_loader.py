@@ -9,7 +9,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_protobuf_modules(require_trigger_source=False, require_synthetic_sipm=False):
+def load_protobuf_modules(require_trigger_source=False, require_synthetic_sipm=False, require_dma=False):
     candidates = []
     configured = os.environ.get("DAPHNE_PROTO_PYTHON_DIR")
     if configured:
@@ -24,6 +24,8 @@ def load_protobuf_modules(require_trigger_source=False, require_synthetic_sipm=F
     visited = set()
     errors = []
     required_tokens = []
+    if require_dma:
+        required_tokens.extend(("DmaAcquireRequest", "DmaReadResponse", "AcquisitionCapabilitiesResponse", "MT2_DMA_SCAN_REQ"))
     if require_trigger_source:
         required_tokens.extend((
             "SPY_TRIGGER_SOURCE_LEGACY_ALL",

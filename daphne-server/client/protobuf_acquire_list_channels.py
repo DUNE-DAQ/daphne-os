@@ -18,7 +18,7 @@ from trigger_source import (
 from waveparse import parse_dump_response
 
 
-pb_high, pb_low = load_protobuf_modules(require_trigger_source=True)
+pb_high, pb_low = load_protobuf_modules(require_trigger_source=True, require_dma="--dma" in sys.argv)
 
 
 def next_ids():
@@ -113,7 +113,8 @@ parser.add_argument("-foldername", type=str, required=True, help="Folder locatio
 parser.add_argument("-channel_list", type=str, nargs='+', required=True, help="List of channels (0-39). Accepts space or comma separated. Example: 0 1 2 3   or   0,1,2,3")
 parser.add_argument("-N", type=int, required=True, help="Number of waveforms.")
 parser.add_argument("-L", type=int, required=True, help="Length of each waveform.")
-add_trigger_source_arguments(parser)
+parser.add_argument("--dma", action="store_true", help="Acquire through raw DMA instead of spybuffer")
+add_trigger_source_arguments(parser, include_self="--dma" in sys.argv)
 parser.add_argument("-append_data", action='store_true', help="Append to existing per-channel files.")
 parser.add_argument("-debug", action='store_true', help="Debug printout.")
 parser.add_argument("--timeout_ms", type=int, default=30000, help="Socket timeout in ms for streaming/legacy replies (default 30000).")
@@ -131,6 +132,12 @@ parser.add_argument("-compression_level", type=int, default=1, choices=range(1, 
 parser.set_defaults(v2=True)
 args = parser.parse_args()
 resolve_trigger_source(parser, args)
+if args.dma:
+    from dma_acquire_cli import run_dma_acquire
+    try:
+        sys.exit(run_dma_acquire(args, pb_high))
+    except (ValueError, RuntimeError, TimeoutError) as exc:
+        parser.exit(2, f"DMA acquisition failed: {exc}\n")
 
 # ----------------------------- Setup ----------------------------------
 

@@ -999,7 +999,9 @@ def main() -> int:
     parser.add_argument("--ip", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9876)
     parser.add_argument("--route", default="mezz/0")
-    parser.add_argument("--afes", default="0,3,4")
+    parser.add_argument("--dma", action="store_true", help="Scan all bitslips using physical raw DMA ramp captures")
+    parser.add_argument("--verification-samples", type=int, default=32768)
+    parser.add_argument("--afes", default="0,1,2,3,4" if "--dma" in sys.argv else "0,3,4")
     parser.add_argument("--first-tap", type=int, default=0)
     parser.add_argument("--last-tap", type=int, default=511)
     parser.add_argument("--tap-step", type=int, default=4)
@@ -1016,7 +1018,7 @@ def main() -> int:
         "--coarse_step",
         dest="coarse_step",
         type=int,
-        default=10,
+        default=16 if "--dma" in sys.argv else 10,
         help="Initial IDELAY step used by --auto (default: 10).",
     )
     parser.add_argument(
@@ -1039,8 +1041,8 @@ def main() -> int:
             "simultaneously passing channel subset in each AFE."
         ),
     )
-    parser.add_argument("--samples", type=int, default=512)
-    parser.add_argument("--waveforms", type=int, default=8)
+    parser.add_argument("--samples", type=int, default=32768 if "--dma" in sys.argv else 512)
+    parser.add_argument("--waveforms", type=int, default=1 if "--dma" in sys.argv else 8)
     parser.add_argument("--settle-us", type=int, default=10)
     parser.add_argument("--timeout-ms", type=int, default=600000)
     parser.add_argument(
@@ -1078,7 +1080,7 @@ def main() -> int:
         parser.error("--coarse-step must be greater than zero")
     if args.accept_partial_config and not args.apply_best:
         parser.error("--accept_partial_config requires --apply_best")
-    if args.samples < 2 or args.samples > 2048:
+    if args.samples < 2 or (not args.dma and args.samples > 2048):
         parser.error("--samples must be in 2..2048")
     if args.waveforms <= 0:
         parser.error("--waveforms must be greater than zero")
@@ -1088,6 +1090,16 @@ def main() -> int:
         parser.error("--timeout-ms must be greater than zero")
     if args.max_error_rate < 0.0 or args.max_error_rate > 1.0:
         parser.error("--max-error-rate must be in 0..1")
+
+    if args.dma:
+        if args.max_error_rate != 0 or args.verification_samples < 32768:
+            parser.error("DMA requires zero errors and verification >= 32768 samples")
+        from dma_scan_cli import run_dma_scan
+        try:
+            return run_dma_scan(args, afes)
+        except (RuntimeError, ValueError, TimeoutError) as error:
+            print(f"DMA scan failed: {error}", file=sys.stderr)
+            return 1
 
     try:
         pb = load_protobuf_module(require_timing_write=args.apply_best)
