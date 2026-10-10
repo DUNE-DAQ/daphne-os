@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "client"))
 from protobuf_loader import load_protobuf_modules
 from dma_client import DmaClient
+from dma_output import prepare_dma_output, record_dma_output
 from dma_acquire_cli import run_dma_acquire
 pb, _ = load_protobuf_modules(require_dma=True)
 
@@ -47,7 +48,7 @@ class FakeServer:
             channels = sorted(ch for ch in self.channels if ch//16 == req.route)
             count = min(self.samples-req.tick_offset, req.maximum_bytes//(2*len(channels)))
             ticks = np.arange(req.tick_offset, req.tick_offset+count, dtype=np.uint16)
-            raw = np.stack([((ticks + ch*100 + req.waveform*10) & 0x3fff) << 2 for ch in channels], axis=1)
+            raw = np.stack([(((ticks + ch*100 + req.waveform*10) & 0x3fff) ^ 0x2000) << 2 for ch in channels], axis=1)
             last_route = max(ch//16 for ch in self.channels)
             final = req.tick_offset+count == self.samples
             r = pb.DmaReadResponse(success=True, job_id=7, backend=pb.ACQUISITION_DMA,
@@ -80,6 +81,7 @@ class DmaClientTests(unittest.TestCase):
             for i,ch in enumerate([39,0,17,8]):
                 np.testing.assert_array_equal(data[w,i], (np.arange(32769)+ch*100+w*10)&0x3fff)
         self.assertIsNone(metadata['waveforms'][0]['hardware_timestamp'])
+        self.assertEqual(metadata['saved_encoding'], 'offset_binary')
         self.assertFalse(any(t==pb.MT2_DMA_CONTROL_REQ for t,_ in server.calls))
         client.acknowledge()
         self.assertEqual(server.calls[-1][1].action,pb.DMA_ACK)
@@ -88,7 +90,8 @@ class DmaClientTests(unittest.TestCase):
         mutations = [lambda r: setattr(r,'sequence',2), lambda r: setattr(r,'sample_format',2),
                      lambda r: setattr(r,'tick_count',0), lambda r: setattr(r,'raw16_le',r.raw16_le[:-1]),
                      lambda r: setattr(r,'gateware_build_id',99), lambda r: setattr(r,'final_job',False),
-                     lambda r: r.channels.reverse(), lambda r: setattr(r,'tick_offset',1)]
+                     lambda r: r.channels.reverse(), lambda r: setattr(r,'tick_offset',1),
+                     lambda r: setattr(r,'raw16_le',bytes([r.raw16_le[0] | 1])+r.raw16_le[1:])]
         for corrupt in mutations:
             with self.subTest(corrupt=corrupt):
                 server=FakeServer();server.corrupt=corrupt;client=DmaClient(pb,server.rpc)
@@ -101,6 +104,33 @@ class DmaClientTests(unittest.TestCase):
             server=FakeServer(); client=DmaClient(pb,server.rpc)
             with self.assertRaisesRegex(RuntimeError,'TRIGGER_UNSUPPORTED'): client.acquire([0],32768,trigger_source=source)
             self.assertEqual([t for t,_ in server.calls],[pb.MT2_ACQUISITION_CAPABILITIES_REQ])
+
+    def test_zero_and_signed_limits_normalize_without_unsigned_wrap(self):
+        server = FakeServer()
+        values = np.array([0x8000, 0xfffc, 0, 4, 0x7ffc], dtype='<u2')
+        server.corrupt = lambda r: setattr(r, 'raw16_le', values.tobytes())
+        client = DmaClient(pb, server.rpc)
+        data, _ = client.acquire([0], 5)
+        np.testing.assert_array_equal(data[0, 0], [0, 8191, 8192, 8193, 16383])
+        client.acknowledge()
+
+    def test_repeated_jobs_negotiate_once_and_poll_before_sleeping(self):
+        server = FakeServer()
+        client = DmaClient(pb, server.rpc)
+        for _ in range(2):
+            server.running = True
+            original_rpc = server.rpc
+            def rpc(*args):
+                if args[0] == pb.MT2_DMA_STATUS_REQ: server.running = False
+                return original_rpc(*args)
+            client.rpc = rpc
+            with patch('dma_client.time.sleep') as sleep:
+                client.acquire([0], 17)
+                sleep.assert_not_called()
+            client.acknowledge()
+        self.assertEqual(sum(t == pb.MT2_ACQUISITION_CAPABILITIES_REQ for t, _ in server.calls), 1)
+        with self.assertRaisesRegex(RuntimeError, 'TRIGGER_UNSUPPORTED'):
+            client.acquire([0], 17, trigger_source='external')
 
     def test_duplicate_channels_and_memory_budget(self):
         client=DmaClient(pb,FakeServer().rpc)
@@ -130,6 +160,18 @@ class DmaClientTests(unittest.TestCase):
                 values=np.fromfile(Path(directory)/f'channel_{ch}.dat',dtype='<u2').reshape(5,32769)
                 self.assertTrue(np.all(values<=16383))
             self.assertEqual(len(list(Path(directory).glob('dma_metadata_*.jsonl'))),1)
+
+    def test_appending_old_encoding_is_rejected_before_changing_files(self):
+        with tempfile.TemporaryDirectory(dir=ROOT.parent / 'build') as directory:
+            file = Path(directory) / 'channel_0.dat'
+            file.write_bytes(b'\x00\x00')
+            with self.assertRaisesRegex(ValueError, 'existing ADC encoding'):
+                prepare_dma_output(directory, [0], append=True)
+            self.assertEqual(file.read_bytes(), b'\x00\x00')
+            prepare_dma_output(directory, [0], append=False)
+            file.write_bytes(b'\x00\x20')
+            record_dma_output(directory, [0])
+            prepare_dma_output(directory, [0], append=True)
 
 
 if __name__=='__main__': unittest.main()

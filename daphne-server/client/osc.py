@@ -32,6 +32,7 @@ from trigger_source import (
     resolve_trigger_source,
 )
 from dma_client import DmaClient, link_rpc
+from dma_output import prepare_dma_output, record_dma_output
 from waveparse import parse_dump_response
 
 
@@ -152,11 +153,12 @@ class V2Link:
 
 # ---------------------- Disk writer ----------------------
 class WaveformDiskWriter(threading.Thread):
-    def __init__(self, save_dir, channels, append_data=False, queue_frames=512, flush_every=128):
+    def __init__(self, save_dir, channels, append_data=False, queue_frames=512, flush_every=128, dma=False):
         super().__init__(daemon=True)
         self.save_dir = Path(save_dir)
         self.channels = list(channels)
         self.append_data = bool(append_data)
+        self.dma = bool(dma)
         self.flush_every = max(1, int(flush_every))
 
         self.queue = queue.Queue(maxsize=max(1, int(queue_frames)))
@@ -173,11 +175,17 @@ class WaveformDiskWriter(threading.Thread):
         files = {}
 
         try:
+            if self.dma:
+                prepare_dma_output(self.save_dir, self.channels, self.append_data)
             self.save_dir.mkdir(parents=True, exist_ok=True)
             for ch in self.channels:
                 fp = self.save_dir / f"channel_{ch}.dat"
                 files[ch] = open(fp, mode)
+            if self.dma:
+                record_dma_output(self.save_dir, self.channels)
         except Exception as exc:
+            for handle in files.values():
+                handle.close()
             with self._lock:
                 self._error = f"writer init failed: {exc}"
             self._ready_evt.set()
@@ -657,6 +665,7 @@ class DaphneOscApp(QtWidgets.QWidget):
                 append_data=args.append_data,
                 queue_frames=args.save_queue_frames,
                 flush_every=args.flush_every_frames,
+                dma=args.dma,
             )
             self.writer.start()
             self.writer.wait_ready(timeout_s=2.0)
@@ -784,6 +793,8 @@ class DaphneOscApp(QtWidgets.QWidget):
         if getattr(args, "run_notes", ""):
             payload["run_notes"] = str(args.run_notes)
         save_dir = Path(args.save_dir)
+        if args.dma:
+            payload["saved_encoding"] = "offset_binary"
         save_dir.mkdir(parents=True, exist_ok=True)
         with open(save_dir / "run_metadata.json", "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2, sort_keys=True)

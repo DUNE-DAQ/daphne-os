@@ -31,12 +31,15 @@ class DmaClient:
                 c.sample_format != 1 or not c.maximum_job_bytes or
                 not c.maximum_waveforms or not (1 <= c.maximum_fragment_bytes <= 1048576)):
             raise RuntimeError("BACKEND_MISMATCH: compatible raw DMA server/driver unavailable")
-        if trigger_source is not None:
-            source = getattr(p, "DMA_TRIGGER_" + trigger_source.upper())
-            if source not in c.dma_trigger_sources:
-                raise RuntimeError(f"TRIGGER_UNSUPPORTED: DMA {trigger_source} requires trigger firmware; use software")
         self.capabilities = c
+        self._check_trigger(trigger_source)
         return c
+
+    def _check_trigger(self, trigger_source):
+        if trigger_source is not None:
+            source = getattr(self.pb, "DMA_TRIGGER_" + trigger_source.upper())
+            if source not in self.capabilities.dma_trigger_sources:
+                raise RuntimeError(f"TRIGGER_UNSUPPORTED: DMA {trigger_source} requires trigger firmware; use software")
 
     def batch_limit(self, channels, samples):
         if (not channels or len(set(channels)) != len(channels) or
@@ -81,14 +84,17 @@ class DmaClient:
         self.job_id = initial.job_id
         deadline = time.monotonic() + timeout_s
         r = initial
+        delay = .002
         while r.state == self.pb.DMA_JOB_RUNNING:
             self._check_stop()
             if time.monotonic() >= deadline:
                 raise TimeoutError("DMA job deadline expired")
-            time.sleep(.02)
             r = self._call("DMA_STATUS", self.pb.DmaJobRequest(job_id=self.job_id), self.pb.DmaJobResponse)
             if r.job_id != self.job_id or r.backend != self.pb.ACQUISITION_DMA:
                 raise RuntimeError("DMA status identity/backend changed")
+            if r.state == self.pb.DMA_JOB_RUNNING:
+                time.sleep(delay)
+                delay = min(.02, delay * 2)
         if r.state != self.pb.DMA_JOB_READY:
             raise RuntimeError(r.message or "DMA job failed/cancelled")
         return r
@@ -102,7 +108,9 @@ class DmaClient:
         p = self.pb
         if self.job_id is not None:
             raise RuntimeError("ACK or cancel the previous DMA job first")
-        self.probe(trigger_source)
+        if self.capabilities is None:
+            self.probe()
+        self._check_trigger(trigger_source)
         if not 1 <= waveforms <= self.batch_limit(channels, samples):
             raise ValueError("DMA N exceeds batch budget")
         if not 10 <= timeout_ms <= 600000:
@@ -152,6 +160,8 @@ class DmaClient:
                             raise RuntimeError("DMA timestamp changed within a waveform")
                         timestamp = ts
                         data = np.frombuffer(reply.raw16_le, dtype="<u2").reshape(count, len(expected_channels))
+                        if np.any(data & 3):
+                            raise RuntimeError("DMA ADC14 framing error: nonzero padding bits")
                         for i, ch in enumerate(expected_channels):
                             raw[w, order[ch], tick:end] = data[:, i]
                         tick = end
@@ -160,7 +170,11 @@ class DmaClient:
                                  "hardware_timestamp": timestamp[1] if timestamp[0] else None})
             adc14 = np.right_shift(raw, 2)
             np.bitwise_and(adc14, 0x3fff, out=adc14)
+            # ADC_OUTPUT_FORMAT=0 is two's complement, not offset binary.
+            # Normalize to the same unsigned ADC14 convention as spybuffer.
+            np.bitwise_xor(adc14, 0x2000, out=adc14)
             return adc14, {"backend": "dma", "wire_format": "raw16_le", "saved_format": "adc14_u16_le",
+                "wire_encoding": "adc14_twos_complement_left_shift_2", "saved_encoding": "offset_binary",
                 "build_id": c.gateware_build_id, "channels": list(channels), "samples": samples,
                 "waveforms": metadata, "trigger_source": trigger_source,
                 "independent_software_triggers": True, "continuous": False, "pretrigger_samples": 0}

@@ -5,6 +5,7 @@ import tarfile
 import subprocess
 import uuid
 from dma_client import DmaClient
+from dma_output import prepare_dma_output, record_dma_output
 from v2_client import V2Client
 
 
@@ -25,10 +26,11 @@ def run_dma_acquire(args, pb):
         batch = min(args.chunk, client.batch_limit(channels, args.L))
         if getattr(args, "osc_mode", False):
             batch = 1
-        folder.mkdir(parents=True, exist_ok=True)
+        prepare_dma_output(folder, channels, args.append_data)
         try:
             for ch in channels:
                 files[ch] = (folder / f"channel_{ch}.dat").open("ab" if args.append_data else "wb")
+            record_dma_output(folder, channels)
             with metadata_path.open("w", encoding="utf-8") as metadata_file:
                 while completed < args.N:
                     n = min(batch, args.N - completed)

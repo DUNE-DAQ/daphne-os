@@ -1,5 +1,6 @@
 """Qt worker and disk integration with an offline raw DMA transport."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import sys
@@ -22,7 +23,7 @@ class DmaOscTests(unittest.TestCase):
         server=FakeServer()
         request=pb.DumpSpyBuffersRequest(numberOfSamples=32769,numberOfWaveforms=1,channelList=[39,0,17])
         with tempfile.TemporaryDirectory(dir=ROOT.parent/'build') as directory:
-            writer=osc.WaveformDiskWriter(directory,[39,0,17])
+            writer=osc.WaveformDiskWriter(directory,[39,0,17],dma=True)
             writer.start();self.assertTrue(writer.wait_ready())
             worker=osc.AcquisitionWorker('fake','mezz/0','fake',1000,request,20,max_waveforms=1,
                 save_queue=writer.queue,save_health_checker=lambda: writer.snapshot()['error'],
@@ -42,7 +43,20 @@ class DmaOscTests(unittest.TestCase):
             self.assertFalse(writer.is_alive())
             np.testing.assert_array_equal(np.fromfile(Path(directory)/'channel_39.dat',dtype='<u2'),plots[0][0])
             self.assertTrue((Path(directory)/'dma_waveforms.jsonl').is_file())
+            self.assertEqual(json.loads((Path(directory)/'dma_format.json').read_text())['saved_encoding'], 'offset_binary')
             app.processEvents()
+
+    def test_writer_rejects_unknown_append_without_changing_data(self):
+        import osc
+        with tempfile.TemporaryDirectory(dir=ROOT.parent/'build') as directory:
+            file=Path(directory)/'channel_0.dat'
+            file.write_bytes(b'\x00\x00')
+            writer=osc.WaveformDiskWriter(directory,[0],append_data=True,dma=True)
+            writer.start();self.assertTrue(writer.wait_ready());writer.join(2)
+            self.assertFalse(writer.is_alive())
+            self.assertIn('existing ADC encoding',writer.snapshot()['error'])
+            self.assertEqual(file.read_bytes(),b'\x00\x00')
+            self.assertFalse((Path(directory)/'dma_format.json').exists())
 
 
 if __name__=='__main__':unittest.main()
