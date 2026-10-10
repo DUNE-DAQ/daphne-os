@@ -1,0 +1,2295 @@
+{
+  "session_build_id": "0x0e501139",
+  "raw_sha256": "35a6496bfba7e0d9960e8dec4a2735a5422622c8abb042f5b17d17b705c5d08e",
+  "corrected_baseline": {
+    "elapsed_s": 1.062000000005355,
+    "metadata": {
+      "backend": "dma",
+      "wire_format": "raw16_le",
+      "saved_format": "adc14_u16_le",
+      "wire_encoding": "adc14_twos_complement_left_shift_2",
+      "saved_encoding": "offset_binary",
+      "build_id": 240128313,
+      "channels": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39
+      ],
+      "samples": 8192,
+      "waveforms": [
+        {
+          "waveform": 0,
+          "timestamp_valid": false,
+          "hardware_timestamp": null
+        },
+        {
+          "waveform": 1,
+          "timestamp_valid": false,
+          "hardware_timestamp": null
+        }
+      ],
+      "trigger_source": "software",
+      "independent_software_triggers": true,
+      "continuous": false,
+      "pretrigger_samples": 0
+    },
+    "channels": [
+      {
+        "channel": 0,
+        "min": 8192,
+        "max": 8208,
+        "mean": 8199.648193359375,
+        "std": 2.4076977498846595,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          48,
+          44,
+          40,
+          48,
+          40,
+          40,
+          44,
+          44,
+          52,
+          48,
+          44,
+          36,
+          40,
+          32,
+          32,
+          40,
+          28,
+          20,
+          28,
+          32
+        ]
+      },
+      {
+        "channel": 1,
+        "min": 8198,
+        "max": 8214,
+        "mean": 8206.539245605469,
+        "std": 2.2288059568721748,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          60,
+          60,
+          56,
+          48,
+          48,
+          56,
+          52,
+          60,
+          60,
+          56,
+          52,
+          56,
+          56,
+          56,
+          60,
+          64,
+          68,
+          56,
+          48,
+          48
+        ]
+      },
+      {
+        "channel": 2,
+        "min": 8340,
+        "max": 8359,
+        "mean": 8349.14599609375,
+        "std": 2.2489252172531753,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          628,
+          628,
+          636,
+          632,
+          632,
+          632,
+          640,
+          636,
+          636,
+          636,
+          640,
+          632,
+          632,
+          636,
+          632,
+          640,
+          636,
+          636,
+          640,
+          632
+        ]
+      },
+      {
+        "channel": 3,
+        "min": 8553,
+        "max": 8570,
+        "mean": 8561.736755371094,
+        "std": 2.2769869456165663,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          1476,
+          1480,
+          1492,
+          1492,
+          1484,
+          1480,
+          1488,
+          1476,
+          1488,
+          1484,
+          1492,
+          1480,
+          1492,
+          1492,
+          1496,
+          1500,
+          1484,
+          1488,
+          1484,
+          1488
+        ]
+      },
+      {
+        "channel": 4,
+        "min": 8665,
+        "max": 8684,
+        "mean": 8675.11572265625,
+        "std": 2.0716621462199005,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          1924,
+          1924,
+          1932,
+          1932,
+          1924,
+          1920,
+          1928,
+          1924,
+          1928,
+          1928,
+          1928,
+          1924,
+          1924,
+          1936,
+          1932,
+          1932,
+          1932,
+          1932,
+          1932,
+          1940
+        ]
+      },
+      {
+        "channel": 5,
+        "min": 9017,
+        "max": 9033,
+        "mean": 9024.9716796875,
+        "std": 2.224448823703279,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          3336,
+          3344,
+          3332,
+          3332,
+          3328,
+          3324,
+          3328,
+          3328,
+          3328,
+          3320,
+          3320,
+          3328,
+          3324,
+          3332,
+          3328,
+          3324,
+          3328,
+          3336,
+          3324,
+          3320
+        ]
+      },
+      {
+        "channel": 6,
+        "min": 8697,
+        "max": 8715,
+        "mean": 8706.306457519531,
+        "std": 2.2996140767537505,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          2044,
+          2044,
+          2056,
+          2056,
+          2060,
+          2052,
+          2060,
+          2060,
+          2060,
+          2060,
+          2060,
+          2052,
+          2056,
+          2052,
+          2052,
+          2048,
+          2056,
+          2052,
+          2060,
+          2072
+        ]
+      },
+      {
+        "channel": 7,
+        "min": 8900,
+        "max": 8915,
+        "mean": 8907.326171875,
+        "std": 2.0440542572046576,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          2852,
+          2852,
+          2860,
+          2864,
+          2864,
+          2860,
+          2860,
+          2856,
+          2852,
+          2848,
+          2856,
+          2860,
+          2856,
+          2856,
+          2860,
+          2860,
+          2852,
+          2856,
+          2864,
+          2860
+        ]
+      },
+      {
+        "channel": 8,
+        "min": 7992,
+        "max": 8008,
+        "mean": 8000.089904785156,
+        "std": 2.1317472478754977,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          64764,
+          64768,
+          64780,
+          64776,
+          64772,
+          64776,
+          64768,
+          64772,
+          64768,
+          64776,
+          64784,
+          64776,
+          64772,
+          64772,
+          64768,
+          64768,
+          64776,
+          64776,
+          64776,
+          64780
+        ]
+      },
+      {
+        "channel": 9,
+        "min": 7684,
+        "max": 7704,
+        "mean": 7694.8822021484375,
+        "std": 2.3404227704182547,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          63540,
+          63532,
+          63532,
+          63544,
+          63536,
+          63544,
+          63544,
+          63544,
+          63536,
+          63536,
+          63536,
+          63536,
+          63536,
+          63536,
+          63548,
+          63552,
+          63548,
+          63544,
+          63540,
+          63552
+        ]
+      },
+      {
+        "channel": 10,
+        "min": 8109,
+        "max": 8127,
+        "mean": 8118.715026855469,
+        "std": 2.121355738714566,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65240,
+          65232,
+          65232,
+          65228,
+          65228,
+          65240,
+          65240,
+          65236,
+          65228,
+          65240,
+          65232,
+          65228,
+          65236,
+          65236,
+          65232,
+          65232,
+          65220,
+          65228,
+          65236,
+          65232
+        ]
+      },
+      {
+        "channel": 11,
+        "min": 8140,
+        "max": 8156,
+        "mean": 8148.2847900390625,
+        "std": 1.9619047925168998,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65364,
+          65364,
+          65364,
+          65368,
+          65360,
+          65356,
+          65352,
+          65356,
+          65364,
+          65368,
+          65372,
+          65360,
+          65356,
+          65364,
+          65356,
+          65368,
+          65360,
+          65360,
+          65356,
+          65356
+        ]
+      },
+      {
+        "channel": 12,
+        "min": 7964,
+        "max": 7978,
+        "mean": 7970.346984863281,
+        "std": 1.8451463041070597,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          64652,
+          64648,
+          64652,
+          64648,
+          64656,
+          64656,
+          64656,
+          64652,
+          64648,
+          64648,
+          64652,
+          64652,
+          64656,
+          64656,
+          64656,
+          64648,
+          64656,
+          64648,
+          64648,
+          64648
+        ]
+      },
+      {
+        "channel": 13,
+        "min": 8137,
+        "max": 8152,
+        "mean": 8143.973693847656,
+        "std": 1.9518380455048308,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65348,
+          65340,
+          65340,
+          65340,
+          65344,
+          65348,
+          65344,
+          65348,
+          65348,
+          65344,
+          65348,
+          65348,
+          65344,
+          65336,
+          65340,
+          65340,
+          65332,
+          65340,
+          65344,
+          65352
+        ]
+      },
+      {
+        "channel": 14,
+        "min": 7673,
+        "max": 7692,
+        "mean": 7682.30078125,
+        "std": 2.41452703358203,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          63508,
+          63504,
+          63508,
+          63516,
+          63516,
+          63512,
+          63520,
+          63516,
+          63504,
+          63504,
+          63504,
+          63504,
+          63504,
+          63504,
+          63504,
+          63504,
+          63508,
+          63508,
+          63500,
+          63500
+        ]
+      },
+      {
+        "channel": 15,
+        "min": 8142,
+        "max": 8158,
+        "mean": 8149.6680908203125,
+        "std": 2.1104030752889766,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65372,
+          65360,
+          65364,
+          65368,
+          65368,
+          65364,
+          65360,
+          65360,
+          65356,
+          65368,
+          65372,
+          65368,
+          65368,
+          65364,
+          65360,
+          65360,
+          65356,
+          65352,
+          65364,
+          65360
+        ]
+      },
+      {
+        "channel": 16,
+        "min": 8004,
+        "max": 8020,
+        "mean": 8011.4189453125,
+        "std": 2.1164862678527534,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          64824,
+          64820,
+          64824,
+          64824,
+          64824,
+          64816,
+          64808,
+          64812,
+          64820,
+          64824,
+          64820,
+          64828,
+          64824,
+          64828,
+          64824,
+          64812,
+          64804,
+          64820,
+          64808,
+          64820
+        ]
+      },
+      {
+        "channel": 17,
+        "min": 8142,
+        "max": 8156,
+        "mean": 8149.342590332031,
+        "std": 1.9909469247992193,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65372,
+          65368,
+          65368,
+          65368,
+          65368,
+          65368,
+          65368,
+          65360,
+          65364,
+          65368,
+          65368,
+          65364,
+          65368,
+          65360,
+          65360,
+          65364,
+          65360,
+          65360,
+          65368,
+          65368
+        ]
+      },
+      {
+        "channel": 18,
+        "min": 7949,
+        "max": 7965,
+        "mean": 7956.4210205078125,
+        "std": 2.12950178793393,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          64584,
+          64600,
+          64596,
+          64592,
+          64584,
+          64584,
+          64588,
+          64588,
+          64596,
+          64588,
+          64588,
+          64600,
+          64592,
+          64604,
+          64596,
+          64592,
+          64592,
+          64604,
+          64596,
+          64588
+        ]
+      },
+      {
+        "channel": 19,
+        "min": 8434,
+        "max": 8449,
+        "mean": 8441.670104980469,
+        "std": 2.059300273377398,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          988,
+          980,
+          984,
+          988,
+          976,
+          984,
+          988,
+          984,
+          976,
+          988,
+          984,
+          980,
+          976,
+          976,
+          980,
+          976,
+          980,
+          980,
+          984,
+          984
+        ]
+      },
+      {
+        "channel": 20,
+        "min": 7789,
+        "max": 7806,
+        "mean": 7797.785095214844,
+        "std": 2.058387238388515,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          63964,
+          63952,
+          63956,
+          63964,
+          63972,
+          63968,
+          63968,
+          63964,
+          63964,
+          63964,
+          63972,
+          63960,
+          63964,
+          63964,
+          63964,
+          63964,
+          63960,
+          63964,
+          63960,
+          63960
+        ]
+      },
+      {
+        "channel": 21,
+        "min": 8140,
+        "max": 8158,
+        "mean": 8147.717346191406,
+        "std": 2.3284923972430525,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65344,
+          65352,
+          65344,
+          65344,
+          65344,
+          65352,
+          65356,
+          65348,
+          65344,
+          65344,
+          65332,
+          65336,
+          65348,
+          65332,
+          65340,
+          65332,
+          65340,
+          65332,
+          65332,
+          65336
+        ]
+      },
+      {
+        "channel": 22,
+        "min": 8112,
+        "max": 8131,
+        "mean": 8122.359558105469,
+        "std": 2.3418070488295943,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65244,
+          65256,
+          65244,
+          65244,
+          65248,
+          65256,
+          65248,
+          65244,
+          65236,
+          65252,
+          65256,
+          65256,
+          65252,
+          65256,
+          65252,
+          65252,
+          65248,
+          65244,
+          65256,
+          65252
+        ]
+      },
+      {
+        "channel": 23,
+        "min": 7967,
+        "max": 7984,
+        "mean": 7974.3311767578125,
+        "std": 2.031746257169507,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          64672,
+          64660,
+          64664,
+          64668,
+          64680,
+          64672,
+          64672,
+          64664,
+          64664,
+          64664,
+          64660,
+          64664,
+          64668,
+          64664,
+          64660,
+          64664,
+          64664,
+          64660,
+          64660,
+          64656
+        ]
+      },
+      {
+        "channel": 24,
+        "min": 7549,
+        "max": 7566,
+        "mean": 7557.742431640625,
+        "std": 2.0892129819620764,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          62984,
+          62992,
+          63000,
+          62992,
+          62992,
+          62988,
+          62996,
+          63000,
+          62996,
+          62984,
+          62992,
+          62988,
+          62980,
+          62992,
+          62980,
+          62976,
+          62984,
+          62988,
+          62992,
+          62992
+        ]
+      },
+      {
+        "channel": 25,
+        "min": 8282,
+        "max": 8302,
+        "mean": 8291.718994140625,
+        "std": 2.4854587973972566,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          408,
+          408,
+          408,
+          396,
+          400,
+          396,
+          404,
+          412,
+          408,
+          404,
+          408,
+          408,
+          404,
+          388,
+          392,
+          392,
+          388,
+          396,
+          396,
+          388
+        ]
+      },
+      {
+        "channel": 26,
+        "min": 8106,
+        "max": 8122,
+        "mean": 8114.2193603515625,
+        "std": 2.346425801932564,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65220,
+          65220,
+          65220,
+          65220,
+          65216,
+          65208,
+          65216,
+          65220,
+          65220,
+          65228,
+          65228,
+          65220,
+          65224,
+          65228,
+          65216,
+          65228,
+          65220,
+          65224,
+          65232,
+          65236
+        ]
+      },
+      {
+        "channel": 27,
+        "min": 7882,
+        "max": 7899,
+        "mean": 7890.449462890625,
+        "std": 2.231507054649619,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          64320,
+          64320,
+          64312,
+          64316,
+          64316,
+          64316,
+          64312,
+          64312,
+          64316,
+          64320,
+          64308,
+          64320,
+          64316,
+          64320,
+          64328,
+          64320,
+          64320,
+          64320,
+          64316,
+          64312
+        ]
+      },
+      {
+        "channel": 28,
+        "min": 7528,
+        "max": 7545,
+        "mean": 7536.7813720703125,
+        "std": 2.446433882700094,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          62920,
+          62912,
+          62908,
+          62912,
+          62920,
+          62920,
+          62916,
+          62904,
+          62908,
+          62916,
+          62916,
+          62920,
+          62912,
+          62912,
+          62912,
+          62912,
+          62912,
+          62900,
+          62904,
+          62908
+        ]
+      },
+      {
+        "channel": 29,
+        "min": 7326,
+        "max": 7345,
+        "mean": 7335.41015625,
+        "std": 2.8387205481670676,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          62116,
+          62112,
+          62116,
+          62112,
+          62112,
+          62112,
+          62120,
+          62116,
+          62112,
+          62112,
+          62100,
+          62108,
+          62108,
+          62112,
+          62112,
+          62104,
+          62096,
+          62096,
+          62104,
+          62104
+        ]
+      },
+      {
+        "channel": 30,
+        "min": 7503,
+        "max": 7519,
+        "mean": 7510.549255371094,
+        "std": 2.245033729697823,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          62816,
+          62800,
+          62796,
+          62796,
+          62804,
+          62812,
+          62808,
+          62808,
+          62800,
+          62792,
+          62796,
+          62804,
+          62800,
+          62800,
+          62796,
+          62800,
+          62796,
+          62800,
+          62796,
+          62796
+        ]
+      },
+      {
+        "channel": 31,
+        "min": 8253,
+        "max": 8269,
+        "mean": 8261.07080078125,
+        "std": 2.2870200878407014,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          268,
+          264,
+          268,
+          272,
+          280,
+          268,
+          268,
+          276,
+          280,
+          276,
+          284,
+          276,
+          276,
+          276,
+          276,
+          280,
+          276,
+          268,
+          268,
+          268
+        ]
+      },
+      {
+        "channel": 32,
+        "min": 8106,
+        "max": 8129,
+        "mean": 8118.0869140625,
+        "std": 3.3529574818997103,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65220,
+          65232,
+          65236,
+          65244,
+          65248,
+          65228,
+          65228,
+          65228,
+          65248,
+          65268,
+          65252,
+          65244,
+          65244,
+          65244,
+          65252,
+          65252,
+          65268,
+          65252,
+          65236,
+          65228
+        ]
+      },
+      {
+        "channel": 33,
+        "min": 7621,
+        "max": 7644,
+        "mean": 7632.233337402344,
+        "std": 3.2189675964719218,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          63292,
+          63300,
+          63296,
+          63288,
+          63280,
+          63288,
+          63296,
+          63300,
+          63288,
+          63284,
+          63296,
+          63284,
+          63288,
+          63288,
+          63292,
+          63296,
+          63296,
+          63280,
+          63272,
+          63256
+        ]
+      },
+      {
+        "channel": 34,
+        "min": 7712,
+        "max": 7734,
+        "mean": 7722.457214355469,
+        "std": 2.9936864642835506,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          63644,
+          63664,
+          63656,
+          63656,
+          63652,
+          63632,
+          63648,
+          63656,
+          63644,
+          63644,
+          63660,
+          63652,
+          63652,
+          63640,
+          63656,
+          63660,
+          63656,
+          63664,
+          63656,
+          63644
+        ]
+      },
+      {
+        "channel": 35,
+        "min": 7779,
+        "max": 7801,
+        "mean": 7789.6163330078125,
+        "std": 3.0531612764036553,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          63920,
+          63920,
+          63940,
+          63920,
+          63920,
+          63928,
+          63932,
+          63920,
+          63912,
+          63924,
+          63916,
+          63920,
+          63924,
+          63928,
+          63928,
+          63924,
+          63904,
+          63920,
+          63932,
+          63924
+        ]
+      },
+      {
+        "channel": 36,
+        "min": 7457,
+        "max": 7480,
+        "mean": 7468.524230957031,
+        "std": 2.9577136587715604,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          62648,
+          62644,
+          62632,
+          62636,
+          62636,
+          62636,
+          62652,
+          62660,
+          62640,
+          62632,
+          62640,
+          62660,
+          62656,
+          62636,
+          62628,
+          62636,
+          62644,
+          62636,
+          62624,
+          62640
+        ]
+      },
+      {
+        "channel": 37,
+        "min": 7255,
+        "max": 7278,
+        "mean": 7267.249084472656,
+        "std": 3.3044057048432034,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          61816,
+          61808,
+          61808,
+          61816,
+          61816,
+          61824,
+          61836,
+          61820,
+          61824,
+          61812,
+          61840,
+          61828,
+          61836,
+          61832,
+          61820,
+          61820,
+          61828,
+          61840,
+          61836,
+          61844
+        ]
+      },
+      {
+        "channel": 38,
+        "min": 7771,
+        "max": 7793,
+        "mean": 7780.98095703125,
+        "std": 3.0284907967445083,
+        "jumps_gt_512": 0,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          63896,
+          63908,
+          63908,
+          63904,
+          63892,
+          63888,
+          63884,
+          63884,
+          63896,
+          63904,
+          63892,
+          63888,
+          63892,
+          63888,
+          63892,
+          63884,
+          63880,
+          63884,
+          63900,
+          63900
+        ]
+      },
+      {
+        "channel": 39,
+        "min": 7615,
+        "max": 8135,
+        "mean": 8121.6173095703125,
+        "std": 35.179503187501105,
+        "jumps_gt_512": 21,
+        "nonzero_raw_low_bits": 0,
+        "first_raw": [
+          65256,
+          65260,
+          65276,
+          65260,
+          65268,
+          65264,
+          65268,
+          65260,
+          65264,
+          65260,
+          65268,
+          65264,
+          65252,
+          65252,
+          65264,
+          65260,
+          65252,
+          65252,
+          65256,
+          65264
+        ]
+      }
+    ]
+  },
+  "ch39_example": {
+    "waveform": 0,
+    "first_tick": 1485,
+    "outlier_tick": 1488,
+    "raw16": [
+      65260,
+      65264,
+      65276,
+      63228,
+      65264,
+      65256,
+      65260
+    ],
+    "adc14": [
+      8123,
+      8124,
+      8127,
+      7615,
+      8124,
+      8122,
+      8123
+    ]
+  },
+  "fast_scan": [
+    {
+      "afe": 0,
+      "elapsed_s": 4.23499999998603,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "originalDelay": 256,
+            "bitslip": 7,
+            "selectedDelay": 260,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 196,
+            "lastPassingTap": 328,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 1,
+      "elapsed_s": 4.312000000005355,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 1,
+            "originalDelay": 332,
+            "bitslip": 8,
+            "selectedDelay": 332,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 248,
+            "lastPassingTap": 420,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 2,
+      "elapsed_s": 4.35899999999674,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 2,
+            "originalDelay": 352,
+            "bitslip": 8,
+            "selectedDelay": 356,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 284,
+            "lastPassingTap": 428,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 3,
+      "elapsed_s": 4.35999999998603,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 3,
+            "originalDelay": 344,
+            "bitslip": 7,
+            "selectedDelay": 344,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 264,
+            "lastPassingTap": 428,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 4,
+      "elapsed_s": 4.26600000000326,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 4,
+            "originalDelay": 304,
+            "bitslip": 6,
+            "selectedDelay": 304,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 288,
+            "lastPassingTap": 320,
+            "applied": true
+          }
+        ]
+      }
+    }
+  ],
+  "selected_long_verification": [
+    {
+      "afe": 0,
+      "elapsed_s": 0.6879999999946449,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "originalDelay": 256,
+            "bitslip": 7,
+            "selectedDelay": 256,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 256,
+            "lastPassingTap": 256,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 1,
+      "elapsed_s": 0.5940000000118744,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 1,
+            "originalDelay": 332,
+            "bitslip": 8,
+            "selectedDelay": 332,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 332,
+            "lastPassingTap": 332,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 2,
+      "elapsed_s": 0.625,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 2,
+            "originalDelay": 352,
+            "bitslip": 8,
+            "selectedDelay": 352,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 352,
+            "lastPassingTap": 352,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 3,
+      "elapsed_s": 0.5940000000118744,
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 3,
+            "originalDelay": 344,
+            "bitslip": 7,
+            "selectedDelay": 344,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 344,
+            "lastPassingTap": 344,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "afe": 4,
+      "elapsed_s": 0.35999999998603016,
+      "scan": {
+        "success": false,
+        "message": "One or more AFEs have no passing eye; failed lanes remain unavailable",
+        "afes": [
+          {
+            "afe": 4,
+            "originalDelay": 296
+          }
+        ]
+      }
+    }
+  ],
+  "candidate_comparison": [
+    {
+      "tap": 4,
+      "elapsed_s": 0.75,
+      "analog_outliers_gt_256_per_lane": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        44
+      ],
+      "means": [
+        8113.055346679687,
+        7626.52727355957,
+        7717.01838684082,
+        7782.476971435547,
+        7462.239349365234,
+        7260.69638671875,
+        7778.105578613281,
+        8117.804849243164
+      ],
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 4,
+            "originalDelay": 296,
+            "bitslip": 7,
+            "selectedDelay": 4,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 4,
+            "lastPassingTap": 4,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "tap": 300,
+      "elapsed_s": 0.6559999999881256,
+      "analog_outliers_gt_256_per_lane": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        303
+      ],
+      "means": [
+        8117.0115966796875,
+        7630.444387817382,
+        7720.045120239258,
+        7787.370407104492,
+        7466.950833129883,
+        7265.169033813477,
+        7783.093075561524,
+        8121.789965820312
+      ],
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 4,
+            "originalDelay": 296,
+            "bitslip": 6,
+            "selectedDelay": 300,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 300,
+            "lastPassingTap": 300,
+            "applied": true
+          }
+        ]
+      }
+    },
+    {
+      "tap": 304,
+      "elapsed_s": 0.6559999999881256,
+      "analog_outliers_gt_256_per_lane": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        285
+      ],
+      "means": [
+        8118.499884033203,
+        7631.947183227539,
+        7720.355899047851,
+        7787.440316772461,
+        7468.289953613281,
+        7266.241613769531,
+        7783.168353271484,
+        8122.309423828125
+      ],
+      "scan": {
+        "success": true,
+        "message": "Physical DMA eye measured; applied candidates verified and AFE patterns restored",
+        "afes": [
+          {
+            "afe": 4,
+            "originalDelay": 296,
+            "bitslip": 6,
+            "selectedDelay": 304,
+            "approvedLaneMask": 255,
+            "firstPassingTap": 304,
+            "lastPassingTap": 304,
+            "applied": true
+          }
+        ]
+      }
+    }
+  ],
+  "subsequent_verification_failures": [
+    {
+      "tap": 0,
+      "error": "Final physical ramp verification failed",
+      "elapsed_s": 0.75
+    },
+    {
+      "tap": 1,
+      "error": "Final physical ramp verification failed",
+      "elapsed_s": 0.6559999999881256
+    },
+    {
+      "tap": 2,
+      "error": "Final physical ramp verification failed",
+      "elapsed_s": 0.6879999999946449
+    },
+    {
+      "tap": 6,
+      "elapsed_s": 0.4370000000053551,
+      "scan": {
+        "success": false,
+        "message": "One or more AFEs have no passing eye; failed lanes remain unavailable",
+        "afes": [
+          {
+            "afe": 4,
+            "originalDelay": 296
+          }
+        ]
+      }
+    },
+    {
+      "tap": 8,
+      "error": "Final physical ramp verification failed",
+      "elapsed_s": 0.6719999999913853
+    },
+    {
+      "tap": 12,
+      "error": "Final physical ramp verification failed",
+      "elapsed_s": 0.6719999999913853
+    }
+  ],
+  "pc_corrected_latency": [
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 127.89350000093691,
+      "rpcs": [
+        {
+          "type": "MT2_ACQUISITION_CAPABILITIES_REQ",
+          "elapsed_ms": 25.13860000181012
+        },
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.100499992026016
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.525400007609278
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.575200008461252
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.972999992314726
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 100.93280000728555,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 25.836499989964068
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 24.758499988820404
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.247500016121194
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.6853000135161
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 101.51979999500327,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.155300001846626
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 24.797299993224442
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.552799983415753
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.739400018006563
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 103.58589998213574,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.22149998205714
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.511199986794963
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 26.328400010243058
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 25.157299998681992
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 101.60970001015812,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.059499999973923
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 24.706700001843274
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.620699976570904
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.925599980633706
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 102.2819000063464,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.29989999695681
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.214399996912107
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.20370000274852
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 25.22460001637228
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 102.84919998957776,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.29379997961223
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.02900001127273
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.848499994026497
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 25.3577999828849
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 101.88270002254285,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.44980000331998
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 24.960899987490848
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.275099993450567
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.83020001091063
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 101.63779999129474,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 25.880200002575293
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.275499996496364
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.584799994248897
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.61560000665486
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 101.19549999944866,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 25.794299988774583
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.27460001874715
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.162800011457875
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.716599989915267
+        }
+      ]
+    },
+    {
+      "channels": 1,
+      "L": 2048,
+      "N": 10,
+      "elapsed_ms": 332.3939999972936,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 26.36389998951927
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 24.988199991639704
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.182399986078963
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.896400009514764
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 24.882800003979355
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 26.092899992363527
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.64479998545721
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.34439999726601
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.454499991610646
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.08359999046661
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.36520001012832
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 25.858200009679422
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.684100004378706
+        }
+      ]
+    },
+    {
+      "channels": 40,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 238.23089999496005,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 28.625500010093674
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.339100015116856
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 79.45849999669008
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 50.27989999507554
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 27.927200018893927
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 25.15000000130385
+        }
+      ]
+    },
+    {
+      "channels": 40,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 167.7471000002697,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 27.70440001040697
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.21089999936521
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 30.877500015776604
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 30.659699987154454
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 27.67929999390617
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.646200006827712
+        }
+      ]
+    },
+    {
+      "channels": 40,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 167.3527999955695,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 27.52239999244921
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.226900004781783
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 30.96570001798682
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 30.360600008862093
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 27.44400000665337
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 25.02269999240525
+        }
+      ]
+    },
+    {
+      "channels": 40,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 167.44889999972656,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 27.284599986160174
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 24.704900017241016
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 30.36119998432696
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 31.5845999866724
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 27.50610001385212
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 25.047100003575906
+        }
+      ]
+    },
+    {
+      "channels": 40,
+      "L": 2048,
+      "N": 1,
+      "elapsed_ms": 167.32069998397492,
+      "rpcs": [
+        {
+          "type": "MT2_DMA_ACQUIRE_REQ",
+          "elapsed_ms": 28.162699978565797
+        },
+        {
+          "type": "MT2_DMA_STATUS_REQ",
+          "elapsed_ms": 25.29109999886714
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 30.725200020242482
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 30.089099978795275
+        },
+        {
+          "type": "MT2_DMA_READ_REQ",
+          "elapsed_ms": 27.47619998990558
+        },
+        {
+          "type": "MT2_DMA_CONTROL_REQ",
+          "elapsed_ms": 24.6880000049714
+        }
+      ]
+    }
+  ],
+  "resumed_board_state": {
+    "capabilities": {
+      "success": true,
+      "protocolRevision": 1,
+      "backend": "ACQUISITION_DMA",
+      "availableBackends": [
+        "ACQUISITION_DMA"
+      ],
+      "dmaTriggerSources": [
+        "DMA_TRIGGER_SOFTWARE"
+      ],
+      "gatewareBuildId": 240128313,
+      "gatewareAbi": 131072,
+      "gatewareCapabilities": 1328,
+      "sampleFormat": 1,
+      "maximumJobBytes": "67108864",
+      "maximumSamples": 33554432,
+      "maximumWaveforms": 256,
+      "maximumFragmentBytes": 1048576,
+      "afes": [
+        {
+          "state": "FRONTEND_ALIGNED",
+          "approvedLaneMask": 255,
+          "configurationGeneration": "2"
+        },
+        {
+          "afe": 1,
+          "state": "FRONTEND_ALIGNED",
+          "approvedLaneMask": 255,
+          "configurationGeneration": "2"
+        },
+        {
+          "afe": 2,
+          "state": "FRONTEND_ALIGNED",
+          "approvedLaneMask": 255,
+          "configurationGeneration": "2"
+        },
+        {
+          "afe": 3,
+          "state": "FRONTEND_ALIGNED",
+          "approvedLaneMask": 255,
+          "configurationGeneration": "2"
+        },
+        {
+          "afe": 4,
+          "state": "FRONTEND_FAILED",
+          "configurationGeneration": "11"
+        }
+      ],
+      "message": "Software trigger = one START per waveform; external/timing/self/all require future trigger firmware. No pretrigger.",
+      "dmaAvailable": true,
+      "maximumScanTicks": "1000000000"
+    },
+    "loopback_ch0_L2048_N1_ms": [
+      6.767487000615802,
+      6.2541929983126465,
+      6.0801309991802555,
+      6.101580998802092,
+      6.025050002790522,
+      6.160501998238033,
+      6.051030999515206,
+      6.136110998340882,
+      6.053801000234671,
+      6.097330999182304
+    ],
+    "file_capture": {
+      "format": {
+        "saved_encoding": "offset_binary",
+        "adc_bits": 14,
+        "channels": [
+          0,
+          17
+        ]
+      },
+      "channels": [
+        {
+          "channel": 0,
+          "bytes": 8192,
+          "mean": 8211.810302734375,
+          "std": 2.1038472260455126,
+          "min": 8205,
+          "max": 8219
+        },
+        {
+          "channel": 17,
+          "bytes": 8192,
+          "mean": 8144.13818359375,
+          "std": 2.1641492585236204,
+          "min": 8137,
+          "max": 8152
+        }
+      ]
+    }
+  },
+  "selected_afe4_slip6_points": [
+    {
+      "tap": 296,
+      "transitionsPerChannel": "32767",
+      "channelFailures": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "28"
+      ],
+      "bitslip": 6,
+      "lowBitFailures": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ],
+      "boundaryFailures": [
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0"
+      ]
+    }
+  ]
+}

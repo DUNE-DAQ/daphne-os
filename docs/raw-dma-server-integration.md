@@ -95,12 +95,15 @@ Medir y aplicar el ojo físico:
 ```sh
 python daphne-server/client/scan_afe_delay_eye.py \
   --ip 193.206.157.36 --port 9876 --dma --afes 0,1,2,3,4 \
-  --samples 32768 --waveforms 1 --coarse-step 16 --tap-step 4 \
-  --verification-samples 32768 --apply-best --summary
+  --samples 2048 --waveforms 1 --coarse-step 16 --tap-step 4 \
+  --verification-samples 1048576 --apply-best --summary
 ```
 
-El scanner recorre los 16 bitslips, busca un ojo común sin errores, refina los
-taps y verifica el punto elegido con al menos 32768 muestras. Comprueba rampa
+El scanner recorre los 16 bitslips, busca un ojo común sin errores y refina los
+taps usando 2048 muestras por punto por defecto. La verificación final usa
+1048576 muestras por defecto (mínimo configurable 32768), para cubrir todos
+los bits y detectar errores más raros sin repetir esa longitud en todo el
+barrido. Un candidato que falla la verificación se restaura y no queda aprobado. Comprueba rampa
 raw de 16 bits, bits bajos y continuidad entre paquetes, incluido el wrap.
 Restaura el patrón, sincronización y ajustes temporales cuando corresponde.
 `--accept-partial-config` permite explícitamente un subconjunto de lanes;
@@ -126,9 +129,20 @@ python daphne-server/client/protobuf_acquire_list_channels.py \
 
 Se conserva el orden de canales solicitado. El transporte utiliza palabras
 raw de 16 bits little endian; los archivos `channel_<id>.dat` contienen ADC14
-sin signo en palabras de 16 bits little endian, tras desplazar dos bits.
+en offset-binary en palabras de 16 bits little endian. Con el AFE configurado
+en complemento a dos (`ADC_OUTPUT_FORMAT=0`), el cliente desplaza dos bits,
+extrae los 14 bits e invierte su MSB (`^ 0x2000`). Así el cero analógico queda
+cerca de 8192, como en el camino spybuffer. También rechaza bits de padding
+no nulos. Los archivos anteriores a esta corrección contienen los códigos
+en complemento a dos sin normalizar; no mezclarlos con los nuevos al anexar.
 Los metadatos JSON registran el backend, build ID y límites de cada waveform.
+`dma_format.json` identifica la codificación de los archivos y bloquea append
+sobre datos existentes con codificación desconocida.
 La FFT de `osc.py` usa todas las L muestras, aunque el dibujo reduzca puntos.
+Se negocian capacidades una vez por sesión y STATUS se consulta de inmediato;
+solo un trabajo aún activo introduce backoff, de 2 a 20 ms. El protocolo finito
+todavía necesita varios viajes de red por waveform, frente al único dump
+legacy. Las mejoras no convierten esta entrega en un stream continuo.
 
 ## Ciclo de vida y límites
 
@@ -164,3 +178,9 @@ La compilación SSH de revisión está aislada en
 ejecutables instalados. Es almacenamiento temporal y se pierde al reiniciar.
 No se han ejecutado capturas, cambios de servicios, insmod ni recargas de PL
 como parte de esa validación de compilación.
+
+La investigación física posterior se documenta en
+[offset, alineación y latencia DMA](raw-dma-alignment-investigation-2026-10-11.md).
+Corrige el formato y reduce esperas de cliente, pero detecta errores
+intermitentes de CH39 incluso después de pasar rampas largas. Esa sesión no
+cualifica la captura estable de los 40 canales ni habilita producción.
