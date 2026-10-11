@@ -1,5 +1,6 @@
 #include "afe_capture.hpp"
 #include <iostream>
+#include <cerrno>
 using namespace daphne_dma;
 void require(bool value) { if (!value) throw std::runtime_error("Triggered engine assertion failed"); }
 template<class F> void rejects(F f) { bool rejected = false; try { f(); } catch (...) { rejected = true; } require(rejected); }
@@ -43,6 +44,17 @@ struct Backend final : AfeTriggerBackend {
   void stop() override { ++t->stops; if(t->fail_stop) throw std::runtime_error("halt not proven"); }
 };
 int main() {
+  daphne_afe_trigger_status probe{};
+  require(trigger_status_probe_supported(-1, EINVAL, probe));
+  require(!trigger_status_probe_supported(-1, ENOTTY, probe));
+  require(!trigger_status_probe_supported(-1, EBUSY, probe));
+  require(!trigger_status_probe_supported(0, 0, probe));
+  probe.capture.abi=1; probe.capture.state=DAPHNE_AFE_IDLE;
+  require(trigger_status_probe_supported(0, 0, probe));
+  probe.capture.state=DAPHNE_AFE_RUNNING;
+  require(!trigger_status_probe_supported(0, 0, probe));
+  probe.abi=1; require(trigger_status_probe_supported(0, 0, probe));
+  probe.abi=2; require(!trigger_status_probe_supported(0, 0, probe));
   AfeTriggerRequest req{{{39,0,17},65536,1,1000,123},8192,0,8192};
   auto layout=afe_trigger_layout(req,64ULL<<20,448ULL<<20);
   require(layout.ring_ticks==81920);

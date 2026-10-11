@@ -132,6 +132,7 @@ class AfeCaptureEngine {
 };
 std::unique_ptr<AfeCaptureEngine> make_linux_afe_engine(
     uint64_t maximum_bytes, const std::string& device = "/dev/daphne-afe-dma");
+bool trigger_status_probe_supported(int result, int error, const daphne_afe_trigger_status& status);
 void verify_linux_afe_idle(const std::string& device = "/dev/daphne-afe-dma");
 
 } // namespace daphne_dma

@@ -14,6 +14,15 @@
 
 namespace daphne_dma {
 
+bool trigger_status_probe_supported(int result, int error, const daphne_afe_trigger_status& status) {
+  if (result < 0) return error == EINVAL;
+  // Persistent PREPARE reuses cyclic allocation and clears legacy metadata.
+  // On close, the dispatcher can return an empty trigger record with a valid
+  // IDLE capture status. PREPARE_TRIGGER still validates the active ABI/provider.
+  return status.abi == 1 || (status.abi == 0 && status.capture.abi == DAPHNE_AFE_DMA_ABI &&
+                            status.capture.state == DAPHNE_AFE_IDLE);
+}
+
 AfeLayout afe_layout(const AfeRequest& req, uint64_t maximum_bytes) {
   if (req.channels.empty() || !req.length || !req.count)
     throw std::invalid_argument("DMA requires channels and nonzero L/count");
@@ -227,7 +236,7 @@ bool LinuxAfeEngine::supports_triggered() const {
   if (fd < 0) return false;
   daphne_afe_trigger_status t{};
   const int rc = ::ioctl(fd, DAPHNE_AFE_TRIGGER_STATUS, &t);
-  const bool supported = rc == 0 ? t.abi == 1 : errno == EINVAL;
+  const bool supported = trigger_status_probe_supported(rc, errno, t);
   ::close(fd);
   return supported;
 }
