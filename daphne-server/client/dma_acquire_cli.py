@@ -7,6 +7,8 @@ import uuid
 from dma_client import DmaClient
 from dma_output import prepare_dma_output, record_dma_output
 from v2_client import V2Client
+from tqdm import tqdm
+from cli_presentation import print_acquisition_start, print_acquisition_done
 
 
 def run_dma_acquire(args, pb):
@@ -23,6 +25,7 @@ def run_dma_acquire(args, pb):
                   identity="dma-acquire-" + uuid.uuid4().hex) as transport:
         client = DmaClient(pb, transport.rpc)
         client.probe(args.trigger_source)
+        print_acquisition_start(args, channels, 'dma')
         batch = min(args.chunk, client.batch_limit(channels, args.L))
         if getattr(args, "osc_mode", False):
             batch = 1
@@ -31,7 +34,7 @@ def run_dma_acquire(args, pb):
             for ch in channels:
                 files[ch] = (folder / f"channel_{ch}.dat").open("ab" if args.append_data else "wb")
             record_dma_output(folder, channels)
-            with metadata_path.open("w", encoding="utf-8") as metadata_file:
+            with metadata_path.open("w", encoding="utf-8") as metadata_file, tqdm(total=args.N, unit='wf') as pbar:
                 while completed < args.N:
                     n = min(batch, args.N - completed)
                     data, metadata = client.acquire(channels, args.L, n, args.trigger_source,
@@ -44,13 +47,14 @@ def run_dma_acquire(args, pb):
                     metadata_file.flush()
                     client.acknowledge()
                     completed += n
-                    print(f"DMA: {completed}/{args.N} waveforms, L={args.L}")
+                    pbar.update(n)
         finally:
             try:
                 client.cancel()
             finally:
                 for f in files.values():
                     f.close()
+    print_acquisition_done(completed, args.N)
     if args.compress:
         if args.compression_format == "tar":
             with tarfile.open(str(folder) + ".tar.gz", "w:gz", compresslevel=args.compression_level) as archive:

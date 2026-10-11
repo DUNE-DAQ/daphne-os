@@ -16,6 +16,7 @@ from trigger_source import (
     resolve_trigger_source,
 )
 from waveparse import parse_dump_response
+from cli_presentation import print_acquisition_start, print_acquisition_done
 
 
 pb_high, pb_low = load_protobuf_modules(require_trigger_source=True, require_dma="--dma" in sys.argv)
@@ -137,7 +138,7 @@ if args.dma:
     try:
         sys.exit(run_dma_acquire(args, pb_high))
     except (ValueError, RuntimeError, TimeoutError) as exc:
-        parser.exit(2, f"DMA acquisition failed: {exc}\n")
+        parser.exit(2, f"Acquisition failed: {exc}\n")
 
 # ----------------------------- Setup ----------------------------------
 
@@ -161,7 +162,6 @@ configure_trigger_source(
     _send_trigger_source_request,
     args.trigger_source,
 )
-print(f"Configured spybuffer trigger source: {args.trigger_source}")
 
 n_channels = len(args.channel_list)
 def _parse_channels(tokens):
@@ -179,6 +179,7 @@ def _parse_channels(tokens):
 
 args.channel_list = _parse_channels(args.channel_list)
 n_channels = len(args.channel_list)
+print_acquisition_start(args, args.channel_list, 'spybuffer')
 
 if not (args.legacy or args.legacy_only):
     credit = compute_credit(args.L, min(args.chunk, args.N), n_channels, budget_mb=args.net_buffer_mb)
@@ -207,7 +208,6 @@ if args.osc_mode:
     req.numberOfSamples = args.L
     req.softwareTrigger = bool(args.software_trigger)
 
-    print(f"Osc-mode: requesting {args.N} triggers (1 wf per channel per request), L={args.L}, channels={args.channel_list}, TRIGGER_SOURCE={args.trigger_source}, V2={args.v2}")
     files: Dict[int, any] = {ch: open(os.path.join(foldername, f"channel_{ch}.dat"), mode) for ch in args.channel_list}
     try:
         with tqdm(total=args.N, unit='wf') as pbar:
@@ -246,6 +246,7 @@ if args.osc_mode:
             except Exception:
                 pass
 
+    print_acquisition_done(args.N, args.N)
     if args.debug:
         dt = time.time() - start_time
         print(f"Done (osc-mode). Saved {args.N} waveforms per channel. Time: {dt//60:.0f}:{dt%60:.0f}")
@@ -274,7 +275,6 @@ if args.legacy or args.legacy_only:
         env.payload = req.SerializeToString()
         expect_type = pb_high.DUMP_SPYBUFFER
 
-    print(f"Requesting {args.N} waveforms (L={args.L}) on channels {args.channel_list}; TRIGGER_SOURCE={args.trigger_source} V2={args.v2 and not args.legacy_only}")
     resp_bytes = send_envelope_and_get_reply(socket, env)
 
     resp_env = pb_high.ControlEnvelopeV2() if (args.v2 and not args.legacy_only) else pb_high.ControlEnvelope()
@@ -290,15 +290,16 @@ if args.legacy or args.legacy_only:
     except ValueError:
         raise RuntimeError(f"Data size {data.size} not compatible with (N={args.N}, C={n_channels}, L={args.L})")
 
-    with tqdm(total=args.N, unit='wf', desc="Writing") as pbar:
+    with tqdm(total=args.N, unit='wf') as pbar:
         for idx, ch in enumerate(args.channel_list):
             fname = os.path.join(foldername, f"channel_{ch}.dat")
             if args.debug:
                 print(f"Saving data for channel {ch} to {fname}")
             with open(fname, mode) as f:
                 y[:, idx, :].astype(np.uint16, copy=False).tofile(f)
-            pbar.update(args.N)
+        pbar.update(args.N)
 
+    print_acquisition_done(args.N, args.N)
     if args.debug:
         dt = time.time() - start_time
         print(f"Done (legacy). Time: {dt//60:.0f}:{dt%60:.0f}")
@@ -334,7 +335,8 @@ else:
     env.type = pb_high.DUMP_SPYBUFFER_CHUNK
     env.payload = creq.SerializeToString()
 
-print(f"Streaming id={creq.requestID} N={args.N} L={args.L} chunk={creq.chunkSize} channels={args.channel_list} TRIGGER_SOURCE={args.trigger_source} V2={args.v2 and not args.legacy}")
+if args.debug:
+    print(f"Streaming id={creq.requestID} chunk={creq.chunkSize}")
 
 # Open all files once
 files: Dict[int, any] = {ch: open(os.path.join(foldername, f"channel_{ch}.dat"), mode) for ch in args.channel_list}
@@ -381,6 +383,7 @@ finally:
         except Exception:
             pass
 
+print_acquisition_done(wf_written, args.N)
 if args.debug:
     dt = time.time() - start_time
     print(f"Done (stream). Received {wf_written}/{args.N} waveforms. Time: {dt//60:.0f}:{dt%60:.0f}")

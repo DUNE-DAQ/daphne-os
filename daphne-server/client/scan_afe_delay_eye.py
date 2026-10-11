@@ -26,6 +26,10 @@ from afe_delay_sweep_analysis import (
     summarize_afe_eye,
 )
 from trigger_source import configure_trigger_source, read_trigger_source
+from cli_presentation import (
+    format_window, print_scan_header, print_scan_channels,
+    print_scan_apply, print_scan_artifacts,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -551,15 +555,6 @@ def apply_timing_settings(pb, args, settings: list[dict]) -> dict:
         context.term()
 
 
-def format_window(window: TapWindow | None) -> str:
-    if window is None:
-        return "none"
-    return (
-        f"{window.first_tap}..{window.last_tap} "
-        f"({window.point_count} tested points, midpoint={window.recommended_tap})"
-    )
-
-
 def plot_heatmap(
     run_dir: Path,
     afe: int,
@@ -704,16 +699,8 @@ def save_results(
                 max_error_rate=args.max_error_rate,
             )
 
-            print(
-                f"AFE{afe}: original_delay={afe_result.originalDelay}, "
-                f"bitslip={afe_result.bitslip}"
-            )
-            for lane, window in enumerate(eye.channel_windows):
-                status = "PASS" if window is not None else "FAIL"
-                print(
-                    f"  [{status}] ch{afe * 8 + lane:02d}: "
-                    f"passing eye {format_window(window)}"
-                )
+            print_scan_channels(afe, afe_result.originalDelay,
+                                afe_result.bitslip, eye.channel_windows)
             partial_candidate = None
             if eye.common_window is None:
                 all_afes_pass = False
@@ -918,16 +905,8 @@ def save_results(
             )
             for setting in recommendations:
                 choice = timing_choices_by_afe[setting["afe"]]
-                coverage = ""
-                if choice["mode"] == "partial":
-                    coverage = ", channels=" + ",".join(
-                        str(channel)
-                        for channel in choice["passing_channels"]
-                    )
-                print(
-                    f"[APPLY] AFE{setting['afe']}: IDELAY={setting['delay']}, "
-                    f"BITSLIP={setting['bitslip']}{coverage}"
-                )
+                print_scan_apply(setting['afe'], setting['delay'], setting['bitslip'],
+                                 choice['passing_channels'] if choice['mode'] == 'partial' else None)
         except Exception as error:
             timing_application["success"] = False
             timing_application["error"] = str(error)
@@ -1093,6 +1072,7 @@ def main() -> int:
     if args.max_error_rate < 0.0 or args.max_error_rate > 1.0:
         parser.error("--max-error-rate must be in 0..1")
 
+    print_scan_header(args, afes)
     if args.dma:
         if args.max_error_rate != 0 or args.verification_samples < 32768:
             parser.error("DMA requires zero errors and verification >= 32768 samples")
@@ -1100,44 +1080,11 @@ def main() -> int:
         try:
             return run_dma_scan(args, afes)
         except (RuntimeError, ValueError, TimeoutError) as error:
-            print(f"DMA scan failed: {error}", file=sys.stderr)
+            print(f"[FAIL] {error}", file=sys.stderr)
             return 1
 
     try:
         pb = load_protobuf_module(require_timing_write=args.apply_best)
-        print("DAPHNE AFE input-delay ramp sweep")
-        print(f"  endpoint       : tcp://{args.ip}:{args.port}")
-        print(f"  route          : {args.route}")
-        print(f"  AFEs           : {afes}")
-        if args.auto:
-            print(
-                f"  taps           : {args.first_tap}..{args.last_tap} "
-                f"coarse step {args.coarse_step}, fine step 1"
-            )
-        else:
-            print(
-                f"  taps           : {args.first_tap}..{args.last_tap} "
-                f"step {args.tap_step}"
-            )
-        print(f"  samples        : {args.samples}")
-        print(f"  waveforms/tap  : {args.waveforms}")
-        print("  trigger        : software (server-side)")
-        if args.apply_best:
-            print(
-                "[INFO] A successful scan will apply each common-eye "
-                "midpoint and leave delay VTC disabled."
-            )
-            if args.accept_partial_config:
-                print(
-                    "[WARN] partial configuration accepted: the best "
-                    "simultaneously passing channel subset will be used."
-                )
-        else:
-            print(
-                "[INFO] The client will restore the trigger source; the "
-                "server will restore AFE output, IDELAY and VTC state."
-            )
-
         auto_metadata = None
         if args.auto:
             response, original_trigger_source, auto_metadata = run_auto_sweep(
@@ -1158,10 +1105,7 @@ def main() -> int:
             original_trigger_source,
             auto_metadata,
         )
-        if run_dir is not None:
-            print(f"[INFO] detailed results: {run_dir}")
-        else:
-            print("[INFO] no artifacts generated; use --summary to create them")
+        print_scan_artifacts(run_dir)
         if passed and application_succeeded:
             print("[PASS] every requested AFE has a common eight-channel eye")
             return 0
