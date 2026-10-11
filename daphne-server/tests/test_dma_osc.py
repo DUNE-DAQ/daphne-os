@@ -19,6 +19,25 @@ from test_dma_trigger_client import TriggerServer
 
 @unittest.skipUnless(importlib.util.find_spec('PyQt6') and importlib.util.find_spec('pyqtgraph'), 'Qt optional on the test host')
 class DmaOscTests(unittest.TestCase):
+    def test_dma_failure_stays_visible_and_never_rearms_automatically(self):
+        from PyQt6 import QtWidgets
+        import osc
+        from dma_client import DmaClient
+        app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        server=TriggerServer();server.drop_metadata=True
+        req=pb.DumpSpyBuffersRequest(numberOfSamples=2048,numberOfWaveforms=1,channelList=[0])
+        worker=osc.AcquisitionWorker('fake','mezz/0','fake',1000,req,20,dma=True,
+            dma_capture_mode='triggered',dma_pretrigger=1024)
+        worker._link=object();worker._dma_client=DmaClient(pb,server.rpc)
+        messages=[];worker.status.connect(messages.append)
+        worker._poll_once()
+        calls=len(server.calls);worker._poll_once()
+        self.assertEqual(len(server.calls),calls)
+        self.assertTrue(worker._stop_evt.is_set())
+        self.assertEqual(worker._frames_acquired,0)
+        self.assertIn('[DMA stopped] Missing triggered waveform metadata',messages[-1])
+        app.processEvents()
+
     def test_close_before_dma_worker_starts_never_acquires(self):
         from PyQt6 import QtWidgets
         import osc

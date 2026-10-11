@@ -625,6 +625,10 @@ class AcquisitionWorker(QtCore.QObject):
         except Exception as exc:
             self.status.emit(f"[acquisition error] {exc}")
             self._close_link()
+            if self.dma:
+                # A failed DMA job is terminal. Automatic new ARM attempts hide
+                # the error behind the next phase message and repeat bad jobs.
+                self._finish_acquisition(f'[DMA stopped] {exc}')
         finally:
             self._emit_telemetry(force=False)
             self._busy = False
