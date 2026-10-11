@@ -85,6 +85,10 @@ class LinuxAfeEngine final : public AfeCaptureEngine {
  public:
   LinuxAfeEngine(uint64_t limit, std::string device) : limit_(limit), device_(std::move(device)) {}
   bool supports_triggered() const override;
+  daphne_afe_session_caps persistent_caps() const override { return linux_session_caps(device_); }
+  std::unique_ptr<AfePersistentSession> open_persistent(const AfePersistentRequest& r) override {
+    return open_linux_persistent(r, limit_, device_);
+  }
   std::unique_ptr<AfeTriggeredSession> open_triggered(const AfeTriggerRequest&, uint64_t) override;
   AfeCapture capture(const AfeRequest& req, const std::atomic<bool>& cancel) override {
     static_assert(sizeof(daphne_afe_dma_config) == 32, "AFE config UAPI layout");

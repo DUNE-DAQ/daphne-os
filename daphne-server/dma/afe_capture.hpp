@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../kernel/daphne-afe-dma/daphne_afe_dma_uapi.h"
+#include "../kernel/daphne-afe-dma/daphne_afe_session_uapi.h"
 
 namespace daphne_dma {
 
@@ -33,6 +34,8 @@ struct AfeCapture {
   std::array<std::string, 3> raw;
   bool triggered = false;
   daphne_afe_trigger_status trigger{};
+  daphne_afe_session_event event{};
+  uint64_t copy_ns = 0;
 };
 
 enum class TriggerPhase { preparing, history, waiting, capturing, finalizing, reading };
@@ -78,6 +81,40 @@ AfeLayout afe_layout(const AfeRequest& request, uint64_t maximum_bytes);
 void validate_afe_completion(const AfeRequest& request, const AfeLayout& layout,
                              const daphne_afe_dma_status& status);
 
+struct AfePersistentRequest {
+  AfeTriggerRequest trigger;
+  uint64_t target = 0, ring_budget = 0;
+  uint32_t pressure_timeout_ms = 0, cleanup_timeout_ms = 10000;
+  bool pattern = false; // standalone qualification only; never a public ALIGNED assertion
+};
+// GET is nonblocking. Only RELEASE/GET EBUSY or EAGAIN are retryable;
+// mutable operations with unknown results (including EINTR) are never replayed.
+class AfeSessionBackend {
+ public:
+  virtual ~AfeSessionBackend() = default;
+  virtual daphne_afe_session_config prepare(daphne_afe_session_config) = 0;
+  virtual void start() = 0;
+  virtual bool get(daphne_afe_session_event&) = 0;
+  virtual void read(const daphne_afe_event_id&, uint32_t, uint64_t, char*, uint32_t) = 0;
+  virtual bool release(const daphne_afe_event_id&) = 0;
+  virtual daphne_afe_session_status status() = 0;
+  virtual void cancel() = 0;
+  virtual void wait() = 0;
+  virtual void close() = 0; // includes live idle proof; quarantine retains kernel resources
+};
+class AfePersistentSession {
+ public:
+  virtual ~AfePersistentSession() = default;
+  virtual bool next(AfeCapture&, const std::atomic<bool>&) = 0;
+  virtual daphne_afe_session_status status() = 0;
+  virtual void finish(bool cancel) = 0;
+};
+std::unique_ptr<AfePersistentSession> make_persistent_session(
+    const AfePersistentRequest&, uint64_t waveform_limit, std::unique_ptr<AfeSessionBackend>);
+daphne_afe_session_caps linux_session_caps(const std::string&);
+std::unique_ptr<AfePersistentSession> open_linux_persistent(
+    const AfePersistentRequest&, uint64_t waveform_limit, const std::string&);
+
 // Injectable boundary for tests. The server supplies the readiness/alignment
 // permission; a public RPC cannot assert that the frontend is aligned.
 class AfeCaptureEngine {
@@ -85,6 +122,10 @@ class AfeCaptureEngine {
   virtual ~AfeCaptureEngine() = default;
   virtual AfeCapture capture(const AfeRequest&, const std::atomic<bool>& cancel) = 0;
   virtual bool supports_triggered() const { return false; }
+  virtual daphne_afe_session_caps persistent_caps() const { return {}; }
+  virtual std::unique_ptr<AfePersistentSession> open_persistent(const AfePersistentRequest&) {
+    throw std::runtime_error("PERSISTENT_UNAVAILABLE: session engine unavailable");
+  }
   virtual std::unique_ptr<AfeTriggeredSession> open_triggered(const AfeTriggerRequest&, uint64_t) {
     throw std::runtime_error("TRIGGERED_UNAVAILABLE: capture engine has no triggered session");
   }

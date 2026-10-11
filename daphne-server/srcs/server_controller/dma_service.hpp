@@ -8,6 +8,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <deque>
+#include <condition_variable>
 #include "daphneV3_high_level_confs.pb.h"
 #include "server_controller/gateware.hpp"
 #include "../../dma/afe_capture.hpp"
@@ -47,6 +49,9 @@ class DmaService {
   daphne::AcquisitionCapabilitiesResponse capabilities(uint32_t maximum_revision = 0) const;
  private:
   void start(const daphne::DmaAcquireRequest&, const std::string&, daphne::DmaJobResponse&);
+  void start_persistent(const daphne::DmaAcquireRequest&, const std::string&, daphne::DmaJobResponse&);
+  void read_persistent(const daphne::DmaReadRequest&, daphne::DmaReadResponse&);
+  void ack_persistent(const daphne::DmaControlRequest&);
   void scan(const daphne::AfeDelaySweepRequest&, const std::string&, daphne::DmaJobResponse&);
   void status(uint64_t, const std::string&, daphne::DmaJobResponse&);
   void read(const daphne::DmaReadRequest&, const std::string&, daphne::DmaReadResponse&);
@@ -83,6 +88,16 @@ class DmaService {
   std::vector<daphne_dma::AfeCapture> captures_;
   std::vector<std::array<uint32_t, 3>> read_ticks_;
   daphne::AfeDelaySweepResponse scan_result_;
+  struct StagedEvent { daphne_dma::AfeCapture capture; std::array<uint32_t, 3> read_ticks{}; };
+  std::deque<StagedEvent> staged_;
+  std::condition_variable credit_;
+  daphne_afe_session_caps session_caps_{};
+  daphne_afe_session_status session_status_{};
+  uint64_t target_ = 0, staged_total_ = 0, acknowledged_ = 0, delivered_ = 0;
+  uint64_t staged_bytes_ = 0, fragment_sequence_ = 0;
+  uint64_t staging_copy_ns_ = 0;
+  bool producer_closed_ = false;
+  static constexpr uint32_t staging_event_limit_ = 16;
 };
 
 // Physical-pattern scan, using the same capture engine as normal acquisition.
