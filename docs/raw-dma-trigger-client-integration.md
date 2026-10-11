@@ -153,3 +153,10 @@ spybuffer mínima. El informe físico previo acredita firmware/UAPI, no sustituy
 esa prueba del nuevo protocolo. Preparar UART y recuperación antes de cargar
 el firmware de pruebas; no repetir las campañas DDR ya cerradas. T6 (latencia de
 terminación) y la cualificación física de external/timing permanecen pendientes.
+
+Actualización física del 2026-10-11: el servidor corregido y osc.py pasaron
+capturas triggered software con pretrigger y eventos repetidos; se corrigió
+la interpretación de los snapshots anteriores a halt que dejaba la GUI vacía.
+La sesión manual está activa. Ver
+[resultados, configuración y límite de latencia](raw-dma-trigger-snapshot-fix-2026-10-11.md)
+para las pruebas realizadas y las partes de T5/T6 todavía pendientes.
