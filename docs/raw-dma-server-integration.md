@@ -1,5 +1,9 @@
 # Raw DMA en daphneServer: primera integración
 
+La extensión posterior de trigger/pretrigger, su negociación y los comandos
+actuales están en [raw-dma-trigger-client-integration.md](raw-dma-trigger-client-integration.md).
+El resto de este documento describe el modo DMA **finito**, que se conserva.
+
 ## Alcance y compatibilidad
 
 El mismo `daphneServer` admite el backend DMA mediante `--dma --gateware-mode raw-dma`.
@@ -12,8 +16,7 @@ Los START se emiten en cuanto termina y se libera la captura anterior, sin una
 pausa artificial. No se promete adquisición continua, pretrigger ni timestamp
 hardware; esos datos se indican expresamente en los metadatos.
 
-El protocolo y los clientes contemplan software, external, timing, self y all.
-Por ahora el servidor anuncia únicamente software y rechaza las demás fuentes
+El modo finito anuncia únicamente software y rechaza las demás fuentes
 antes de START. La espera de un trigger hardware, la ventana de L muestras que
 ignora triggers adicionales y el rearme requieren la siguiente versión del
 firmware y su validación. No se simulan esas fuentes con START Linux.
@@ -23,7 +26,8 @@ mensajes y gráficos de los clientes (commits `9d76ca8` y `611ded1`). CH39 queda
 fuera de ese alcance. La implementación de los otros dos métodos de trigger
 queda pendiente de un nuevo firmware con soporte físico de trigger y rearme;
 después deberá integrarse y verificarse con el servidor y los clientes.
-La versión actual continúa admitiendo únicamente software trigger en DMA.
+Ese cierre corresponde a la integración finita. La extensión enlazada arriba añade
+triggered software/external/timing, con las limitaciones de cualificación indicadas.
 
 La admisión depende de ABI 2.0, variante raw-dma, capability física AFE bit 4,
 UAPI AFE ABI 1 y formato raw 1. No se fija un commit de firmware. El build ID
