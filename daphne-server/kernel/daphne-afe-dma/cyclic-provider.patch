@@ -1,0 +1,103 @@
+--- daphne_dma_bounded.c
++++ daphne_dma_bounded.c
+@@ -1961,7 +1961,8 @@
+ 		axidma_tail_segment = list_last_entry(&tail_desc->segments,
+ 					       struct xilinx_axidma_tx_segment,
+ 					       node);
+-		axidma_tail_segment->hw.next_desc = (u32)desc->async_tx.phys;
++		axidma_tail_segment->hw.next_desc = lower_32_bits(desc->async_tx.phys);
++		axidma_tail_segment->hw.next_desc_msb = upper_32_bits(desc->async_tx.phys);
+ 	} else {
+ 		aximcdma_tail_segment =
+ 			list_last_entry(&tail_desc->segments,
+@@ -2392,7 +2393,7 @@
+ 	int i;
+ 	u32 reg;
+ 
+-	if (!period_len)
++	if (!period_len || buf_len % period_len)
+ 		return NULL;
+ 
+ 	num_periods = buf_len / period_len;
+@@ -2434,8 +2435,10 @@
+ 					  period_len * i);
+ 			hw->control = copy;
+ 
+-			if (prev)
+-				prev->hw.next_desc = segment->phys;
++			if (prev) {
++				prev->hw.next_desc = lower_32_bits(segment->phys);
++				prev->hw.next_desc_msb = upper_32_bits(segment->phys);
++			}
+ 
+ 			prev = segment;
+ 			sg_used += copy;
+@@ -2455,12 +2458,16 @@
+ 	desc->cyclic = true;
+ 	reg = dma_ctrl_read(chan, XILINX_DMA_REG_DMACR);
+ 	reg |= XILINX_DMA_CR_CYCLIC_BD_EN_MASK;
++	/* Polling consumer needs error IRQs only, no IRQ per history period. */
++	if (!(flags & DMA_PREP_INTERRUPT))
++		reg &= ~(XILINX_DMA_DMACR_FRM_CNT_IRQ | XILINX_DMA_DMACR_DLY_CNT_IRQ);
+ 	dma_ctrl_write(chan, XILINX_DMA_REG_DMACR, reg);
+ 
+ 	segment = list_last_entry(&desc->segments,
+ 				  struct xilinx_axidma_tx_segment,
+ 				  node);
+-	segment->hw.next_desc = (u32) head_segment->phys;
++	segment->hw.next_desc = lower_32_bits(head_segment->phys);
++	segment->hw.next_desc_msb = upper_32_bits(head_segment->phys);
+ 
+ 	/* For the last DMA_MEM_TO_DEV transfer, set EOP */
+ 	if (direction == DMA_MEM_TO_DEV) {
+@@ -2585,17 +2592,18 @@
+ 	u32 reg;
+ 	int err;
+ 
+-	if (!chan->cyclic) {
+-		err = chan->stop_transfer(chan);
+-		if (err) {
+-			dev_err(chan->dev, "Cannot stop channel %p: %x\n",
+-				chan, dma_ctrl_read(chan,
+-				XILINX_DMA_REG_DMASR));
+-			chan->err = true;
+-		}
+-	}
+-
+-	xilinx_dma_chan_reset(chan);
++	/* Stop is bounded; a stalled cyclic S2MM packet may require reset.
++	 * Never release descriptor memory if that reset cannot be proven.
++	 * The consumer must fence payload writes BEFORE terminating a valid job.
++	 */
++	err = chan->stop_transfer(chan);
++	if (err)
++		dev_warn(chan->dev, "bounded stop failed; attempting reset\n");
++	err = xilinx_dma_chan_reset(chan);
++	if (err) {
++		chan->err = true;
++		return err;
++	}
+ 	/* Remove and free all of the descriptors in the lists */
+ 	chan->terminating = true;
+ 	xilinx_dma_free_descriptors(chan);
+@@ -2635,6 +2643,8 @@
+  *
+  * Return: '0' on success and failure value on error
+  */
++int daphne_bounded_vdma_channel_set_config(struct dma_chan *dchan,
++                                         struct xilinx_vdma_config *cfg);
+ int daphne_bounded_vdma_channel_set_config(struct dma_chan *dchan,
+ 					struct xilinx_vdma_config *cfg)
+ {
+@@ -3378,6 +3388,11 @@
+ 	.remove = xilinx_dma_remove,
+ };
+ 
++/* Versioned admission for the cyclic consumer; finite consumers need no symbol. */
++int daphne_bounded_cyclic_api(void);
++int daphne_bounded_cyclic_api(void) { return 1; }
++EXPORT_SYMBOL_GPL(daphne_bounded_cyclic_api);
++
+ module_platform_driver(xilinx_vdma_driver);
+ 
+ MODULE_AUTHOR("Xilinx, Inc.");
