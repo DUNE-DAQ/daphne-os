@@ -33,6 +33,8 @@ from trigger_source import (
 )
 from dma_client import DmaClient, link_rpc
 from dma_output import prepare_dma_output, record_dma_output
+from dma_options import (add_dma_capture_arguments, validate_dma_capture_arguments,
+                         capture_contract, phase_text, relative_sample_axis)
 from waveparse import parse_dump_response
 
 
@@ -153,12 +155,13 @@ class V2Link:
 
 # ---------------------- Disk writer ----------------------
 class WaveformDiskWriter(threading.Thread):
-    def __init__(self, save_dir, channels, append_data=False, queue_frames=512, flush_every=128, dma=False):
+    def __init__(self, save_dir, channels, append_data=False, queue_frames=512, flush_every=128, dma=False, dma_contract=None):
         super().__init__(daemon=True)
         self.save_dir = Path(save_dir)
         self.channels = list(channels)
         self.append_data = bool(append_data)
         self.dma = bool(dma)
+        self.dma_contract = dma_contract
         self.flush_every = max(1, int(flush_every))
 
         self.queue = queue.Queue(maxsize=max(1, int(queue_frames)))
@@ -176,13 +179,15 @@ class WaveformDiskWriter(threading.Thread):
 
         try:
             if self.dma:
-                prepare_dma_output(self.save_dir, self.channels, self.append_data)
+                prepare_dma_output(self.save_dir, self.channels, self.append_data, self.dma_contract)
             self.save_dir.mkdir(parents=True, exist_ok=True)
             for ch in self.channels:
                 fp = self.save_dir / f"channel_{ch}.dat"
                 files[ch] = open(fp, mode)
             if self.dma:
-                record_dma_output(self.save_dir, self.channels)
+                record_dma_output(self.save_dir, self.channels, self.dma_contract)
+                if not self.append_data:
+                    (self.save_dir / 'dma_waveforms.jsonl').write_text('', encoding='utf-8')
         except Exception as exc:
             for handle in files.values():
                 handle.close()
@@ -209,10 +214,15 @@ class WaveformDiskWriter(threading.Thread):
                         raise ValueError(
                             f"Invalid frame shape {yk.shape}, expected ({len(self.channels)}, N)"
                         )
+                    if self.dma_contract and yk.shape[1] != self.dma_contract['samples']:
+                        raise ValueError('DMA frame length differs from the saved capture contract')
+                    if receipt is not None:
+                        metadata = dict(metadata or {})
+                        metadata['file_first_waveform'] = {str(ch): files[ch].tell() // (2*yk.shape[1]) for ch in self.channels}
 
                     local_bytes = 0
                     for idx, ch in enumerate(self.channels):
-                        out = yk[idx, :].astype(np.uint16, copy=False)
+                        out = yk[idx, :].astype('<u2' if self.dma else np.uint16, copy=False)
                         out.tofile(files[ch])
                         local_bytes += out.nbytes
 
@@ -278,6 +288,7 @@ class AcquisitionWorker(QtCore.QObject):
     fft_update = QtCore.pyqtSignal(object, int)  # (dBFS spectrum, number of averaged waveforms)
     plot_update = QtCore.pyqtSignal(object, float, int, int)  # (yk, rtt_ms, frame_id, t_ns)
     acquisition_finished = QtCore.pyqtSignal(str)
+    stopped = QtCore.pyqtSignal()
 
     def __init__(
         self,
@@ -293,6 +304,10 @@ class AcquisitionWorker(QtCore.QObject):
         fft_config=None,
         dma=False,
         dma_trigger_source="software",
+        dma_capture_mode="finite",
+        dma_pretrigger=0,
+        dma_trigger_timeout_ms=10000,
+        dma_job_timeout_ms=0,
     ):
         super().__init__()
         self.endpoint = endpoint
@@ -302,7 +317,12 @@ class AcquisitionWorker(QtCore.QObject):
         self.req = req
         self.dma = dma
         self.dma_trigger_source = dma_trigger_source
+        self.dma_capture_mode = dma_capture_mode
+        self.dma_pretrigger = dma_pretrigger
+        self.dma_trigger_timeout_ms = dma_trigger_timeout_ms
+        self.dma_job_timeout_ms = dma_job_timeout_ms
         self._dma_client = None
+        self.dma_cleanup_error = ''
         self.period_ms = max(1, int(period_ms))
         self.max_waveforms = max(0, int(max_waveforms))
 
@@ -444,6 +464,9 @@ class AcquisitionWorker(QtCore.QObject):
 
     @QtCore.pyqtSlot()
     def start(self):
+        if self.dma and self._stop_evt.is_set():
+            self.stop()
+            return
         self._stop_evt.clear()
 
         self._timer = QtCore.QTimer()
@@ -462,12 +485,14 @@ class AcquisitionWorker(QtCore.QObject):
             self._timer = None
 
         self._close_link()
+        self.stopped.emit()
 
     def _close_link(self):
         if self._dma_client is not None:
             try:
                 self._dma_client.cancel()
             except Exception as exc:
+                self.dma_cleanup_error = str(exc)
                 self.status.emit(f"[DMA cancellation] {exc}")
             self._dma_client = None
         if self._link is not None:
@@ -482,8 +507,10 @@ class AcquisitionWorker(QtCore.QObject):
             return
         self._link = V2Link(self.endpoint, self.identity.encode(), self.timeout_ms)
         if self.dma:
-            self._dma_client = DmaClient(pb_high, link_rpc(pb_high, self._link, self.route), self._stop_evt.is_set)
-            self._dma_client.probe(self.dma_trigger_source)
+            self._dma_client = DmaClient(pb_high, link_rpc(pb_high, self._link, self.route), self._stop_evt.is_set,
+                progress_callback=lambda done, total, phase: self.status.emit(
+                    f'{phase_text(pb_high, phase)} ({done}/{total}); displayed waveform is the last completed event'))
+            self._dma_client.probe(self.dma_trigger_source, self.dma_capture_mode, self.dma_pretrigger)
         self.status.emit(f"Connected to {self.endpoint}")
 
     def _push_save_frame(self, yk, metadata=None):
@@ -548,7 +575,9 @@ class AcquisitionWorker(QtCore.QObject):
             if self.dma:
                 t0 = time.monotonic()
                 y_all, metadata = self._dma_client.acquire(list(self.req.channelList), self.req.numberOfSamples,
-                    1, self.dma_trigger_source, timeout_ms=10000)
+                    1, self.dma_trigger_source, timeout_ms=self.dma_trigger_timeout_ms,
+                    capture_mode=self.dma_capture_mode, pretrigger=self.dma_pretrigger,
+                    job_timeout_ms=self.dma_job_timeout_ms)
                 rtt_ms = (time.monotonic() - t0) * 1000
                 yk = np.ascontiguousarray(y_all[0])
             else:
@@ -632,7 +661,9 @@ class DaphneOscApp(QtWidgets.QWidget):
         self._latest_fft_x = None
         self._latest_fft_y = None
 
-        self._x_axis = np.arange(self.n_samples)
+        self._triggered = args.dma and getattr(args, 'capture_mode', 'finite') == 'triggered'
+        self._x_axis = (relative_sample_axis(self.n_samples, args.pretrigger, self.fs_hz)
+                        if self._triggered else np.arange(self.n_samples))
         self._latest_worker_msg = "Ready"
         self._last_rtt_ms = 0.0
         self._frames_rendered = 0
@@ -666,6 +697,7 @@ class DaphneOscApp(QtWidgets.QWidget):
                 queue_frames=args.save_queue_frames,
                 flush_every=args.flush_every_frames,
                 dma=args.dma,
+                dma_contract=capture_contract(args) if args.dma else None,
             )
             self.writer.start()
             self.writer.wait_ready(timeout_s=2.0)
@@ -719,6 +751,10 @@ class DaphneOscApp(QtWidgets.QWidget):
             save_health_checker=self._writer_error_text,
             dma=args.dma,
             dma_trigger_source=args.trigger_source,
+            dma_capture_mode=getattr(args, 'capture_mode', 'finite'),
+            dma_pretrigger=getattr(args, 'pretrigger', 0),
+            dma_trigger_timeout_ms=getattr(args, 'trigger_timeout_ms', 10000),
+            dma_job_timeout_ms=getattr(args, 'job_timeout_ms', 0),
             fft_config={
                 "enabled": self.enable_fft,
                 "channel_index": self.fft_channel_index,
@@ -740,6 +776,8 @@ class DaphneOscApp(QtWidgets.QWidget):
 
         self.worker_thread.started.connect(self.worker.start)
         self.worker_thread.finished.connect(self.worker.deleteLater)
+        if args.dma:
+            self.worker.stopped.connect(self.worker_thread.quit)
         QtWidgets.QApplication.instance().aboutToQuit.connect(self._cleanup)
         self.worker_thread.start()
 
@@ -759,7 +797,9 @@ class DaphneOscApp(QtWidgets.QWidget):
             "samples_per_waveform": self.n_samples,
             "backend": "dma" if args.dma else "spybuffer",
             "wire_format": "raw16_le" if args.dma else "legacy",
-            "independent_software_triggers": bool(args.dma),
+            "independent_software_triggers": bool(args.dma and self.trigger_source == 'software'),
+            "capture_mode": getattr(args, 'capture_mode', 'finite') if args.dma else 'spybuffer',
+            "pretrigger_samples": getattr(args, 'pretrigger', 0),
             "continuous": False,
             "trigger_source": self.trigger_source,
             "software_trigger": bool(self.software_trigger),
@@ -808,11 +848,14 @@ class DaphneOscApp(QtWidgets.QWidget):
         self.plot_wf = pg.PlotWidget(title=f"Waveforms (ch {ch_label})")
         self.plot_wf.setLabel("left", "ADC counts")
         self.plot_wf.setLabel("bottom", "Sample")
+        if self._triggered:
+            self.plot_wf.setLabel('bottom', 'Time relative to trigger (µs)')
+            self.plot_wf.addItem(pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen('y', style=QtCore.Qt.PenStyle.DashLine)))
         wf_item = self.plot_wf.getPlotItem()
         wf_item.setClipToView(False)
         wf_item.setDownsampling(auto=False)
         wf_item.enableAutoRange(axis="y", enable=False)
-        self.plot_wf.setXRange(0, self.n_samples - 1, padding=0)
+        self.plot_wf.setXRange(float(self._x_axis[0]), float(self._x_axis[-1]), padding=0)
         layout.addWidget(self.plot_wf)
 
         self.legend = self.plot_wf.addLegend(offset=(10, 10))
@@ -1378,8 +1421,30 @@ class DaphneOscApp(QtWidgets.QWidget):
         self.status.setText(status_text)
 
     def closeEvent(self, event):
+        if self.args.dma and self.worker_thread.isRunning():
+            event.ignore()
+            if not getattr(self, '_closing_dma', False):
+                self._closing_dma = True
+                self.render_timer.stop()
+                self.worker.request_stop()
+                QtCore.QMetaObject.invokeMethod(self.worker, 'stop', QtCore.Qt.ConnectionType.QueuedConnection)
+                self._on_worker_status('Stopping DMA; waiting for cancellation and idle verification')
+                self._close_timer = QtCore.QTimer(self)
+                self._close_timer.setInterval(100)
+                self._close_timer.timeout.connect(self._finish_dma_close)
+                self._close_timer.start()
+            return
         self._cleanup()
         super().closeEvent(event)
+
+    def _finish_dma_close(self):
+        if not self.worker_thread.isRunning():
+            self._close_timer.stop()
+            if self.worker.dma_cleanup_error:
+                self._on_worker_status(f'DMA cleanup unconfirmed: {self.worker.dma_cleanup_error}; keep the overlay loaded')
+                self._closing_dma = False
+                return
+            self.close()
 
     def _cleanup(self):
         if self._cleaned:
@@ -1389,7 +1454,8 @@ class DaphneOscApp(QtWidgets.QWidget):
         if hasattr(self, "render_timer") and self.render_timer is not None:
             self.render_timer.stop()
 
-        if getattr(self, "worker", None) is not None:
+        thread_running = getattr(self, 'worker_thread', None) is not None and self.worker_thread.isRunning()
+        if getattr(self, "worker", None) is not None and thread_running:
             self.worker.request_stop()
             QtCore.QMetaObject.invokeMethod(
                 self.worker,
@@ -1397,7 +1463,7 @@ class DaphneOscApp(QtWidgets.QWidget):
                 QtCore.Qt.ConnectionType.QueuedConnection,
             )
 
-        if getattr(self, "worker_thread", None) is not None:
+        if thread_running:
             self.worker_thread.quit()
             self.worker_thread.wait(3000)
 
@@ -1468,6 +1534,7 @@ def main():
 
     parser.add_argument("-L", type=int, required=True, help="Samples per waveform (<= 2048)")
     parser.add_argument("--dma", action="store_true", help="Acquire long waveforms through raw DMA")
+    add_dma_capture_arguments(parser)
     add_trigger_source_arguments(parser, include_self="--dma" in sys.argv)
 
     parser.add_argument("-enable_fft", "--enable_fft", action="store_true", help="Show statistically averaged FFT plot")
@@ -1518,6 +1585,7 @@ def main():
 
     args = parser.parse_args()
     resolve_trigger_source(parser, args)
+    validate_dma_capture_arguments(parser, args)
 
     # Parse channels
     if args.channels:
@@ -1552,6 +1620,9 @@ def main():
     if args.rms_window < 1:
         print("rms_window must be >= 1")
         return 2
+    if not np.isfinite(args.sampling_rate_hz) or args.sampling_rate_hz <= 0:
+        print('sampling_rate_hz must be positive and finite')
+        return 2
 
     if args.enable_fft:
         if args.fft_channel is None:
@@ -1583,12 +1654,17 @@ def main():
 
         if args.dma:
             client = DmaClient(pb_high, link_rpc(pb_high, config_link, args.route))
-            client.probe(args.trigger_source)
-            client.batch_limit(args.channels, args.L)
+            client.probe(args.trigger_source, args.capture_mode, args.pretrigger)
+            client.batch_limit(args.channels, args.L, args.capture_mode, args.pretrigger)
             if args.enable_fft and args.fft_avg_waves * (args.L // 2 + 1) * 8 > 64 * 1024 * 1024:
                 raise ValueError("DMA FFT average exceeds 64 MiB; reduce -fft_avg_waves")
             args.save_queue_frames = min(args.save_queue_frames, max(1, 64 * 1024 * 1024 // (2 * len(args.channels) * args.L)))
-            print("DMA software trigger: independent START per waveform")
+            if args.capture_mode == 'finite':
+                print('DMA software trigger: independent START per waveform')
+            else:
+                print(f'DMA triggered: source={args.trigger_source}, P={args.pretrigger}, trigger sample={args.pretrigger}')
+                if args.trigger_source in ('external', 'timing'):
+                    print(f'DMA {args.trigger_source}: experimental source; waiting for an event from hardware')
         else:
             configure_trigger_source(pb_high, send_trigger_source_request, args.trigger_source)
             print(f"Configured spybuffer trigger source: {args.trigger_source}")
