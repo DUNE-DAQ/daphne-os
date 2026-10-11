@@ -254,7 +254,12 @@ void DmaService::scan(const daphne::AfeDelaySweepRequest& req, const std::string
     try {
       if (!scanner_) throw std::runtime_error("DMA scanner unavailable");
       auto result = scanner_(req, cancel_);
+      // A startup probe can observe a temporarily unavailable backend. After
+      // calibration has closed its driver FDs, refresh read-only admission in
+      // this worker; capabilities on the router continue to use cached data.
+      const bool triggered = (identity_.capabilities & 64U) && engine_->supports_triggered();
       std::lock_guard<std::mutex> lock(mutex_);
+      triggered_available_ = triggered;
       scan_result_ = std::move(result);
       for (uint32_t a = 0; a < 5; ++a) if (mask & (1U << a)) states_[a] = daphne::FRONTEND_CONFIGURED_UNALIGNED;
       for (const auto& a : scan_result_.afes()) if (a.applied()) {

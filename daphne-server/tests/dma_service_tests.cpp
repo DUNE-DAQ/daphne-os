@@ -124,8 +124,26 @@ void test_triggered() {
   require(wait_ready(service, job.job_id()).state() == DMA_JOB_CANCELLED);
   control.set_job_id(job.job_id()); require(rpc(service, MT2_DMA_CONTROL_REQ, control).success());
 }
+void test_triggered_admission_after_calibration() {
+  auto engine = std::make_unique<Engine>(); auto* fake = engine.get();
+  DmaService service({0x44415048,0x20000,3,987,80}, {}, std::move(engine),
+      [](const auto&, bool) {}, [fake](const AfeDelaySweepRequest&, const std::atomic<bool>&) {
+        fake->triggered = true;
+        AfeDelaySweepResponse out; auto* a = out.add_afes(); a->set_afe(0);
+        a->set_applied(true); a->set_approved_lane_mask(255); return out;
+      }, [] {}, [] { return true; });
+  require(!service.capabilities(2).capture_modes(1).available());
+  ConfigureRequest configure; configure.add_afes()->set_id(0); service.configured(configure);
+  AfeDelaySweepRequest scan; scan.set_backend(ACQUISITION_DMA); scan.add_afes(0);
+  scan.set_firsttap(100); scan.set_lasttap(104); scan.set_tapstep(4);
+  scan.set_numberofsamples(32768); scan.set_numberofwaveforms(1); scan.set_apply_best(true);
+  auto job = rpc(service, MT2_DMA_SCAN_REQ, scan);
+  require(wait_ready(service, job.job_id()).state() == DMA_JOB_READY);
+  require(service.capabilities(2).capture_modes(1).available());
+}
 int main() {
   test_triggered();
+  test_triggered_admission_after_calibration();
   auto engine = std::make_unique<Engine>(); auto* fake = engine.get();
   unsigned guards = 0;
   DmaServiceOptions options; options.maximum_job_bytes = 2U << 20; options.maximum_fragment_bytes = 64;

@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
     session = open_linux_persistent(r, 64ULL << 20, "/dev/daphne-afe-dma");
     const auto start = std::chrono::steady_clock::now();
     const auto deadline = start + std::chrono::seconds(120);
-    std::atomic<bool> cancel{false}; uint64_t bytes=0, count=0;
+    std::atomic<bool> cancel{false}; uint64_t bytes=0, count=0, copy_ns=0;
     while (count < r.target) {
       if (std::chrono::steady_clock::now() >= deadline) throw std::runtime_error("Probe 120 s deadline expired");
       AfeCapture c;
@@ -38,9 +38,10 @@ int main(int argc, char** argv) {
           if (word != expected) throw std::runtime_error("Pattern integrity mismatch event="+std::to_string(c.event.id.sequence)+" route="+std::to_string(route)+" tick="+std::to_string(t));
         }
       }
-      bytes+=c.layout.total_bytes;++count;
+      bytes+=c.layout.total_bytes;copy_ns+=c.copy_ns;++count;
       if (pause) std::this_thread::sleep_for(std::chrono::milliseconds(pause));
     }
+    const double delivery_seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
     auto s=session->status();
     while (s.state!=DAPHNE_SESSION_COMPLETE || s.released!=r.target) {
       if (std::chrono::steady_clock::now() >= deadline) throw std::runtime_error("Probe final stop deadline expired");
@@ -51,7 +52,8 @@ int main(int argc, char** argv) {
     session->finish(false);
     const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
     std::cout<<"{\"events\":"<<count<<",\"bytes\":"<<bytes<<",\"seconds\":"<<seconds
-      <<",\"payload_MB_s\":"<<bytes/seconds/1e6<<",\"pauses\":"<<s.pauses
+      <<",\"capture_delivery_seconds\":"<<delivery_seconds<<",\"final_drain_close_seconds\":"<<seconds-delivery_seconds
+      <<",\"copy_ns\":"<<copy_ns<<",\"payload_MB_s\":"<<bytes/seconds/1e6<<",\"pauses\":"<<s.pauses
       <<",\"starts\":"<<s.starts<<",\"stops\":"<<s.stops<<",\"guards_ok\":true,\"pattern\":"<<(r.pattern?"true":"false")<<"}\n";
     return 0;
   } catch (const std::exception& e) {
