@@ -117,6 +117,11 @@ vueltas/generaciones, stale/double ACK, N>2^32, cancelación y metadatos corrupt
 clientes offline de archivos/append, decoder y Qt; cliente Python contra el
 servicio C++ real por ZeroMQ con backend simulado. No prueban coherencia DDR.
 
+El [informe físico del 12 de octubre](raw-dma-persistent-physical-results-2026-10-12.md)
+registra la carga de 630a9da, el DTBO Linux compatible, las pruebas reales desde
+daphne-dev y las mediciones por etapa. La admisión triggered se refresca en el
+worker después de calibración, manteniendo capabilities como consulta cacheada.
+
 Ensayos físicos separados: sonda patrón N=1/2/8/37 y presión, cliente de archivos
 con N no múltiplo de chunk, Qt offscreen/archivo, lease/cancel y adquisición finita
 posterior. External/timing requieren estímulos controlados y revisión CDC.
