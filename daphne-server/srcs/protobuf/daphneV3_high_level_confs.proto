@@ -232,7 +232,7 @@ message AfeAcquisitionState {
   uint32 afe = 1; FrontendState state = 2; uint32 approved_lane_mask = 3;
   uint64 configuration_generation = 4;
 }
-enum DmaCaptureMode { DMA_CAPTURE_FINITE = 0; DMA_CAPTURE_TRIGGERED = 1; }
+enum DmaCaptureMode { DMA_CAPTURE_FINITE = 0; DMA_CAPTURE_TRIGGERED = 1; DMA_CAPTURE_PERSISTENT = 2; }
 enum DmaCapturePhase {
   DMA_PHASE_IDLE = 0; DMA_PHASE_PREPARING = 1; DMA_PHASE_HISTORY = 2;
   DMA_PHASE_WAITING_TRIGGER = 3; DMA_PHASE_CAPTURING = 4;
@@ -261,6 +261,9 @@ message AcquisitionCapabilitiesResponse {
   repeated DmaModeCapabilities capture_modes = 19;
   uint64 maximum_ring_bytes = 20; uint32 period_ticks = 21;
   uint32 lease_ms = 22; uint32 cleanup_timeout_ms = 23;
+  uint32 session_abi = 24; uint32 session_features = 25; uint32 session_slots = 26;
+  uint64 maximum_target_waveforms = 27; uint32 maximum_staged_events = 28;
+  uint64 session_pool_bytes = 29; uint64 session_route_bytes = 30;
 }
 enum DmaJobState {
   DMA_JOB_IDLE = 0; DMA_JOB_RUNNING = 1; DMA_JOB_READY = 2;
@@ -272,6 +275,9 @@ message DmaAcquireRequest {
   DmaTriggerSource trigger_source = 5; uint32 timeout_ms = 6;
   DmaCaptureMode capture_mode = 7; uint32 pretrigger_samples = 8;
   uint64 job_timeout_ms = 9;
+  // Revision 3 persistent acquisition: N is independent of staging/chunk.
+  uint64 target_waveforms = 10; uint32 protocol_revision = 11;
+  uint32 pressure_timeout_ms = 12;
 }
 message DmaJobRequest { uint64 job_id = 1; }
 message DmaJobResponse {
@@ -281,6 +287,21 @@ message DmaJobResponse {
   DmaCaptureMode capture_mode = 9; DmaTriggerSource trigger_source = 10;
   uint32 pretrigger_samples = 11; DmaCapturePhase phase = 12;
   uint32 contract_version = 13; uint64 job_timeout_ms = 14;
+  DmaSessionProgress session_progress = 15;
+  repeated DmaEventId available_events = 16;
+}
+message DmaEventId { uint64 session = 1; uint64 sequence = 2; uint64 generation = 3; uint32 slot = 4; }
+message DmaSessionProgress {
+  uint64 target = 1; uint64 accepted = 2; uint64 completed = 3;
+  uint64 driver_delivered = 4; uint64 driver_released = 5;
+  uint64 staged = 6; uint64 acknowledged = 7; uint64 delivered = 8;
+  uint64 staged_bytes = 9; uint32 staged_events = 10; uint32 driver_state = 11;
+  uint64 segment = 12; uint64 pauses = 13; repeated uint64 ignored = 14;
+  uint64 allocated_bytes = 15; uint64 start_ns = 16; uint64 end_ns = 17;
+  uint64 starts = 18; uint64 stops = 19; bool producer_complete = 20;
+  int32 error = 21; uint32 hardware_error = 22; bool guards_ok = 23;
+  uint64 session = 24;
+  uint64 staging_copy_ns = 25;
 }
 message DmaWaveformMetadata {
   uint32 contract_version = 1; DmaCaptureMode capture_mode = 2;
@@ -289,10 +310,14 @@ message DmaWaveformMetadata {
   uint64 window_first = 7; uint64 stream_ticks = 8;
   uint64 trigger_timestamp = 9; bool trigger_timestamp_valid = 10;
   uint64 ignored_triggers = 11; uint32 period_ticks = 12; uint32 ring_ticks = 13;
+  DmaEventId event_id = 14; uint64 channel_mask = 15; uint64 first_cursor = 16;
+  uint64 fence_end = 17; uint64 segment = 18; repeated uint64 valid_bytes = 19;
+  repeated uint64 ignored = 20;
 }
 message DmaReadRequest {
   uint64 job_id = 1; uint32 waveform = 2; uint32 route = 3;
   uint32 tick_offset = 4; uint32 maximum_bytes = 5;
+  DmaEventId event_id = 6;
 }
 message DmaReadResponse {
   bool success = 1; string message = 2; uint64 job_id = 3;
@@ -305,9 +330,10 @@ message DmaReadResponse {
   uint64 timestamp = 19; bool timestamp_valid = 20;
   bool independently_software_triggered = 21;
   DmaWaveformMetadata waveform_metadata = 22;
+  uint64 fragment_sequence = 23; uint64 target_waveforms = 24;
 }
 enum DmaControlAction { DMA_CANCEL = 0; DMA_ACK = 1; DMA_KEEPALIVE = 2; }
-message DmaControlRequest { uint64 job_id = 1; DmaControlAction action = 2; }
+message DmaControlRequest { uint64 job_id = 1; DmaControlAction action = 2; repeated DmaEventId event_ids = 3; }
 
 // Applies a persistent manual timing configuration to one AFE. AFE numbers
 // use board numbering; the server performs the board-to-PL mapping.
