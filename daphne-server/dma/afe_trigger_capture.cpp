@@ -37,6 +37,7 @@ void validate_afe_trigger_completion(const AfeTriggerRequest& req, const AfeTrig
   for (size_t r = 0; r < 3; ++r) if (!layout.waveform.channels[r].empty()) routes |= 1U << r;
   if (t.abi != DAPHNE_AFE_TRIGGER_ABI || s.abi != DAPHNE_AFE_DMA_ABI ||
       s.state != DAPHNE_AFE_COMPLETE || s.error || s.hardware_error || !s.guards_ok ||
+      (s.hardware_status & 3U) != 2U ||
       s.build_id != req.capture.build_id || s.format != 1 || s.flags != DAPHNE_AFE_ALIGNED ||
       s.channel_mask != layout.waveform.mask || s.active_routes != routes ||
       t.source != req.source || t.pretrigger != req.pretrigger ||
@@ -56,9 +57,16 @@ void validate_afe_trigger_completion(const AfeTriggerRequest& req, const AfeTrig
         s.valid_bytes[r] != layout.waveform.bytes[r] ||
         s.transfer_bytes[r] != stride * layout.ring_ticks ||
         s.received_bytes[r] != stride * t.stream_ticks ||
-        s.accepted_beats[r] > UINT64_MAX / 16 || s.accepted_beats[r] * 16 != stride * t.stream_ticks ||
-        (stride && ((s.dma_status[r] & 0x770U) || !(s.dma_status[r] & 1U) || (s.dma_control[r] & 5U))))
-      throw std::runtime_error("Triggered DMA stream bytes/beats/halt mismatch");
+        s.accepted_beats[r] > UINT64_MAX / 16 || s.accepted_beats[r] * 16 != stride * t.stream_ticks)
+      throw std::runtime_error("Triggered DMA stream bytes/beats mismatch on route " + std::to_string(r));
+    // COMPLETE is published only after the kernel's DDR fence and halt proof.
+    // Its retained counters/monitor registers were sampled BEFORE halt/reset;
+    // RUN may still be set in that snapshot. Do not mistake it for live state.
+    // Accept either that completed IDLE snapshot or a post-halt snapshot.
+    const bool completed_idle = (s.dma_status[r] & 8U) && !(s.dma_control[r] & 4U);
+    const bool halted = (s.dma_status[r] & 1U) && !(s.dma_control[r] & 5U);
+    if (stride && ((s.dma_status[r] & 0x770U) || !(completed_idle || halted)))
+      throw std::runtime_error("Triggered DMA completion snapshot invalid on route " + std::to_string(r));
   }
 }
 

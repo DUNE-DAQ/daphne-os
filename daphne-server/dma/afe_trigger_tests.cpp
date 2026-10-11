@@ -20,6 +20,7 @@ struct Backend final : AfeTriggerBackend {
     s.abi=1; s.pretrigger=c.pretrigger; s.period_ticks=c.period_ticks; s.ring_ticks=c.ring_ticks; s.source=c.source;
     auto& a=s.capture; a.abi=1; a.flags=2; a.format=1; a.build_id=c.expected_build_id; a.channel_mask=c.channel_mask;
     a.guards_ok=1; a.state=step>=3 ? DAPHNE_AFE_COMPLETE : DAPHNE_AFE_RUNNING;
+    a.hardware_status=step>=3 ? 2 : 1;
     s.armed=step<3; s.trigger_flags=step>=3 ? 2 : 0;
     s.trigger_index=uint64_t(c.ring_ticks)*3+c.pretrigger; s.window_first=s.trigger_index-c.pretrigger;
     s.stream_ticks=((s.window_first+c.length+c.period_ticks-1)/c.period_ticks)*c.period_ticks;
@@ -53,6 +54,15 @@ int main() {
   require(first.trigger.trigger_index-first.trigger.window_first==8192 && second.raw[2].size()==131072);
   require(trace->prepared==1 && trace->arms==2 && trace->triggers==3 && trace->reads==6);
   auto invalid=first.trigger; invalid.stream_ticks+=1; rejects([&]{validate_afe_trigger_completion(req,layout,invalid);});
+  // Real consumer retains monitor registers sampled before its halt/reset.
+  // One route's physical snapshot: IDLE, RUN/CYCLIC still visible in cache.
+  auto cached=first.trigger;
+  for(unsigned r=0;r<3;++r) { cached.capture.dma_status[r]=69640; cached.capture.dma_control[r]=81939; }
+  validate_afe_trigger_completion(req,layout,cached);
+  invalid=cached; invalid.capture.dma_status[0]=0; rejects([&]{validate_afe_trigger_completion(req,layout,invalid);});
+  invalid=cached; invalid.capture.dma_status[0]|=0x10; rejects([&]{validate_afe_trigger_completion(req,layout,invalid);});
+  invalid=cached; invalid.capture.dma_control[0]|=4; rejects([&]{validate_afe_trigger_completion(req,layout,invalid);});
+  invalid=cached; invalid.capture.hardware_status=1; rejects([&]{validate_afe_trigger_completion(req,layout,invalid);});
   invalid=first.trigger; invalid.trigger_flags=0; rejects([&]{validate_afe_trigger_completion(req,layout,invalid);});
   invalid=first.trigger; invalid.capture.guards_ok=0; rejects([&]{validate_afe_trigger_completion(req,layout,invalid);});
   session->finish(); require(trace->stops==1); session.reset(); require(trace->stops==1);
