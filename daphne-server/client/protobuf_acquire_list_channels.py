@@ -17,6 +17,7 @@ from trigger_source import (
 )
 from waveparse import parse_dump_response
 from cli_presentation import print_acquisition_start, print_acquisition_done
+from dma_options import add_dma_capture_arguments, validate_dma_capture_arguments
 
 
 pb_high, pb_low = load_protobuf_modules(require_trigger_source=True, require_dma="--dma" in sys.argv)
@@ -115,6 +116,7 @@ parser.add_argument("-channel_list", type=str, nargs='+', required=True, help="L
 parser.add_argument("-N", type=int, required=True, help="Number of waveforms.")
 parser.add_argument("-L", type=int, required=True, help="Length of each waveform.")
 parser.add_argument("--dma", action="store_true", help="Acquire through raw DMA instead of spybuffer")
+add_dma_capture_arguments(parser)
 add_trigger_source_arguments(parser, include_self="--dma" in sys.argv)
 parser.add_argument("-append_data", action='store_true', help="Append to existing per-channel files.")
 parser.add_argument("-debug", action='store_true', help="Debug printout.")
@@ -133,6 +135,7 @@ parser.add_argument("-compression_level", type=int, default=1, choices=range(1, 
 parser.set_defaults(v2=True)
 args = parser.parse_args()
 resolve_trigger_source(parser, args)
+validate_dma_capture_arguments(parser, args)
 if args.dma:
     from dma_acquire_cli import run_dma_acquire
     try:
