@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <filesystem>
 
 namespace daphne_dma {
 
@@ -83,6 +84,8 @@ void abort_and_prove_halt(int fd) {
 class LinuxAfeEngine final : public AfeCaptureEngine {
  public:
   LinuxAfeEngine(uint64_t limit, std::string device) : limit_(limit), device_(std::move(device)) {}
+  bool supports_triggered() const override;
+  std::unique_ptr<AfeTriggeredSession> open_triggered(const AfeTriggerRequest&, uint64_t) override;
   AfeCapture capture(const AfeRequest& req, const std::atomic<bool>& cancel) override {
     static_assert(sizeof(daphne_afe_dma_config) == 32, "AFE config UAPI layout");
     static_assert(sizeof(daphne_afe_dma_status) == 208, "AFE status UAPI layout");
@@ -152,6 +155,83 @@ class LinuxAfeEngine final : public AfeCaptureEngine {
   uint64_t limit_;
   std::string device_;
 };
+
+void trigger_ioctl(int fd, unsigned long command, void* argument = nullptr) {
+  if (::ioctl(fd, command, argument) < 0)
+    throw std::runtime_error(std::string("Triggered DMA ioctl errno=") + std::to_string(errno) + ": " + std::strerror(errno));
+}
+class LinuxTriggerBackend final : public AfeTriggerBackend {
+ public:
+  explicit LinuxTriggerBackend(const std::string& device) {
+    fd_ = ::open(device.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd_ < 0) throw std::runtime_error(std::string("open trigger driver: ") + std::strerror(errno));
+  }
+  ~LinuxTriggerBackend() override { ::close(fd_); } // Driver retains quarantined resources.
+  void prepare(const daphne_afe_trigger_config& config) override {
+    auto cfg = config; trigger_ioctl(fd_, DAPHNE_AFE_PREPARE_TRIGGER, &cfg);
+  }
+  void arm() override { trigger_ioctl(fd_, DAPHNE_AFE_ARM); }
+  bool software_trigger() override {
+    if (::ioctl(fd_, DAPHNE_AFE_SOFTWARE_TRIGGER) == 0) return true;
+    if (errno == EAGAIN) return false;
+    throw std::runtime_error(std::string("Software trigger ioctl: ") + std::strerror(errno));
+  }
+  daphne_afe_trigger_status status() override {
+    daphne_afe_trigger_status t{};
+    checked_ioctl(fd_, DAPHNE_AFE_TRIGGER_STATUS, &t); // Read-only retry is safe.
+    return t;
+  }
+  void wait() override {
+    pollfd pfd{fd_, POLLIN | POLLERR | POLLHUP, 0};
+    if (::poll(&pfd, 1, 10) < 0 && errno != EINTR) throw std::runtime_error("Triggered poll failed");
+  }
+  std::string read_route(uint32_t route, uint64_t bytes, const std::atomic<bool>& cancel) override {
+    trigger_ioctl(fd_, DAPHNE_AFE_SELECT_ROUTE, &route);
+    std::string raw(static_cast<size_t>(bytes), '\0');
+    size_t offset = 0;
+    while (offset < raw.size()) {
+      if (cancel.load()) throw std::runtime_error("DMA_CANCELLED");
+      const auto n = ::read(fd_, raw.data() + offset, std::min<size_t>(raw.size() - offset, 1U << 20));
+      if (n < 0 && errno == EINTR) continue;
+      if (n <= 0) throw std::runtime_error("Triggered DMA short/failed read");
+      offset += static_cast<size_t>(n);
+    }
+    return raw;
+  }
+  void stop() override {
+    trigger_ioctl(fd_, DAPHNE_AFE_ABORT);
+    const auto s = daphne_dma::status(fd_);
+    if (s.state == DAPHNE_AFE_QUARANTINED || s.state == DAPHNE_AFE_RUNNING)
+      throw std::runtime_error("DMA_QUARANTINED: triggered stop not proven");
+    for (size_t r = 0; r < 3; ++r)
+      if (!(s.dma_status[r] & 1U) || (s.dma_control[r] & 5U))
+        throw std::runtime_error("DMA_QUARANTINED: triggered halt not proven");
+  }
+ private:
+  int fd_ = -1;
+};
+bool LinuxAfeEngine::supports_triggered() const {
+  // Probe only the existing ioctl dispatcher, never an extension MMIO address.
+  // EINVAL means the new read-only operation exists but no trigger job is prepared.
+  // PREPARE_TRIGGER remains the authoritative AFEC/provider-version admission.
+  for (const auto base : {"b0020000", "b0040000", "b0060000"}) {
+    std::error_code error;
+    const auto path = std::filesystem::read_symlink(std::string("/sys/bus/platform/devices/") + base + ".dma/driver", error);
+    if (error || path.filename() != "daphne-dma-bounded") return false;
+  }
+  const int fd = ::open(device_.c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return false;
+  daphne_afe_trigger_status t{};
+  const int rc = ::ioctl(fd, DAPHNE_AFE_TRIGGER_STATUS, &t);
+  const bool supported = rc == 0 ? t.abi == 1 : errno == EINVAL;
+  ::close(fd);
+  return supported;
+}
+std::unique_ptr<AfeTriggeredSession> LinuxAfeEngine::open_triggered(const AfeTriggerRequest& req, uint64_t ring_limit) {
+  // Geometry admission precedes even opening the driver.
+  afe_trigger_layout(req, limit_, ring_limit);
+  return make_triggered_session(req, limit_, ring_limit, std::make_unique<LinuxTriggerBackend>(device_));
+}
 } // namespace
 
 std::unique_ptr<AfeCaptureEngine> make_linux_afe_engine(uint64_t bytes, const std::string& device) {
