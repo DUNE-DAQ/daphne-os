@@ -232,7 +232,21 @@ message AfeAcquisitionState {
   uint32 afe = 1; FrontendState state = 2; uint32 approved_lane_mask = 3;
   uint64 configuration_generation = 4;
 }
-message AcquisitionCapabilitiesRequest {}
+enum DmaCaptureMode { DMA_CAPTURE_FINITE = 0; DMA_CAPTURE_TRIGGERED = 1; }
+enum DmaCapturePhase {
+  DMA_PHASE_IDLE = 0; DMA_PHASE_PREPARING = 1; DMA_PHASE_HISTORY = 2;
+  DMA_PHASE_WAITING_TRIGGER = 3; DMA_PHASE_CAPTURING = 4;
+  DMA_PHASE_FINALIZING = 5; DMA_PHASE_READING = 6;
+}
+message DmaModeCapabilities {
+  DmaCaptureMode mode = 1;
+  repeated DmaTriggerSource trigger_sources = 2;
+  bool available = 3; bool pretrigger_available = 4;
+  repeated DmaTriggerSource experimental_sources = 5;
+  bool timing_requires_endpoint = 6;
+}
+// Omitted means the original revision-1 capabilities, for old clients.
+message AcquisitionCapabilitiesRequest { uint32 maximum_protocol_revision = 1; }
 message AcquisitionCapabilitiesResponse {
   bool success = 1; uint32 protocol_revision = 2; AcquisitionBackend backend = 3;
   repeated AcquisitionBackend available_backends = 4;
@@ -244,6 +258,9 @@ message AcquisitionCapabilitiesResponse {
   repeated AfeAcquisitionState afes = 14;
   string message = 15; bool timestamp_available = 16;
   bool dma_available = 17; uint64 maximum_scan_ticks = 18;
+  repeated DmaModeCapabilities capture_modes = 19;
+  uint64 maximum_ring_bytes = 20; uint32 period_ticks = 21;
+  uint32 lease_ms = 22; uint32 cleanup_timeout_ms = 23;
 }
 enum DmaJobState {
   DMA_JOB_IDLE = 0; DMA_JOB_RUNNING = 1; DMA_JOB_READY = 2;
@@ -253,12 +270,25 @@ message DmaAcquireRequest {
   AcquisitionBackend backend = 1; repeated uint32 channels = 2;
   uint32 samples = 3; uint32 waveforms = 4;
   DmaTriggerSource trigger_source = 5; uint32 timeout_ms = 6;
+  DmaCaptureMode capture_mode = 7; uint32 pretrigger_samples = 8;
+  uint64 job_timeout_ms = 9;
 }
 message DmaJobRequest { uint64 job_id = 1; }
 message DmaJobResponse {
   bool success = 1; string message = 2; uint64 job_id = 3; DmaJobState state = 4;
   uint32 completed_waveforms = 5; uint32 expected_waveforms = 6;
   AcquisitionBackend backend = 7; AfeDelaySweepResponse scan_result = 8;
+  DmaCaptureMode capture_mode = 9; DmaTriggerSource trigger_source = 10;
+  uint32 pretrigger_samples = 11; DmaCapturePhase phase = 12;
+  uint32 contract_version = 13; uint64 job_timeout_ms = 14;
+}
+message DmaWaveformMetadata {
+  uint32 contract_version = 1; DmaCaptureMode capture_mode = 2;
+  DmaTriggerSource trigger_source = 3; uint32 samples = 4;
+  uint32 pretrigger_samples = 5; uint64 trigger_index = 6;
+  uint64 window_first = 7; uint64 stream_ticks = 8;
+  uint64 trigger_timestamp = 9; bool trigger_timestamp_valid = 10;
+  uint64 ignored_triggers = 11; uint32 period_ticks = 12; uint32 ring_ticks = 13;
 }
 message DmaReadRequest {
   uint64 job_id = 1; uint32 waveform = 2; uint32 route = 3;
@@ -274,6 +304,7 @@ message DmaReadResponse {
   uint32 gateware_build_id = 17; uint32 sample_format = 18;
   uint64 timestamp = 19; bool timestamp_valid = 20;
   bool independently_software_triggered = 21;
+  DmaWaveformMetadata waveform_metadata = 22;
 }
 enum DmaControlAction { DMA_CANCEL = 0; DMA_ACK = 1; DMA_KEEPALIVE = 2; }
 message DmaControlRequest { uint64 job_id = 1; DmaControlAction action = 2; }
