@@ -4,6 +4,7 @@ from pathlib import Path
 import tarfile
 import subprocess
 import uuid
+import time
 from dma_client import DmaClient
 from dma_output import prepare_dma_output, record_dma_output
 from v2_client import V2Client
@@ -35,11 +36,13 @@ def run_dma_acquire(args, pb):
         prepare_dma_output(folder, channels, args.append_data, contract)
         offsets = {str(ch): (folder / f'channel_{ch}.dat').stat().st_size // (2*args.L)
                    if args.append_data and (folder / f'channel_{ch}.dat').is_file() else 0 for ch in channels}
-        if mode == 'triggered':
+        if mode in ('triggered', 'persistent'):
             print(f'DMA triggered: P={pretrigger}, trigger sample={pretrigger}, source={args.trigger_source}')
             if args.trigger_source in ('external', 'timing'):
                 print(f'DMA {args.trigger_source}: experimental source; waiting for an event from hardware')
         try:
+            acquisition_begin = time.monotonic()
+            disk_write_s = 0.
             for ch in channels:
                 files[ch] = (folder / f"channel_{ch}.dat").open("ab" if args.append_data else "wb")
             record_dma_output(folder, channels, contract)
@@ -49,11 +52,21 @@ def run_dma_acquire(args, pb):
                         pbar.update(max(0, completed + done - pbar.n))
                         pbar.set_postfix_str(phase_text(pb, phase))
                     client.progress_callback = progress
+                if mode == 'persistent':
+                    client.start_session(channels, args.L, args.N, args.trigger_source,
+                        timeout_ms=getattr(args, 'trigger_timeout_ms', 30000), pretrigger=pretrigger,
+                        job_timeout_ms=getattr(args, 'job_timeout_ms', 0),
+                        pressure_timeout_ms=getattr(args, 'pressure_timeout_ms', 0))
                 while completed < args.N:
                     n = min(batch, args.N - completed)
-                    data, metadata = client.acquire(channels, args.L, n, args.trigger_source,
-                        timeout_ms=getattr(args, 'trigger_timeout_ms', 10000), capture_mode=mode,
-                        pretrigger=pretrigger, job_timeout_ms=getattr(args, 'job_timeout_ms', 0))
+                    if mode == 'persistent':
+                        data, metadata = client.read_batch(n)
+                        n = data.shape[0]
+                    else:
+                        data, metadata = client.acquire(channels, args.L, n, args.trigger_source,
+                            timeout_ms=getattr(args, 'trigger_timeout_ms', 10000), capture_mode=mode,
+                            pretrigger=pretrigger, job_timeout_ms=getattr(args, 'job_timeout_ms', 0))
+                    disk_begin = time.monotonic()
                     for i, ch in enumerate(channels):
                         files[ch].write(data[:, i, :].astype("<u2", copy=False).tobytes())
                         files[ch].flush()
@@ -61,9 +74,20 @@ def run_dma_acquire(args, pb):
                     metadata['file_first_waveform'] = {ch: start + completed for ch, start in offsets.items()}
                     metadata_file.write(json.dumps(metadata) + "\n")
                     metadata_file.flush()
-                    client.acknowledge()
+                    disk_write_s += time.monotonic() - disk_begin
+                    if mode == 'persistent':
+                        client.ack_batch()
+                    else:
+                        client.acknowledge()
                     completed += n
                     pbar.update(max(0, completed - pbar.n))
+                if mode == 'persistent':
+                    result = client.finish_session()
+                    from google.protobuf.json_format import MessageToDict
+                    metadata_file.write(json.dumps({'session_result': MessageToDict(result,
+                        preserving_proto_field_name=True), 'client_elapsed_s': time.monotonic()-acquisition_begin,
+                        'read_rpc_s': client._stream_read_rpc_ns/1e9, 'validation_decode_s': client._stream_decode_ns/1e9,
+                        'disk_write_flush_s': disk_write_s}) + '\n')
         finally:
             try:
                 client.cancel()

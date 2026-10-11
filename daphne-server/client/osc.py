@@ -308,6 +308,7 @@ class AcquisitionWorker(QtCore.QObject):
         dma_pretrigger=0,
         dma_trigger_timeout_ms=10000,
         dma_job_timeout_ms=0,
+        dma_pressure_timeout_ms=0,
     ):
         super().__init__()
         self.endpoint = endpoint
@@ -321,6 +322,9 @@ class AcquisitionWorker(QtCore.QObject):
         self.dma_pretrigger = dma_pretrigger
         self.dma_trigger_timeout_ms = dma_trigger_timeout_ms
         self.dma_job_timeout_ms = dma_job_timeout_ms
+        self.dma_pressure_timeout_ms = dma_pressure_timeout_ms
+        self._dma_last_plot = 0.
+        self._dma_skipped_plots = 0
         self._dma_client = None
         self.dma_cleanup_error = ''
         self.period_ms = max(1, int(period_ms))
@@ -574,10 +578,18 @@ class AcquisitionWorker(QtCore.QObject):
             metadata = None
             if self.dma:
                 t0 = time.monotonic()
-                y_all, metadata = self._dma_client.acquire(list(self.req.channelList), self.req.numberOfSamples,
-                    1, self.dma_trigger_source, timeout_ms=self.dma_trigger_timeout_ms,
-                    capture_mode=self.dma_capture_mode, pretrigger=self.dma_pretrigger,
-                    job_timeout_ms=self.dma_job_timeout_ms)
+                if self.dma_capture_mode == 'persistent':
+                    if self._dma_client.job_id is None:
+                        self._dma_client.start_session(list(self.req.channelList), self.req.numberOfSamples,
+                            self.max_waveforms, self.dma_trigger_source, timeout_ms=self.dma_trigger_timeout_ms,
+                            pretrigger=self.dma_pretrigger, job_timeout_ms=self.dma_job_timeout_ms,
+                            pressure_timeout_ms=self.dma_pressure_timeout_ms)
+                    y_all, metadata = self._dma_client.read_batch(1)
+                else:
+                    y_all, metadata = self._dma_client.acquire(list(self.req.channelList), self.req.numberOfSamples,
+                        1, self.dma_trigger_source, timeout_ms=self.dma_trigger_timeout_ms,
+                        capture_mode=self.dma_capture_mode, pretrigger=self.dma_pretrigger,
+                        job_timeout_ms=self.dma_job_timeout_ms)
                 rtt_ms = (time.monotonic() - t0) * 1000
                 yk = np.ascontiguousarray(y_all[0])
             else:
@@ -604,11 +616,21 @@ class AcquisitionWorker(QtCore.QObject):
 
             self._frames_acquired += 1
             self._update_fft(yk)
-            self.plot_update.emit(yk, float(rtt_ms), int(self._frames_acquired), time.time_ns())
+            if self.dma_capture_mode != 'persistent' or time.monotonic() - self._dma_last_plot >= self.period_ms / 1000 or self._frames_acquired == self.max_waveforms:
+                self.plot_update.emit(yk, float(rtt_ms), int(self._frames_acquired), time.time_ns())
+                self._dma_last_plot = time.monotonic()
+            else:
+                self._dma_skipped_plots += 1
             self._push_save_frame(yk, metadata)
             if self.dma:
-                self._dma_client.acknowledge()
+                if self.dma_capture_mode == 'persistent':
+                    self._dma_client.ack_batch()
+                else:
+                    self._dma_client.acknowledge()
             if self.max_waveforms > 0 and self._frames_acquired >= self.max_waveforms:
+                if self.dma and self.dma_capture_mode == 'persistent':
+                    self._dma_client.finish_session()
+                    self.status.emit(f'[display] {self._dma_skipped_plots} updates skipped; all {self._frames_acquired} waveforms acquired')
                 self._finish_acquisition(f"[done] acquired {self._frames_acquired} waveforms")
                 return
 
@@ -665,7 +687,7 @@ class DaphneOscApp(QtWidgets.QWidget):
         self._latest_fft_x = None
         self._latest_fft_y = None
 
-        self._triggered = args.dma and getattr(args, 'capture_mode', 'finite') == 'triggered'
+        self._triggered = args.dma and getattr(args, 'capture_mode', 'finite') in ('triggered', 'persistent')
         self._x_axis = (relative_sample_axis(self.n_samples, args.pretrigger, self.fs_hz)
                         if self._triggered else np.arange(self.n_samples))
         self._latest_worker_msg = "Ready"
@@ -759,6 +781,7 @@ class DaphneOscApp(QtWidgets.QWidget):
             dma_pretrigger=getattr(args, 'pretrigger', 0),
             dma_trigger_timeout_ms=getattr(args, 'trigger_timeout_ms', 10000),
             dma_job_timeout_ms=getattr(args, 'job_timeout_ms', 0),
+            dma_pressure_timeout_ms=getattr(args, 'pressure_timeout_ms', 0),
             fft_config={
                 "enabled": self.enable_fft,
                 "channel_index": self.fft_channel_index,
@@ -801,7 +824,7 @@ class DaphneOscApp(QtWidgets.QWidget):
             "samples_per_waveform": self.n_samples,
             "backend": "dma" if args.dma else "spybuffer",
             "wire_format": "raw16_le" if args.dma else "legacy",
-            "independent_software_triggers": bool(args.dma and self.trigger_source == 'software'),
+            "independent_software_triggers": bool(args.dma and self.trigger_source == 'software' and args.capture_mode != 'persistent'),
             "capture_mode": getattr(args, 'capture_mode', 'finite') if args.dma else 'spybuffer',
             "pretrigger_samples": getattr(args, 'pretrigger', 0),
             "continuous": False,

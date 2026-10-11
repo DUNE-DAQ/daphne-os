@@ -5,9 +5,10 @@ to the caller, after processing and any requested file writes have succeeded.
 """
 import time
 import numpy as np
+from dma_persistent_client import PersistentClientMixin
 
 
-class DmaClient:
+class DmaClient(PersistentClientMixin):
     def __init__(self, pb, rpc, stop_checker=lambda: False, progress_callback=None):
         self.pb, self.rpc, self.stop_checker = pb, rpc, stop_checker
         self.capabilities = None
@@ -27,10 +28,10 @@ class DmaClient:
         p = self.pb
         query = p.AcquisitionCapabilitiesRequest()
         if hasattr(query, 'maximum_protocol_revision'):
-            query.maximum_protocol_revision = 2
+            query.maximum_protocol_revision = 3 if capture_mode == 'persistent' else 2
         c = self._call("ACQUISITION_CAPABILITIES", query,
                        p.AcquisitionCapabilitiesResponse)
-        if (c.protocol_revision not in (1, 2) or c.backend != p.ACQUISITION_DMA or
+        if (c.protocol_revision not in (1, 2, 3) or c.backend != p.ACQUISITION_DMA or
                 p.ACQUISITION_DMA not in c.available_backends or not c.dma_available or
                 c.gateware_abi != 0x20000 or not (c.gateware_capabilities & 16) or
                 c.sample_format != 1 or not c.maximum_job_bytes or
@@ -41,11 +42,23 @@ class DmaClient:
         return c
 
     def _check_trigger(self, trigger_source, capture_mode="finite", pretrigger=0):
-        if capture_mode not in ('finite', 'triggered') or pretrigger < 0:
+        if capture_mode not in ('finite', 'triggered', 'persistent') or pretrigger < 0:
             raise ValueError('Invalid DMA capture mode/pretrigger')
         if capture_mode == 'finite' and pretrigger:
             raise ValueError('Finite DMA requires P=0')
         sources = self.capabilities.dma_trigger_sources
+        if capture_mode == 'persistent':
+            c, p = self.capabilities, self.pb
+            if (c.protocol_revision != 3 or not hasattr(p, 'DMA_CAPTURE_PERSISTENT') or
+                    not hasattr(p, 'DmaEventId') or c.session_abi != 1 or (c.session_features & 31) != 31 or
+                    not (c.gateware_capabilities & 128) or not c.maximum_target_waveforms or
+                    not 2 <= c.session_slots <= 32 or c.session_slots & (c.session_slots - 1) or
+                    not 1 <= c.maximum_staged_events <= 16):
+                raise RuntimeError('PERSISTENT_UNAVAILABLE: revision 3/ABI 1/features 31 required; no fallback')
+            mode = next((m for m in c.capture_modes if m.mode == p.DMA_CAPTURE_PERSISTENT), None)
+            if mode is None or not mode.available or (pretrigger and not mode.pretrigger_available):
+                raise RuntimeError('PERSISTENT_UNAVAILABLE: driver/provider support unavailable')
+            sources = mode.trigger_sources
         if capture_mode == 'triggered':
             p = self.pb
             if (self.capabilities.protocol_revision != 2 or not hasattr(p, 'DMA_CAPTURE_TRIGGERED') or
@@ -72,16 +85,22 @@ class DmaClient:
         self._check_trigger(None, capture_mode, pretrigger)
         if pretrigger >= samples:
             raise ValueError('DMA requires 0 <= P < L')
-        if capture_mode == 'triggered':
+        if capture_mode in ('triggered', 'persistent'):
             d = c.period_ticks
             if not d or d & (d - 1) or not 8 <= d <= 1048576 or not c.maximum_ring_bytes:
                 raise RuntimeError('Invalid triggered ring capabilities')
             ring = ((samples + 3 * d - 1) // d) * d
+            if capture_mode == 'persistent':
+                ring = max(ring, 8*d)
             sizes = [sum(ch // 16 == r for ch in channels) for r in range(3)]
             allocation = sum(((2*k*ring + 128 + 4095)//4096)*4096 for k in sizes if k)
             if ring // d > 512 or allocation > c.maximum_ring_bytes or any(2*k*ring > 256<<20 for k in sizes):
                 raise ValueError('DMA waveform exceeds advertised triggered ring budget')
         result = min(c.maximum_waveforms, c.maximum_job_bytes // (2 * len(channels) * samples))
+        if capture_mode == 'persistent':
+            if allocation > c.session_pool_bytes or any(2*k*ring > c.session_route_bytes for k in sizes):
+                raise ValueError('DMA waveform exceeds persistent pool budget')
+            result = min(c.maximum_staged_events, c.maximum_job_bytes // (2 * len(channels) * samples))
         if samples > c.maximum_samples or result < 1:
             raise ValueError("DMA waveform exceeds the advertised sample/byte budget")
         return result
@@ -178,6 +197,8 @@ class DmaClient:
                 capture_mode="finite", pretrigger=0, job_timeout_ms=0):
         """Return ADC14 [N, requested channels, L], metadata; caller then ACKs."""
         p = self.pb
+        if capture_mode == 'persistent':
+            raise ValueError('Persistent acquisition requires start_session/read_batch/ack_batch/finish_session')
         if self.job_id is not None:
             raise RuntimeError("ACK or cancel the previous DMA job first")
         if self.capabilities is None:
@@ -255,7 +276,7 @@ class DmaClient:
                             if trigger_bytes is not None and trigger_bytes != encoded:
                                 raise RuntimeError('Triggered metadata changed within a waveform')
                             trigger_bytes = encoded
-                            trigger_metadata = {field.name: getattr(m, field.name) for field in m.DESCRIPTOR.fields}
+                            trigger_metadata = {field.name: getattr(m, field.name) for field in m.DESCRIPTOR.fields if field.number <= 13}
                         elif hasattr(reply, 'waveform_metadata') and reply.HasField('waveform_metadata'):
                             raise RuntimeError('Unexpected triggered metadata in finite acquisition')
                         ts = (reply.timestamp_valid, reply.timestamp)

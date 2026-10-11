@@ -16,7 +16,7 @@ def prepare_dma_output(directory, channels, append=False, contract=None):
                 raise ValueError("Cannot append DMA data: existing ADC encoding is unknown or predates the offset-binary correction; use a new folder")
             if file.is_file() and file.stat().st_size:
                 old = previous.get('capture_contracts', {}).get(str(ch))
-                triggered = (contract or {}).get('capture_mode') == 'triggered' or (old or {}).get('capture_mode') == 'triggered'
+                triggered = (contract or {}).get('capture_mode') in ('triggered', 'persistent') or (old or {}).get('capture_mode') in ('triggered', 'persistent')
                 if (triggered or old is not None) and old != contract:
                     raise ValueError('Cannot append DMA data: capture mode/L/P/source differs or is unknown; use a new folder')
                 if contract and file.stat().st_size % (2 * contract['samples']):
