@@ -250,6 +250,7 @@ if(BUILD_TESTING)
     add_test(NAME dma_osc_unit COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_dma_osc.py)
     set_tests_properties(dma_osc_unit PROPERTIES ENVIRONMENT "DAPHNE_PROTO_PYTHON_DIR=${CMAKE_CURRENT_BINARY_DIR}/srcs/protobuf;QT_QPA_PLATFORM=offscreen")
     add_test(NAME dma_pattern_diagnostic_unit COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_dma_pattern_diagnostic.py)
+    add_test(NAME dma_eye_presentation_unit COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_dma_eye_presentation.py)
   endif()
 
 endif()

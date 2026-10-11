@@ -37,25 +37,15 @@ def save_eye_plots(directory, result):
     try:
         import matplotlib
         matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import numpy as np
     except ImportError:
-        print("Eye plots omitted: matplotlib is not installed; all metrics are in CSV/JSON")
-        return
+        print("[WARN] heatmap not generated: matplotlib is not installed; all metrics are in CSV/JSON")
+        return {}
+    from dma_eye_plot import save_channel_eye, save_bitslip_overview
+    metrics = {}
     for a in result.afes:
-        values = np.full((16, 512), np.nan)
-        for p in a.points:
-            values[p.bitslip, p.tap] = sum(not (p.channelFailures[l] or p.low_bit_failures[l] or p.boundary_failures[l]) for l in range(8))
-        fig, ax = plt.subplots(figsize=(12, 5))
-        img = ax.imshow(values, origin="lower", aspect="auto", extent=(-.5,511.5,-.5,15.5), vmin=0, vmax=8)
-        ax.set(xlabel="IDELAY tap", ylabel="BITSLIP", title=f"AFE{a.afe}: passing physical lanes (zero errors)")
-        ax.set_yticks(range(16))
-        if a.approved_lane_mask:
-            ax.plot(a.selected_delay, a.bitslip, "rx", markersize=10)
-        fig.colorbar(img, ax=ax, label="Passing lanes")
-        fig.tight_layout()
-        fig.savefig(directory / f"afe_{a.afe}_eye.png", dpi=150)
-        plt.close(fig)
+        metrics[a.afe] = save_channel_eye(directory, a)
+        save_bitslip_overview(directory, a)
+    return metrics
 
 
 def run_dma_scan(args, afes):
@@ -93,7 +83,7 @@ def run_dma_scan(args, afes):
                         print("  [FAIL] no delay window is valid for all eight channels")
                         print("  [PARTIAL CANDIDATE] channels " + ','.join(map(str, channels)) + "; eye " + format_window(window))
                 else:
-                    print("  [FAIL] no verified delay window is valid for all eight channels")
+                    print("  [FAIL] no delay window is valid for all eight channels")
                 if a.applied:
                     channels = None if a.approved_lane_mask == 255 else [a.afe * 8 + lane for lane in range(8) if a.approved_lane_mask & (1 << lane)]
                     print_scan_apply(a.afe, a.selected_delay, a.bitslip, channels)
@@ -103,7 +93,6 @@ def run_dma_scan(args, afes):
             if args.summary:
                 directory = Path(args.output_dir) / ("dma-eye-" + time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
                 directory.mkdir(parents=True)
-                (directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
                 with (directory / "points.csv").open("w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     writer.writerow(["afe", "bitslip", "tap", "lane", "within_failures", "low_bit_failures", "boundary_failures", "within_transitions", "boundary_transitions"])
@@ -113,7 +102,14 @@ def run_dma_scan(args, afes):
                                 writer.writerow([a.afe, point.bitslip, point.tap, lane, point.channelFailures[lane],
                                     point.low_bit_failures[lane], point.boundary_failures[lane],
                                     point.transitionsPerChannel, point.boundary_transitions_per_channel])
-                save_eye_plots(directory, result)
+                from dma_eye_plot import measured_margins
+                for a, item in zip(result.afes, summary['afes']):
+                    item['channel_margins'] = measured_margins(a)[2]
+                (directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+                try:
+                    save_eye_plots(directory, result)
+                except Exception as error:
+                    print(f"[WARN] heatmap not generated: {error}")
             print_scan_artifacts(directory)
             full = bool(result.afes) and result.success and all(a.approved_lane_mask == 255 for a in result.afes)
             if full:

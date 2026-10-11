@@ -144,6 +144,37 @@ solo un trabajo aún activo introduce backoff, de 2 a 20 ms. El protocolo finito
 todavía necesita varios viajes de red por waveform, frente al único dump
 legacy. Las mejoras no convierten esta entrega en un stream continuo.
 
+## Mensajes y gráficos de los clientes
+
+Los clientes de archivos y de barrido usan el estilo de mensajes spybuffer
+para ambos backends: solicitudes, progreso en waveforms, ventanas por canal,
+ojo común y aplicación de IDELAY/BITSLIP. Una referencia identifica el backend;
+DMA también informa la longitud de su verificación final. Los errores reales
+de protocolo, verificación o limpieza conservan su diagnóstico específico.
+Esta presentación no modifica la adquisición ni el alineamiento del servidor.
+
+Con `scan_afe_delay_eye.py --dma --summary`, cada AFE produce:
+
+- `afe<id>_delay_eye.png`: errores por canal en el BITSLIP seleccionado,
+  tap elegido y tramo medido que pasa alrededor de ese tap.
+- `afe_<id>_eye.png`: vista complementaria de los 16 BITSLIPs,
+  conservando el nombre anterior del gráfico agregado.
+- `summary.json`: incluye `channel_margins`, además de los resultados previos.
+
+El mapa distingue verde (cero errores observados), una escala logarítmica
+para errores y gris (tap no medido). La fracción dibujada es la mayor de los
+controles de rampa, padding y fronteras, cada uno con su propio denominador.
+El CSV conserva todos los contadores separados.
+
+El span es la distancia entre los extremos muestreados del tramo que contiene
+el tap elegido. El margen es la distancia al extremo muestreado más cercano;
+un margen menor o igual a un paso de scan se resalta en naranja para todos los
+canales. Un asterisco indica que el tramo llega al límite de cobertura: no se
+conoce su anchura completa. Los taps intermedios no medidos no se califican
+como válidos, y este margen no sustituye la verificación final ni demuestra
+estabilidad del ADC normal. El diagnóstico o reparación de CH39 queda fuera
+de esta mejora de presentación.
+
 ## Ciclo de vida y límites
 
 La primera integración limita cada trabajo a 64 MiB y 256 waveforms, con
