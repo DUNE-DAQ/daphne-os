@@ -21,6 +21,9 @@ struct DmaServiceOptions {
   uint32_t maximum_fragment_bytes = 1U << 20;
   uint32_t lease_ms = 30000;
   uint64_t maximum_scan_ticks = 1000000000;
+  uint64_t maximum_ring_bytes = 448ULL << 20;
+  uint32_t period_ticks = 8192;
+  uint32_t cleanup_timeout_ms = 10000;
 };
 
 // Router-thread RPCs own the job lease. Only worker threads touch the engine.
@@ -41,7 +44,7 @@ class DmaService {
   void verify_live() const;
   void invalidate(bool unconfigured = false, uint32_t afe_mask = 31);
   void configured(const daphne::ConfigureRequest&);
-  daphne::AcquisitionCapabilitiesResponse capabilities() const;
+  daphne::AcquisitionCapabilitiesResponse capabilities(uint32_t maximum_revision = 0) const;
  private:
   void start(const daphne::DmaAcquireRequest&, const std::string&, daphne::DmaJobResponse&);
   void scan(const daphne::AfeDelaySweepRequest&, const std::string&, daphne::DmaJobResponse&);
@@ -70,6 +73,12 @@ class DmaService {
   daphne::DmaJobState state_ = daphne::DMA_JOB_IDLE;
   uint32_t samples_ = 0, expected_ = 0, completed_ = 0, read_sequence_ = 0;
   bool quarantine_ = false;
+  bool triggered_available_ = false;
+  daphne::DmaCaptureMode capture_mode_ = daphne::DMA_CAPTURE_FINITE;
+  daphne::DmaTriggerSource trigger_source_ = daphne::DMA_TRIGGER_SOFTWARE;
+  daphne::DmaCapturePhase phase_ = daphne::DMA_PHASE_IDLE;
+  uint32_t pretrigger_ = 0;
+  uint64_t job_timeout_ms_ = 0;
   std::chrono::steady_clock::time_point lease_;
   std::vector<daphne_dma::AfeCapture> captures_;
   std::vector<std::array<uint32_t, 3>> read_ticks_;

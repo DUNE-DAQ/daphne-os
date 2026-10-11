@@ -68,6 +68,11 @@ int main() {
   session=make_triggered_session(req,64ULL<<20,448ULL<<20,std::make_unique<Backend>(trace));
   try { session->next(cancel,{}); require(false); } catch(const std::exception& e) { require(std::string(e.what()).find("QUARANTINED")!=std::string::npos); }
   session.reset(); require(trace->stops==1);
+  trace=std::make_shared<Trace>(); trace->fail_stop=true;
+  session=make_triggered_session(req,64ULL<<20,448ULL<<20,std::make_unique<Backend>(trace));
+  session->next(cancel,{});
+  try { session->finish(); require(false); } catch(const std::exception& e) { require(std::string(e.what()).find("QUARANTINED")!=std::string::npos); }
+  session.reset(); require(trace->stops==1);
   trace=std::make_shared<Trace>();
   session=make_triggered_session(req,64ULL<<20,448ULL<<20,std::make_unique<Backend>(trace));
   rejects([&]{session->next(cancel,[&](TriggerPhase phase){if(phase==TriggerPhase::waiting) cancel=true;});});

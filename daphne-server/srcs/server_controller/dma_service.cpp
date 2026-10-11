@@ -13,8 +13,11 @@ DmaService::DmaService(GatewareIdentity id, DmaServiceOptions opts,
   if (!opts.maximum_job_bytes || opts.maximum_job_bytes > (256ULL << 20) ||
       !opts.maximum_waveforms || !opts.maximum_fragment_bytes ||
       opts.maximum_fragment_bytes > (1U << 20) || opts.lease_ms < 1000 ||
+      !opts.maximum_ring_bytes || opts.maximum_ring_bytes > (448ULL << 20) ||
+      opts.period_ticks != 8192 || opts.cleanup_timeout_ms < 10000 || opts.cleanup_timeout_ms > 60000 ||
       !engine_ || !guard_ || !live_guard_ || !device_available_)
     throw std::invalid_argument("Invalid DMA service budgets/dependencies");
+  triggered_available_ = (identity_.capabilities & 64U) && engine_->supports_triggered();
 }
 DmaService::~DmaService() { shutdown(); }
 void DmaService::verify_live() const { live_guard_(); }
@@ -38,10 +41,11 @@ void DmaService::configured(const daphne::ConfigureRequest& req) {
   approved_.fill(0); states_.fill(daphne::FRONTEND_UNCONFIGURED);
   for (const auto& afe : req.afes()) states_.at(afe.id()) = daphne::FRONTEND_CONFIGURED_UNALIGNED;
 }
-daphne::AcquisitionCapabilitiesResponse DmaService::capabilities() const {
+daphne::AcquisitionCapabilitiesResponse DmaService::capabilities(uint32_t maximum_revision) const {
   std::lock_guard<std::mutex> lock(mutex_);
   daphne::AcquisitionCapabilitiesResponse r;
-  r.set_success(true); r.set_protocol_revision(1); r.set_backend(daphne::ACQUISITION_DMA);
+  const bool extended = maximum_revision >= 2;
+  r.set_success(true); r.set_protocol_revision(extended ? 2 : 1); r.set_backend(daphne::ACQUISITION_DMA);
   r.add_available_backends(daphne::ACQUISITION_DMA);
   r.add_dma_trigger_sources(daphne::DMA_TRIGGER_SOFTWARE);
   r.set_gateware_build_id(identity_.build_id); r.set_gateware_abi(identity_.abi);
@@ -54,6 +58,20 @@ daphne::AcquisitionCapabilitiesResponse DmaService::capabilities() const {
   r.set_dma_available(!quarantine_ && device_available_());
   r.set_timestamp_available(false);
   r.set_message("Software trigger = one START per waveform; external/timing/self/all require future trigger firmware. No pretrigger.");
+  if (extended) {
+    auto* finite = r.add_capture_modes(); finite->set_mode(daphne::DMA_CAPTURE_FINITE);
+    finite->add_trigger_sources(daphne::DMA_TRIGGER_SOFTWARE); finite->set_available(r.dma_available());
+    auto* triggered = r.add_capture_modes(); triggered->set_mode(daphne::DMA_CAPTURE_TRIGGERED);
+    triggered->set_available(triggered_available_ && r.dma_available());
+    triggered->set_pretrigger_available(true); triggered->set_timing_requires_endpoint(true);
+    for (auto source : {daphne::DMA_TRIGGER_SOFTWARE, daphne::DMA_TRIGGER_EXTERNAL, daphne::DMA_TRIGGER_TIMING})
+      triggered->add_trigger_sources(source);
+    triggered->add_experimental_sources(daphne::DMA_TRIGGER_EXTERNAL);
+    triggered->add_experimental_sources(daphne::DMA_TRIGGER_TIMING);
+    r.set_maximum_ring_bytes(options_.maximum_ring_bytes); r.set_period_ticks(options_.period_ticks);
+    r.set_lease_ms(options_.lease_ms); r.set_cleanup_timeout_ms(options_.cleanup_timeout_ms);
+    r.set_message("Finite software START remains compatible. Triggered PREPARE verifies AFEC/provider API before ARM; external/timing are experimental, timing requires a valid endpoint. No continuous acquisition.");
+  }
   for (uint32_t a = 0; a < 5; ++a) {
     auto* s = r.add_afes(); s->set_afe(a); s->set_state(states_[a]);
     s->set_approved_lane_mask(approved_[a]); s->set_configuration_generation(generations_[a]);
@@ -85,40 +103,87 @@ void DmaService::new_job(const std::string& owner) {
   ++job_id_; owner_ = owner; state_ = daphne::DMA_JOB_RUNNING;
   completed_ = expected_ = samples_ = read_sequence_ = 0;
   message_.clear(); captures_.clear(); read_ticks_.clear(); scan_result_.Clear(); cancel_.store(false);
+  capture_mode_ = daphne::DMA_CAPTURE_FINITE; trigger_source_ = daphne::DMA_TRIGGER_SOFTWARE;
+  pretrigger_ = 0; job_timeout_ms_ = 0; phase_ = daphne::DMA_PHASE_IDLE;
   lease_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(options_.lease_ms);
 }
 void DmaService::start(const daphne::DmaAcquireRequest& req, const std::string& owner,
                        daphne::DmaJobResponse& out) {
   if (req.backend() != daphne::ACQUISITION_DMA)
     throw std::invalid_argument("BACKEND_MISMATCH: DMA must be selected explicitly");
-  if (req.trigger_source() != daphne::DMA_TRIGGER_SOFTWARE)
-    throw std::invalid_argument("TRIGGER_UNSUPPORTED: this firmware supports DMA software trigger/START only");
+  if (req.capture_mode() != daphne::DMA_CAPTURE_FINITE && req.capture_mode() != daphne::DMA_CAPTURE_TRIGGERED)
+    throw std::invalid_argument("CAPTURE_MODE_UNSUPPORTED");
+  const bool triggered = req.capture_mode() == daphne::DMA_CAPTURE_TRIGGERED;
+  if (!triggered && (req.trigger_source() != daphne::DMA_TRIGGER_SOFTWARE || req.pretrigger_samples()))
+    throw std::invalid_argument("FINITE requires software trigger and P=0");
+  if (triggered && !triggered_available_)
+    throw std::invalid_argument("TRIGGERED_UNAVAILABLE: firmware/driver/provider support missing");
+  uint32_t source = 0;
+  switch (req.trigger_source()) {
+    case daphne::DMA_TRIGGER_SOFTWARE: source = DAPHNE_AFE_TRIGGER_SOFTWARE; break;
+    case daphne::DMA_TRIGGER_EXTERNAL: source = DAPHNE_AFE_TRIGGER_EXTERNAL; break;
+    case daphne::DMA_TRIGGER_TIMING: source = DAPHNE_AFE_TRIGGER_TIMING; break;
+    default: throw std::invalid_argument("TRIGGER_UNSUPPORTED: triggered supports software/external/timing");
+  }
   daphne_dma::AfeRequest request;
   request.channels.assign(req.channels().begin(), req.channels().end());
   request.length = req.samples(); request.build_id = identity_.build_id;
   request.timeout_ms = req.timeout_ms() ? req.timeout_ms() : 10000;
   const auto layout = daphne_dma::afe_layout(request, options_.maximum_job_bytes);
+  const daphne_dma::AfeTriggerRequest trigger_request{request, req.pretrigger_samples(), source, options_.period_ticks};
+  if (triggered) daphne_dma::afe_trigger_layout(trigger_request, options_.maximum_job_bytes, options_.maximum_ring_bytes);
   if (!req.waveforms() || req.waveforms() > options_.maximum_waveforms ||
       layout.total_bytes > options_.maximum_job_bytes / req.waveforms())
     throw std::invalid_argument("DMA job exceeds waveform/byte budget; reduce the client batch");
   if (busy()) throw std::runtime_error("BUSY");
   check_frontend(request.channels, false);
+  const uint64_t maximum_job_timeout = uint64_t(req.waveforms()) * (request.timeout_ms + uint64_t(options_.cleanup_timeout_ms)) + 5000;
+  const uint64_t job_timeout = req.job_timeout_ms() ? req.job_timeout_ms() : maximum_job_timeout;
+  if (job_timeout < 10 || job_timeout > maximum_job_timeout)
+    throw std::invalid_argument("DMA total job deadline exceeds the bounded waveform budget");
   new_job(owner);
-  { std::lock_guard<std::mutex> lock(mutex_); samples_ = request.length; expected_ = req.waveforms(); }
-  worker_ = std::thread([this, request, n = req.waveforms()] {
+  { std::lock_guard<std::mutex> lock(mutex_); samples_ = request.length; expected_ = req.waveforms();
+    capture_mode_ = req.capture_mode(); trigger_source_ = req.trigger_source(); pretrigger_ = req.pretrigger_samples();
+    job_timeout_ms_ = job_timeout; phase_ = daphne::DMA_PHASE_PREPARING;
+  }
+  worker_ = std::thread([this, request, trigger_request, triggered, job_timeout, n = req.waveforms()] {
+    std::unique_ptr<daphne_dma::AfeTriggeredSession> session;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(job_timeout);
     try {
+      const auto progress = [this, deadline](daphne_dma::TriggerPhase phase) {
+        if (cancel_.load()) throw std::runtime_error("DMA_CANCELLED");
+        if (std::chrono::steady_clock::now() >= deadline) throw std::runtime_error("DMA total job deadline expired");
+        live_guard_();
+        daphne::DmaCapturePhase value = daphne::DMA_PHASE_PREPARING;
+        switch (phase) {
+          case daphne_dma::TriggerPhase::preparing: break;
+          case daphne_dma::TriggerPhase::history: value = daphne::DMA_PHASE_HISTORY; break;
+          case daphne_dma::TriggerPhase::waiting: value = daphne::DMA_PHASE_WAITING_TRIGGER; break;
+          case daphne_dma::TriggerPhase::capturing: value = daphne::DMA_PHASE_CAPTURING; break;
+          case daphne_dma::TriggerPhase::finalizing: value = daphne::DMA_PHASE_FINALIZING; break;
+          case daphne_dma::TriggerPhase::reading: value = daphne::DMA_PHASE_READING; break;
+        }
+        std::lock_guard<std::mutex> lock(mutex_); phase_ = value;
+      };
+      if (triggered) session = engine_->open_triggered(trigger_request, options_.maximum_ring_bytes);
       for (uint32_t wave = 0; wave < n; ++wave) {
         check_frontend(request.channels, false);
-        auto capture = engine_->capture(request, cancel_); // count=1: one software trigger per waveform
+        progress(daphne_dma::TriggerPhase::history);
+        auto capture = triggered ? session->next(cancel_, progress) : engine_->capture(request, cancel_);
+        // Copy is retained before the next ARM invalidates the driver's waveform.
         std::lock_guard<std::mutex> lock(mutex_);
         captures_.push_back(std::move(capture)); read_ticks_.push_back({}); ++completed_;
       }
-      std::lock_guard<std::mutex> lock(mutex_); state_ = daphne::DMA_JOB_READY;
+      if (session) { progress(daphne_dma::TriggerPhase::finalizing); session->finish(); }
+      std::lock_guard<std::mutex> lock(mutex_); state_ = daphne::DMA_JOB_READY; phase_ = daphne::DMA_PHASE_IDLE;
     } catch (const std::exception& e) {
+      std::string message = e.what();
+      if (session) try { session->finish(); } catch (const std::exception& cleanup) { message += "; DMA_QUARANTINED: "; message += cleanup.what(); }
       std::lock_guard<std::mutex> lock(mutex_);
-      message_ = e.what(); quarantine_ = message_.find("QUARANTINED") != std::string::npos;
+      message_ = message; quarantine_ = message_.find("QUARANTINED") != std::string::npos;
       state_ = cancel_.load() ? daphne::DMA_JOB_CANCELLED : daphne::DMA_JOB_FAILED;
-      if (!cancel_.load()) for (auto ch : request.channels) {
+      phase_ = daphne::DMA_PHASE_IDLE;
+      if (!triggered && !cancel_.load()) for (auto ch : request.channels) {
         states_[ch / 8] = daphne::FRONTEND_FAILED; approved_[ch / 8] = 0;
       }
       captures_.clear();
@@ -193,6 +258,9 @@ void DmaService::fill_status(daphne::DmaJobResponse& out) const {
   out.set_success(true); out.set_backend(daphne::ACQUISITION_DMA); out.set_job_id(job_id_);
   out.set_state(state_); out.set_completed_waveforms(completed_); out.set_expected_waveforms(expected_);
   out.set_message(message_);
+  out.set_capture_mode(capture_mode_); out.set_trigger_source(trigger_source_);
+  out.set_pretrigger_samples(pretrigger_); out.set_phase(phase_);
+  out.set_contract_version(2); out.set_job_timeout_ms(job_timeout_ms_);
   if (scan_result_.afes_size()) *out.mutable_scan_result() = scan_result_;
 }
 void DmaService::status(uint64_t id, const std::string& owner, daphne::DmaJobResponse& out) {
@@ -222,7 +290,15 @@ void DmaService::read(const daphne::DmaReadRequest& req, const std::string& owne
   out.set_final_job(out.final_waveform() && req.waveform() + 1 == expected_);
   out.set_gateware_build_id(identity_.build_id); out.set_sample_format(c.status.format);
   out.set_timestamp(c.status.timestamp); out.set_timestamp_valid(bool(c.status.hardware_status & 64));
-  out.set_independently_software_triggered(true);
+  out.set_independently_software_triggered(trigger_source_ == daphne::DMA_TRIGGER_SOFTWARE);
+  if (c.triggered) {
+    auto* m = out.mutable_waveform_metadata(); const auto& t = c.trigger;
+    m->set_contract_version(1); m->set_capture_mode(daphne::DMA_CAPTURE_TRIGGERED);
+    m->set_trigger_source(trigger_source_); m->set_samples(samples_); m->set_pretrigger_samples(pretrigger_);
+    m->set_trigger_index(t.trigger_index); m->set_window_first(t.window_first); m->set_stream_ticks(t.stream_ticks);
+    m->set_trigger_timestamp(t.trigger_timestamp); m->set_trigger_timestamp_valid(bool(t.trigger_flags & 1));
+    m->set_ignored_triggers(t.ignored_triggers); m->set_period_ticks(t.period_ticks); m->set_ring_ticks(t.ring_ticks);
+  }
   read_ticks_.at(req.waveform())[r] += count;
 }
 void DmaService::control(const daphne::DmaControlRequest& req, const std::string& owner, daphne::DmaJobResponse& out) {
@@ -249,7 +325,12 @@ void DmaService::expire() {
   }
 }
 bool DmaService::dispatch(const daphne::ControlEnvelopeV2& req, const std::string& owner, std::string& out) {
-  if (req.type() == daphne::MT2_ACQUISITION_CAPABILITIES_REQ) { out = capabilities().SerializeAsString(); return true; }
+  if (req.type() == daphne::MT2_ACQUISITION_CAPABILITIES_REQ) {
+    daphne::AcquisitionCapabilitiesRequest query; daphne::AcquisitionCapabilitiesResponse response;
+    if (!query.ParseFromString(req.payload())) { response.set_success(false); response.set_message("Bad capabilities query"); }
+    else response = capabilities(query.maximum_protocol_revision());
+    out = response.SerializeAsString(); return true;
+  }
   if (req.type() == daphne::MT2_DMA_READ_REQ) {
     daphne::DmaReadRequest r; daphne::DmaReadResponse response;
     try { if (!r.ParseFromString(req.payload())) throw std::invalid_argument("Bad DMA read payload"); read(r, owner, response); }

@@ -122,13 +122,16 @@ class TriggeredSession final : public AfeTriggeredSession {
   void finish() override {
     if (finished_) return;
     finished_ = true; // Do not retry a mutable operation after an uncertain failure.
-    backend_->stop();
+    try { backend_->stop(); }
+    catch (const std::exception& e) {
+      throw std::runtime_error(std::string("DMA_QUARANTINED: cleanup unconfirmed: ") + e.what());
+    }
   }
  private:
   [[noreturn]] void fail(const std::exception& e) {
     std::string message = e.what();
     try { finish(); }
-    catch (const std::exception& cleanup) { message += "; DMA_QUARANTINED: cleanup unconfirmed: "; message += cleanup.what(); }
+    catch (const std::exception& cleanup) { message += "; "; message += cleanup.what(); }
     throw std::runtime_error(message);
   }
   AfeTriggerRequest req_;
