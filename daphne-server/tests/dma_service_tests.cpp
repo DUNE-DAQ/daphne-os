@@ -5,7 +5,8 @@
 
 using namespace daphne_sc;
 using namespace daphne;
-void require(bool b) { if (!b) { std::cerr << "DMA service assertion failed\n"; std::exit(1); } }
+void require_at(bool b, int line) { if (!b) { std::cerr << "DMA service assertion failed at line " << line << '\n'; std::exit(1); } }
+#define require(...) require_at((__VA_ARGS__), __LINE__)
 struct Engine final : daphne_dma::AfeCaptureEngine {
   unsigned starts = 0;
   unsigned prepares = 0, arms = 0, finishes = 0;
@@ -141,9 +142,64 @@ void test_triggered_admission_after_calibration() {
   require(wait_ready(service, job.job_id()).state() == DMA_JOB_READY);
   require(service.capabilities(2).capture_modes(1).available());
 }
+void test_long_scan_verification_budget() {
+  auto engine = std::make_unique<Engine>();
+  unsigned scans = 0, guards = 0;
+  DmaServiceOptions options; options.maximum_scan_ticks = 200000;
+  DmaService service({0x44415048,0x20000,3,987,80}, options, std::move(engine),
+      [&](const auto&, bool) { ++guards; }, [&](const AfeDelaySweepRequest&, const std::atomic<bool>&) {
+        ++scans; return AfeDelaySweepResponse{};
+      }, [] {}, [] { return true; });
+  ConfigureRequest configure; configure.add_afes()->set_id(0); service.configured(configure);
+  AfeDelaySweepRequest scan; scan.set_backend(ACQUISITION_DMA); scan.add_afes(0);
+  scan.set_firsttap(100); scan.set_lasttap(104); scan.set_tapstep(4);
+  scan.set_numberofsamples(2048); scan.set_numberofwaveforms(1); scan.set_apply_best(true);
+  scan.set_verification_samples(32768);
+  const auto result = rpc(service, MT2_DMA_SCAN_REQ, scan);
+  require(!result.success() && result.message().find("scan tick budget") != std::string::npos);
+  require(scans == 0 && guards == 0 && !service.busy());
+}
+void test_explicit_force_and_unverified_scan() {
+  auto engine = std::make_unique<Engine>();
+  bool reject_hardware = false;
+  unsigned scans = 0;
+  DmaService service({0x44415048,0x20000,3,987,80}, {}, std::move(engine),
+      [&](const auto&, bool) { if (reject_hardware) throw std::runtime_error("FRONTEND_NOT_READY"); },
+      [&](const AfeDelaySweepRequest& req, const std::atomic<bool>&) {
+        ++scans; if (scans == 1) throw std::runtime_error("Final physical ramp verification failed");
+        AfeDelaySweepResponse out; out.set_success(true);out.set_backend(ACQUISITION_DMA);
+        auto* a=out.add_afes();a->set_afe(0);a->set_applied(true);a->set_approved_lane_mask(1);
+        a->set_ramp_verification_skipped(req.skip_ramp_verification());return out;
+      }, [] {}, [] { return true; });
+  DmaAcquireRequest acquire;acquire.set_backend(ACQUISITION_DMA);acquire.add_channels(1);
+  acquire.set_samples(17);acquire.set_waveforms(1);
+  require(!rpc(service,MT2_DMA_ACQUIRE_REQ,acquire).success());
+  acquire.set_force_acquisition(true);
+  auto job=rpc(service,MT2_DMA_ACQUIRE_REQ,acquire);require(job.success() && job.force_acquisition());
+  require(wait_ready(service,job.job_id()).state()==DMA_JOB_READY);
+  DmaControlRequest ctl;ctl.set_job_id(job.job_id());ctl.set_action(DMA_CANCEL);require(rpc(service,MT2_DMA_CONTROL_REQ,ctl).success());
+  reject_hardware=true;require(!rpc(service,MT2_DMA_ACQUIRE_REQ,acquire).success());reject_hardware=false;
+  ConfigureRequest cfg;cfg.add_afes()->set_id(0);service.configured(cfg);
+  AfeDelaySweepRequest scan;scan.set_backend(ACQUISITION_DMA);scan.add_afes(0);scan.set_firsttap(100);
+  scan.set_lasttap(104);scan.set_tapstep(4);scan.set_numberofsamples(2048);scan.set_numberofwaveforms(1);scan.set_apply_best(true);
+  job=rpc(service,MT2_DMA_SCAN_REQ,scan);require(wait_ready(service,job.job_id()).state()==DMA_JOB_FAILED);
+  ctl.set_job_id(job.job_id());ctl.set_action(DMA_CANCEL);require(rpc(service,MT2_DMA_CONTROL_REQ,ctl).success());
+  // A failed scan may be measured again without a configuration rewrite.
+  scan.set_skip_ramp_verification(true);
+  job=rpc(service,MT2_DMA_SCAN_REQ,scan);require(job.success());
+  require(wait_ready(service,job.job_id()).state()==DMA_JOB_READY);
+  require(service.capabilities().afes(0).state()==FRONTEND_CONFIGURED_UNALIGNED);
+  require(service.capabilities().afes(0).approved_lane_mask()==0);
+  ctl.set_job_id(job.job_id());ctl.set_action(DMA_ACK);require(rpc(service,MT2_DMA_CONTROL_REQ,ctl).success());
+  acquire.set_force_acquisition(false);require(!rpc(service,MT2_DMA_ACQUIRE_REQ,acquire).success());
+  acquire.set_force_acquisition(true);job=rpc(service,MT2_DMA_ACQUIRE_REQ,acquire);require(job.success());
+  require(wait_ready(service,job.job_id()).state()==DMA_JOB_READY);
+}
 int main() {
   test_triggered();
   test_triggered_admission_after_calibration();
+  test_long_scan_verification_budget();
+  test_explicit_force_and_unverified_scan();
   auto engine = std::make_unique<Engine>(); auto* fake = engine.get();
   unsigned guards = 0;
   DmaServiceOptions options; options.maximum_job_bytes = 2U << 20; options.maximum_fragment_bytes = 64;

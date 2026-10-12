@@ -979,6 +979,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=9876)
     parser.add_argument("--route", default="mezz/0")
     parser.add_argument("--dma", action="store_true", help="Scan all bitslips using physical raw DMA ramp captures")
+    parser.add_argument("--skip-ramp-verification", action="store_true",
+                        help="Apply the scan timing without final long ramp verification (DMA only)")
     parser.add_argument("--verification-samples", type=int, default=1048576,
                         help="DMA final ramp verification length (default 1048576; minimum 32768)")
     parser.add_argument("--afes", default="0,1,2,3,4" if "--dma" in sys.argv else "0,3,4")
@@ -1073,8 +1075,12 @@ def main() -> int:
         parser.error("--max-error-rate must be in 0..1")
 
     print_scan_header(args, afes)
+    if args.skip_ramp_verification and not args.dma:
+        parser.error('--skip-ramp-verification requires --dma')
+    if args.skip_ramp_verification:
+        print('[INFO] Final long ramp verification will be skipped; applied timing remains unverified')
     if args.dma:
-        if args.max_error_rate != 0 or args.verification_samples < 32768:
+        if args.max_error_rate != 0 or (not args.skip_ramp_verification and args.verification_samples < 32768):
             parser.error("DMA requires zero errors and verification >= 32768 samples")
         from dma_scan_cli import run_dma_scan
         try:

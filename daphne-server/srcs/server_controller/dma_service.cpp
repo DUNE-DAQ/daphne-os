@@ -48,6 +48,7 @@ daphne::AcquisitionCapabilitiesResponse DmaService::capabilities(uint32_t maximu
   daphne::AcquisitionCapabilitiesResponse r;
   const bool extended = maximum_revision >= 2;
   r.set_success(true); r.set_protocol_revision(extended ? 2 : 1); r.set_backend(daphne::ACQUISITION_DMA);
+  r.set_force_acquisition_supported(true); r.set_skip_ramp_verification_supported(true);
   if (maximum_revision >= 3) r.set_protocol_revision(3);
   r.add_available_backends(daphne::ACQUISITION_DMA);
   r.add_dma_trigger_sources(daphne::DMA_TRIGGER_SOFTWARE);
@@ -95,15 +96,15 @@ daphne::AcquisitionCapabilitiesResponse DmaService::capabilities(uint32_t maximu
   }
   return r;
 }
-void DmaService::check_frontend(const std::vector<uint32_t>& channels, bool calibration) {
+void DmaService::check_frontend(const std::vector<uint32_t>& channels, bool calibration, bool force_acquisition) {
   live_guard_();
   guard_(channels, calibration);
   for (auto ch : channels) {
     const uint32_t a = ch / 8;
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      if (states_[a] == daphne::FRONTEND_UNCONFIGURED || states_[a] == daphne::FRONTEND_FAILED ||
-          (!calibration && !(approved_[a] & (1U << (ch % 8)))))
+      if (!force_acquisition && (states_[a] == daphne::FRONTEND_UNCONFIGURED || (!calibration && states_[a] == daphne::FRONTEND_FAILED) ||
+          (!calibration && !(approved_[a] & (1U << (ch % 8))))))
         throw std::runtime_error("ALIGNMENT_REQUIRED: configure and run scan_afe_delay_eye.py --dma --apply_best");
     }
 
@@ -120,6 +121,7 @@ void DmaService::new_job(const std::string& owner) {
   ++job_id_; owner_ = owner; state_ = daphne::DMA_JOB_RUNNING;
   completed_ = expected_ = samples_ = read_sequence_ = 0;
   message_.clear(); captures_.clear(); read_ticks_.clear(); scan_result_.Clear(); cancel_.store(false);
+  force_acquisition_ = false;
   capture_mode_ = daphne::DMA_CAPTURE_FINITE; trigger_source_ = daphne::DMA_TRIGGER_SOFTWARE;
   pretrigger_ = 0; job_timeout_ms_ = 0; phase_ = daphne::DMA_PHASE_IDLE;
   staged_.clear(); session_status_ = {}; target_ = staged_total_ = acknowledged_ = delivered_ = 0;
@@ -157,7 +159,7 @@ void DmaService::start(const daphne::DmaAcquireRequest& req, const std::string& 
       layout.total_bytes > options_.maximum_job_bytes / req.waveforms())
     throw std::invalid_argument("DMA job exceeds waveform/byte budget; reduce the client batch");
   if (busy()) throw std::runtime_error("BUSY");
-  check_frontend(request.channels, false);
+  check_frontend(request.channels, false, req.force_acquisition());
   const uint64_t maximum_job_timeout = uint64_t(req.waveforms()) * (request.timeout_ms + uint64_t(options_.cleanup_timeout_ms)) + 5000;
   const uint64_t job_timeout = req.job_timeout_ms() ? req.job_timeout_ms() : maximum_job_timeout;
   if (job_timeout < 10 || job_timeout > maximum_job_timeout)
@@ -166,8 +168,9 @@ void DmaService::start(const daphne::DmaAcquireRequest& req, const std::string& 
   { std::lock_guard<std::mutex> lock(mutex_); samples_ = request.length; expected_ = req.waveforms();
     capture_mode_ = req.capture_mode(); trigger_source_ = req.trigger_source(); pretrigger_ = req.pretrigger_samples();
     job_timeout_ms_ = job_timeout; phase_ = daphne::DMA_PHASE_PREPARING;
+    force_acquisition_ = req.force_acquisition();
   }
-  worker_ = std::thread([this, request, trigger_request, triggered, job_timeout, n = req.waveforms()] {
+  worker_ = std::thread([this, request, trigger_request, triggered, job_timeout, force = req.force_acquisition(), n = req.waveforms()] {
     std::unique_ptr<daphne_dma::AfeTriggeredSession> session;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(job_timeout);
     try {
@@ -188,7 +191,7 @@ void DmaService::start(const daphne::DmaAcquireRequest& req, const std::string& 
       };
       if (triggered) session = engine_->open_triggered(trigger_request, options_.maximum_ring_bytes);
       for (uint32_t wave = 0; wave < n; ++wave) {
-        check_frontend(request.channels, false);
+        check_frontend(request.channels, false, force);
         progress(daphne_dma::TriggerPhase::history);
         auto capture = triggered ? session->next(cancel_, progress) : engine_->capture(request, cancel_);
         // Copy is retained before the next ARM invalidates the driver's waveform.
@@ -221,7 +224,7 @@ void DmaService::scan(const daphne::AfeDelaySweepRequest& req, const std::string
   const uint32_t timeout = req.timeout_ms() ? req.timeout_ms() : 600000;
   if (req.firsttap() > req.lasttap() || req.lasttap() > 511 || !req.tapstep() ||
       req.tapstep() > 511 || !coarse || coarse > 511 || req.numberofsamples() < 2 ||
-      !req.numberofwaveforms() || req.settletimeus() > 1000000 || verify < 32768 ||
+      !req.numberofwaveforms() || req.settletimeus() > 1000000 || (!req.skip_ramp_verification() && verify < 32768) ||
       timeout < 10 || timeout > 600000 || (req.accept_partial_config() && !req.apply_best()))
     throw std::invalid_argument("Invalid bounded DMA scan request");
   std::vector<uint32_t> channels;
@@ -237,13 +240,16 @@ void DmaService::scan(const daphne::AfeDelaySweepRequest& req, const std::string
   const uint64_t points = 16 * (span / coarse + 2 + span / req.tapstep() + 2);
   const uint64_t ticks = uint64_t(req.numberofsamples()) * req.numberofwaveforms();
   const uint64_t afe_count = channels.size() / 8;
+  const uint64_t verification_ticks = uint64_t(verify) * afe_count * (req.apply_best() && !req.skip_ramp_verification() ? 16 : 0);
   if (ticks > options_.maximum_scan_ticks / points / afe_count ||
-      uint64_t(verify) * afe_count > options_.maximum_scan_ticks - ticks * points * afe_count)
+      verification_ticks > options_.maximum_scan_ticks - ticks * points * afe_count)
     throw std::invalid_argument("DMA sweep exceeds the advertised scan tick budget");
   daphne_dma::AfeRequest check{std::vector<uint32_t>(channels.begin(), channels.begin() + 8),
       req.numberofsamples(), req.numberofwaveforms(), 10000, identity_.build_id};
   daphne_dma::afe_layout(check, options_.maximum_job_bytes);
-  check.length = verify; check.count = 1; daphne_dma::afe_layout(check, options_.maximum_job_bytes);
+  if (req.apply_best() && !req.skip_ramp_verification()) {
+    check.length = verify; check.count = 1; daphne_dma::afe_layout(check, options_.maximum_job_bytes);
+  }
   if (busy()) throw std::runtime_error("BUSY");
   check_frontend(channels, true);
   new_job(owner);
@@ -263,7 +269,8 @@ void DmaService::scan(const daphne::AfeDelaySweepRequest& req, const std::string
       scan_result_ = std::move(result);
       for (uint32_t a = 0; a < 5; ++a) if (mask & (1U << a)) states_[a] = daphne::FRONTEND_CONFIGURED_UNALIGNED;
       for (const auto& a : scan_result_.afes()) if (a.applied()) {
-        approved_[a.afe()] = a.approved_lane_mask(); states_[a.afe()] = daphne::FRONTEND_ALIGNED;
+        approved_[a.afe()] = a.ramp_verification_skipped() ? 0 : a.approved_lane_mask();
+        states_[a.afe()] = a.ramp_verification_skipped() ? daphne::FRONTEND_CONFIGURED_UNALIGNED : daphne::FRONTEND_ALIGNED;
       }
       state_ = daphne::DMA_JOB_READY;
     } catch (const std::exception& e) {
@@ -282,6 +289,7 @@ void DmaService::check_owner(uint64_t id, const std::string& owner) {
 }
 void DmaService::fill_status(daphne::DmaJobResponse& out) const {
   out.set_success(true); out.set_backend(daphne::ACQUISITION_DMA); out.set_job_id(job_id_);
+  out.set_force_acquisition(force_acquisition_);
   out.set_state(state_); out.set_completed_waveforms(completed_); out.set_expected_waveforms(expected_);
   out.set_message(message_);
   out.set_capture_mode(capture_mode_); out.set_trigger_source(trigger_source_);

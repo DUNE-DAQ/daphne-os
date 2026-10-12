@@ -41,8 +41,9 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
   auto* fe = d.getFrontEnd(); auto* afe = d.getAfe();
   const uint32_t old_vtc = fe->getEnableDelayVtc();
   std::vector<Saved> saved;
-  std::vector<uint32_t> requested(req.afes().begin(), req.afes().end());
-  if (requested.empty()) requested = {0, 1, 2, 3, 4};
+  std::vector<uint32_t> requested;
+  for (auto a : req.afes()) requested.push_back(a);
+  if (requested.empty()) for (uint32_t a = 0; a < 5; ++a) requested.push_back(a);
   for (auto a : requested) {
     const auto pl = afe_definitions::AFE_board2PL_map.at(a);
     saved.push_back({a, pl, fe->getDelay(pl), fe->getBitslip(pl),
@@ -72,6 +73,7 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
   };
   daphne::AfeDelaySweepResponse out;
   out.set_backend(daphne::ACQUISITION_DMA); out.set_originalvtcenable(old_vtc);
+  std::string verification_diagnostics;
   const auto deadline = std::chrono::steady_clock::now() +
       std::chrono::milliseconds(req.timeout_ms() ? req.timeout_ms() : 600000);
   auto check = [&] {
@@ -98,6 +100,7 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
       auto* result = out.add_afes(); result->set_afe(s.afe);
       result->set_originaldelay(s.delay); result->set_bitslip(s.slip);
       Choice best;
+      std::vector<Choice> candidates;
       auto position = [&](uint32_t tap, uint32_t slip) {
         check();
         if (fe->setDelay(s.pl, tap) != tap || fe->setBitslip(s.pl, slip) != slip)
@@ -127,29 +130,53 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
           }
         }
         const auto candidate = choose_eye(fine, req.accept_partial_config());
+        if (candidate.mask) candidates.push_back(candidate);
         if (population(candidate.mask) > population(best.mask) ||
             (population(candidate.mask) == population(best.mask) && candidate.last - candidate.first > best.last - best.first))
           best = candidate;
       }
-      result->set_selected_delay(best.tap); result->set_bitslip(best.slip);
-      result->set_first_passing_tap(best.first); result->set_last_passing_tap(best.last);
       if (!best.mask) { all_pass = false; continue; }
-      if (req.apply_best()) {
-        position(best.tap, best.slip);
+      if (req.apply_best() && !req.skip_ramp_verification()) {
         auto verify = capture; verify.length = req.verification_samples() ? req.verification_samples() : 32768; verify.count = 1;
         daphne_dma::afe_layout(verify, options.maximum_job_bytes);
-        const auto final = measure(engine, verify, best.tap, best.slip, cancel);
-        for (uint32_t lane = 0; lane < 8; ++lane)
-          if ((best.mask & (1U << lane)) && (final.failures[lane] || final.low[lane] || final.boundary[lane]))
-            throw std::runtime_error("Final physical ramp verification failed");
+        try {
+          best = daphne_dma::choose_verified_eye(candidates, [&](const Choice& candidate) {
+            position(candidate.tap, candidate.slip);
+            return measure(engine, verify, candidate.tap, candidate.slip, cancel);
+          }, [&](const Choice& candidate, const Point& point) {
+            verification_diagnostics += " AFE" + std::to_string(s.afe) + " rejected slip=" +
+                std::to_string(candidate.slip) + " tap=" + std::to_string(candidate.tap);
+            for (size_t lane = 0; lane < 8; ++lane) {
+              if (!(candidate.mask & (1U << lane))) continue;
+              if (point.failures[lane] || point.low[lane] || point.boundary[lane])
+                verification_diagnostics += " CH" + std::to_string(s.afe * 8 + lane) +
+                    " delta=" + std::to_string(point.failures[lane]) + " low=" +
+                    std::to_string(point.low[lane]) + " boundary=" + std::to_string(point.boundary[lane]);
+            }
+            verification_diagnostics += ";";
+          });
+        } catch (const std::exception& error) {
+          throw std::runtime_error("AFE" + std::to_string(s.afe) + " verification_samples=" +
+                                   std::to_string(verify.length) + ": " + error.what());
+        }
         retained.insert(s.afe); result->set_applied(true);
       }
+      if (req.apply_best() && req.skip_ramp_verification()) {
+        position(best.tap, best.slip);
+        retained.insert(s.afe); result->set_applied(true);
+        result->set_ramp_verification_skipped(true);
+      }
+      result->set_selected_delay(best.tap); result->set_bitslip(best.slip);
+      result->set_first_passing_tap(best.first); result->set_last_passing_tap(best.last);
       result->set_approved_lane_mask(best.mask);
     }
     restore(req.apply_best()); touched = false;
     out.set_success(all_pass);
     out.set_message(all_pass ? "Physical DMA eye measured; applied candidates verified and AFE patterns restored" :
         "One or more AFEs have no passing eye; failed lanes remain unavailable");
+    if (!verification_diagnostics.empty()) out.set_message(out.message() + "; long verification:" + verification_diagnostics);
+    if (req.skip_ramp_verification() && req.apply_best())
+      out.set_message("Timing candidates applied without final ramp verification; use force acquisition for unverified AFEs");
     return out;
   } catch (const std::exception& e) {
     std::string message = e.what();

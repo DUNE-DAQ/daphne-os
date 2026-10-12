@@ -114,6 +114,25 @@ class StreamServer(FakeServer):
 
 
 class PersistentTests(unittest.TestCase):
+    def test_persistent_force_is_negotiated_and_echoed_in_status(self):
+        server=StreamServer();client=DmaClient(pb,server.rpc)
+        with self.assertRaisesRegex(RuntimeError,'does not support force'):
+            client.start_session([0],2048,2,force_acq=True)
+        self.assertEqual(server.starts,0)
+        original=server.rpc
+        def rpc(t,req,*rest):
+            response=original(t,req,*rest)
+            if t==pb.MT2_ACQUISITION_CAPABILITIES_REQ:
+                response.force_acquisition_supported=True
+            if t in (pb.MT2_DMA_ACQUIRE_REQ,pb.MT2_DMA_STATUS_REQ,pb.MT2_DMA_CONTROL_REQ):
+                response.force_acquisition=server.request.force_acquisition
+            return response
+        client=DmaClient(pb,rpc)
+        client.start_session([0],2048,2,force_acq=True)
+        self.assertTrue(server.request.force_acquisition)
+        data,_=client.read_batch(2);self.assertEqual(len(data),2)
+        client.ack_batch();client.finish_session()
+
     def test_incremental_wrap_partial_final_and_encoding(self):
         server=StreamServer();client=DmaClient(pb,server.rpc)
         client.start_session([39,0,17],32769,19,pretrigger=1000)

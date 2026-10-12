@@ -73,6 +73,55 @@ class FakeServer:
 
 
 class DmaClientTests(unittest.TestCase):
+    def test_skip_ramp_requires_support_and_is_sent_explicitly(self):
+        server=FakeServer(); client=DmaClient(pb,server.rpc)
+        request=pb.AfeDelaySweepRequest(backend=pb.ACQUISITION_DMA,afes=[0],skip_ramp_verification=True)
+        with self.assertRaisesRegex(RuntimeError,'does not support skipping'):
+            client.scan(request)
+        self.assertFalse(any(t==pb.MT2_DMA_SCAN_REQ for t,_ in server.calls))
+        original=server.rpc
+        def rpc(t,req,*rest):
+            if t==pb.MT2_DMA_SCAN_REQ:
+                self.assertTrue(req.skip_ramp_verification)
+                response=pb.DmaJobResponse(success=True,job_id=7,backend=pb.ACQUISITION_DMA,state=pb.DMA_JOB_READY)
+                response.scan_result.CopyFrom(pb.AfeDelaySweepResponse(success=True,backend=pb.ACQUISITION_DMA))
+                response.scan_result.afes.add(afe=0,applied=True,ramp_verification_skipped=True,approved_lane_mask=127)
+                return response
+            response=original(t,req,*rest)
+            if t==pb.MT2_ACQUISITION_CAPABILITIES_REQ:response.skip_ramp_verification_supported=True
+            return response
+        client=DmaClient(pb,rpc);result=client.scan(request)
+        self.assertTrue(result.afes[0].ramp_verification_skipped)
+        client.acknowledge()
+
+    def test_force_requires_server_support_and_explicit_acknowledgement(self):
+        server=FakeServer(); client=DmaClient(pb,server.rpc)
+        with self.assertRaisesRegex(RuntimeError,'does not support force'):
+            client.acquire([0],2048,force_acq=True)
+        self.assertFalse(any(t==pb.MT2_DMA_ACQUIRE_REQ for t,_ in server.calls))
+        original=server.rpc
+        accepted=[]
+        def rpc(t,req,*rest):
+            response=original(t,req,*rest)
+            if t==pb.MT2_ACQUISITION_CAPABILITIES_REQ:
+                response.force_acquisition_supported=True
+            if t==pb.MT2_DMA_ACQUIRE_REQ:
+                accepted.append(req.force_acquisition)
+                response.force_acquisition=req.force_acquisition
+            return response
+        client=DmaClient(pb,rpc)
+        data,_=client.acquire([0],2048,force_acq=True)
+        self.assertEqual(data.shape,(1,1,2048));self.assertEqual(accepted,[True])
+        client.acknowledge()
+        def no_ack(t,req,*rest):
+            response=rpc(t,req,*rest)
+            if t==pb.MT2_DMA_ACQUIRE_REQ:response.force_acquisition=False
+            return response
+        client=DmaClient(pb,no_ack)
+        with self.assertRaisesRegex(RuntimeError,'did not accept force'):
+            client.acquire([0],2048,force_acq=True)
+        self.assertIsNone(client.job_id)
+
     def test_long_three_route_requested_order_and_explicit_ack(self):
         server = FakeServer(); client = DmaClient(pb, server.rpc)
         data, metadata = client.acquire([39,0,17,8], 32769, 2)

@@ -59,7 +59,7 @@ class DmaService {
   void fill_status(daphne::DmaJobResponse&) const;
   void check_owner(uint64_t, const std::string&);
   void new_job(const std::string&);
-  void check_frontend(const std::vector<uint32_t>&, bool calibration);
+  void check_frontend(const std::vector<uint32_t>&, bool calibration, bool force_acquisition = false);
   Guard guard_;
   Scanner scanner_;
   std::function<void()> live_guard_;
@@ -78,6 +78,7 @@ class DmaService {
   daphne::DmaJobState state_ = daphne::DMA_JOB_IDLE;
   uint32_t samples_ = 0, expected_ = 0, completed_ = 0, read_sequence_ = 0;
   bool quarantine_ = false;
+  bool force_acquisition_ = false;
   bool triggered_available_ = false;
   daphne::DmaCaptureMode capture_mode_ = daphne::DMA_CAPTURE_FINITE;
   daphne::DmaTriggerSource trigger_source_ = daphne::DMA_TRIGGER_SOFTWARE;

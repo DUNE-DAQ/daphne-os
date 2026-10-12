@@ -20,6 +20,28 @@ from test_dma_trigger_client import TriggerServer
 
 @unittest.skipUnless(importlib.util.find_spec('PyQt6') and importlib.util.find_spec('pyqtgraph'), 'Qt optional on the test host')
 class DmaOscTests(unittest.TestCase):
+    def test_force_flag_reaches_triggered_worker_and_saved_contract(self):
+        from PyQt6 import QtWidgets
+        import osc
+        from dma_client import DmaClient
+        from dma_options import capture_contract
+        app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        server=TriggerServer();original=server.rpc
+        def rpc(t,req,*rest):
+            response=original(t,req,*rest)
+            if t==pb.MT2_ACQUISITION_CAPABILITIES_REQ:response.force_acquisition_supported=True
+            if t==pb.MT2_DMA_ACQUIRE_REQ:
+                self.assertTrue(req.force_acquisition);response.force_acquisition=True
+            return response
+        request=pb.DumpSpyBuffersRequest(numberOfSamples=2048,numberOfWaveforms=1,channelList=[0])
+        worker=osc.AcquisitionWorker('fake','mezz/0','fake',1000,request,20,max_waveforms=1,
+            dma=True,dma_capture_mode='triggered',dma_trigger_source='external',dma_pretrigger=1024,dma_force_acq=True)
+        worker._link=object();worker._dma_client=DmaClient(pb,rpc)
+        worker._poll_once();self.assertEqual(worker._frames_acquired,1)
+        settings=SimpleNamespace(L=2048,capture_mode='triggered',pretrigger=1024,trigger_source='external',force_acq=True)
+        self.assertTrue(capture_contract(settings)['force_acquisition'])
+        app.processEvents()
+
     def test_unaligned_frontend_error_keeps_window_open_and_reports_to_terminal(self):
         from PyQt6 import QtWidgets
         import osc

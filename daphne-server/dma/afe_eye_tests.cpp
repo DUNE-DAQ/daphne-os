@@ -23,5 +23,29 @@ int main() {
   for (auto& x : points) x.boundary[7] = 1;
   require(choose_eye(points, false).mask == 0);
   require(choose_eye(points, true).mask == 127);
+  std::vector<EyeChoice> candidates{{2,0,200,100,255}, {5,40,160,100,255}, {3,0,300,148,127}};
+  unsigned checks = 0;
+  best = choose_verified_eye(candidates, [&](const EyeChoice& c) {
+    ++checks; EyePoint final;
+    if (c.slip == 2) final.failures[0] = 128; // Short search missed a periodic carry error.
+    return final;
+  });
+  require(best.slip == 5 && best.mask == 255 && checks == 2);
+  // Partial admission never accepts an error in an approved lane.
+  checks = 0;
+  best = choose_verified_eye({{2,0,200,100,127}}, [&](const EyeChoice&) {
+    ++checks; EyePoint final; final.low[7] = 100; return final;
+  });
+  require(best.mask == 127 && checks == 1);
+  bool rejected = false;
+  try {
+    choose_verified_eye({{2,0,200,100,127}}, [](const EyeChoice&) {
+      EyePoint final; final.low[0] = 1; return final;
+    });
+  } catch (const std::runtime_error& e) {
+    const std::string message = e.what();
+    rejected = message.find("lane=0") != std::string::npos && message.find("low=1") != std::string::npos;
+  }
+  require(rejected);
   std::cout << "AFE physical eye tests passed\n";
 }

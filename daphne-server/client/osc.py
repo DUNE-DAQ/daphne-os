@@ -311,6 +311,7 @@ class AcquisitionWorker(QtCore.QObject):
         dma_trigger_timeout_ms=10000,
         dma_job_timeout_ms=0,
         dma_pressure_timeout_ms=0,
+        dma_force_acq=False,
     ):
         super().__init__()
         self.endpoint = endpoint
@@ -325,6 +326,7 @@ class AcquisitionWorker(QtCore.QObject):
         self.dma_trigger_timeout_ms = dma_trigger_timeout_ms
         self.dma_job_timeout_ms = dma_job_timeout_ms
         self.dma_pressure_timeout_ms = dma_pressure_timeout_ms
+        self.dma_force_acq = dma_force_acq
         self._dma_last_plot = 0.
         self._dma_skipped_plots = 0
         self._dma_client = None
@@ -588,13 +590,13 @@ class AcquisitionWorker(QtCore.QObject):
                         self._dma_client.start_session(list(self.req.channelList), self.req.numberOfSamples,
                             self.max_waveforms, self.dma_trigger_source, timeout_ms=self.dma_trigger_timeout_ms,
                             pretrigger=self.dma_pretrigger, job_timeout_ms=self.dma_job_timeout_ms,
-                            pressure_timeout_ms=self.dma_pressure_timeout_ms)
+                            pressure_timeout_ms=self.dma_pressure_timeout_ms, force_acq=self.dma_force_acq)
                     y_all, metadata = self._dma_client.read_batch(1)
                 else:
                     y_all, metadata = self._dma_client.acquire(list(self.req.channelList), self.req.numberOfSamples,
                         1, self.dma_trigger_source, timeout_ms=self.dma_trigger_timeout_ms,
                         capture_mode=self.dma_capture_mode, pretrigger=self.dma_pretrigger,
-                        job_timeout_ms=self.dma_job_timeout_ms)
+                        job_timeout_ms=self.dma_job_timeout_ms, force_acq=self.dma_force_acq)
                 rtt_ms = (time.monotonic() - t0) * 1000
                 yk = np.ascontiguousarray(y_all[0])
             else:
@@ -787,6 +789,7 @@ class DaphneOscApp(QtWidgets.QWidget):
             dma_trigger_timeout_ms=getattr(args, 'trigger_timeout_ms', 10000),
             dma_job_timeout_ms=getattr(args, 'job_timeout_ms', 0),
             dma_pressure_timeout_ms=getattr(args, 'pressure_timeout_ms', 0),
+            dma_force_acq=getattr(args, 'force_acq', False),
             fft_config={
                 "enabled": self.enable_fft,
                 "channel_index": self.fft_channel_index,
@@ -1573,6 +1576,8 @@ def main():
 
     parser.add_argument("-L", type=int, required=True, help="Samples per waveform (<= 2048)")
     parser.add_argument("--dma", action="store_true", help="Acquire long waveforms through raw DMA")
+    parser.add_argument("--force_acq", "--force-acq", action="store_true",
+                        help="Acquire DMA without approved AFE alignment; hardware readiness checks remain")
     add_dma_capture_arguments(parser)
     add_trigger_source_arguments(parser, include_self="--dma" in sys.argv)
 
@@ -1625,6 +1630,8 @@ def main():
     args = parser.parse_args()
     resolve_trigger_source(parser, args)
     validate_dma_capture_arguments(parser, args)
+    if args.force_acq and not args.dma:
+        parser.error('--force_acq requires --dma')
 
     # Parse channels
     if args.channels:
@@ -1694,6 +1701,7 @@ def main():
         if args.dma:
             client = DmaClient(pb_high, link_rpc(pb_high, config_link, args.route))
             client.probe(args.trigger_source, args.capture_mode, args.pretrigger)
+            client._check_force_acq(args.force_acq)
             client.batch_limit(args.channels, args.L, args.capture_mode, args.pretrigger)
             if args.enable_fft and args.fft_avg_waves * (args.L // 2 + 1) * 8 > 64 * 1024 * 1024:
                 raise ValueError("DMA FFT average exceeds 64 MiB; reduce -fft_avg_waves")
@@ -1704,6 +1712,8 @@ def main():
                 print(f'DMA triggered: source={args.trigger_source}, P={args.pretrigger}, trigger sample={args.pretrigger}')
                 if args.trigger_source in ('external', 'timing'):
                     print(f'DMA {args.trigger_source}: experimental source; waiting for an event from hardware')
+            if args.force_acq:
+                print('DMA force acquisition: alignment admission overridden explicitly')
         else:
             configure_trigger_source(pb_high, send_trigger_source_request, args.trigger_source)
             print(f"Configured spybuffer trigger source: {args.trigger_source}")

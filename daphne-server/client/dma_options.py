@@ -37,8 +37,11 @@ def validate_dma_capture_arguments(parser, args):
 
 
 def capture_contract(args):
-    return dict(capture_mode=getattr(args, 'capture_mode', 'finite'), samples=args.L,
+    contract = dict(capture_mode=getattr(args, 'capture_mode', 'finite'), samples=args.L,
                 pretrigger_samples=getattr(args, 'pretrigger', 0), trigger_source=args.trigger_source)
+    if getattr(args, 'force_acq', False):
+        contract['force_acquisition'] = True
+    return contract
 
 
 def relative_sample_axis(samples, pretrigger, sampling_rate_hz):

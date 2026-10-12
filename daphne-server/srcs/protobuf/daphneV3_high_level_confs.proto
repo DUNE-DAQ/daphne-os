@@ -183,6 +183,7 @@ message AfeDelaySweepRequest {
   uint32 coarse_step = 11;
   uint32 verification_samples = 12;
   uint32 timeout_ms = 13;
+  bool skip_ramp_verification = 14;
 }
 
 message AfeDelaySweepPoint {
@@ -207,6 +208,7 @@ message AfeDelaySweepAfeResult {
   uint32 first_passing_tap = 7;
   uint32 last_passing_tap = 8;
   bool applied = 9;
+  bool ramp_verification_skipped = 10;
 }
 
 message AfeDelaySweepResponse {
@@ -264,6 +266,8 @@ message AcquisitionCapabilitiesResponse {
   uint32 session_abi = 24; uint32 session_features = 25; uint32 session_slots = 26;
   uint64 maximum_target_waveforms = 27; uint32 maximum_staged_events = 28;
   uint64 session_pool_bytes = 29; uint64 session_route_bytes = 30;
+  bool force_acquisition_supported = 31;
+  bool skip_ramp_verification_supported = 32;
 }
 enum DmaJobState {
   DMA_JOB_IDLE = 0; DMA_JOB_RUNNING = 1; DMA_JOB_READY = 2;
@@ -278,6 +282,7 @@ message DmaAcquireRequest {
   // Revision 3 persistent acquisition: N is independent of staging/chunk.
   uint64 target_waveforms = 10; uint32 protocol_revision = 11;
   uint32 pressure_timeout_ms = 12;
+  bool force_acquisition = 13;
 }
 message DmaJobRequest { uint64 job_id = 1; }
 message DmaJobResponse {
@@ -289,6 +294,7 @@ message DmaJobResponse {
   uint32 contract_version = 13; uint64 job_timeout_ms = 14;
   DmaSessionProgress session_progress = 15;
   repeated DmaEventId available_events = 16;
+  bool force_acquisition = 17;
 }
 message DmaEventId { uint64 session = 1; uint64 sequence = 2; uint64 generation = 3; uint32 slot = 4; }
 message DmaSessionProgress {

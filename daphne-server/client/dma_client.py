@@ -162,6 +162,8 @@ class DmaClient(PersistentClientMixin):
             r = self._call("DMA_STATUS", self.pb.DmaJobRequest(job_id=self.job_id), self.pb.DmaJobResponse)
             if r.job_id != self.job_id or r.backend != self.pb.ACQUISITION_DMA:
                 raise RuntimeError("DMA status identity/backend changed")
+            if getattr(initial, 'force_acquisition', False) and not getattr(r, 'force_acquisition', False):
+                raise RuntimeError('DMA force acquisition acknowledgement changed')
             if getattr(initial, 'contract_version', 0) == 2 and any(
                     getattr(r, field) != getattr(initial, field) for field in
                     ('contract_version', 'capture_mode', 'trigger_source', 'pretrigger_samples', 'job_timeout_ms')):
@@ -194,7 +196,7 @@ class DmaClient(PersistentClientMixin):
         return m
 
     def acquire(self, channels, samples, waveforms=1, trigger_source="software", timeout_ms=10000,
-                capture_mode="finite", pretrigger=0, job_timeout_ms=0):
+                capture_mode="finite", pretrigger=0, job_timeout_ms=0, force_acq=False):
         """Return ADC14 [N, requested channels, L], metadata; caller then ACKs."""
         p = self.pb
         if capture_mode == 'persistent':
@@ -204,6 +206,7 @@ class DmaClient(PersistentClientMixin):
         if self.capabilities is None:
             self.probe()
         self._check_trigger(trigger_source, capture_mode, pretrigger)
+        self._check_force_acq(force_acq)
         if not 1 <= waveforms <= self.batch_limit(channels, samples, capture_mode, pretrigger):
             raise ValueError("DMA N exceeds batch budget")
         if not 10 <= timeout_ms <= 600000:
@@ -215,6 +218,8 @@ class DmaClient(PersistentClientMixin):
             request = p.DmaAcquireRequest(backend=p.ACQUISITION_DMA,
                 channels=channels, samples=samples, waveforms=waveforms,
                 trigger_source=getattr(p, "DMA_TRIGGER_" + trigger_source.upper()), timeout_ms=timeout_ms)
+            if force_acq:
+                request.force_acquisition = True
             if self.capabilities.protocol_revision == 2:
                 request.capture_mode = p.DMA_CAPTURE_TRIGGERED if capture_mode == 'triggered' else p.DMA_CAPTURE_FINITE
                 request.pretrigger_samples = pretrigger
@@ -223,6 +228,8 @@ class DmaClient(PersistentClientMixin):
                 raise ValueError('A total job deadline requires protocol revision 2')
             initial = self._call("DMA_ACQUIRE", request, p.DmaJobResponse)
             self.job_id = initial.job_id
+            if force_acq and not initial.force_acquisition:
+                raise RuntimeError('Server did not accept force acquisition')
             if self.capabilities.protocol_revision == 2:
                 if (initial.contract_version != 2 or initial.capture_mode != request.capture_mode or
                         initial.trigger_source != request.trigger_source or initial.pretrigger_samples != pretrigger):
@@ -319,6 +326,8 @@ class DmaClient(PersistentClientMixin):
         if self.job_id is not None:
             raise RuntimeError("ACK or cancel the previous DMA job first")
         self.probe()
+        if getattr(request, 'skip_ramp_verification', False) and not getattr(self.capabilities, 'skip_ramp_verification_supported', False):
+            raise RuntimeError('Server does not support skipping final ramp verification')
         try:
             initial = self._call("DMA_SCAN", request, p.DmaJobResponse)
             ready = self._wait(initial, (request.timeout_ms or 600000) / 1000 + 5)
@@ -331,6 +340,10 @@ class DmaClient(PersistentClientMixin):
             except Exception as cleanup:
                 raise RuntimeError(f"{error}; DMA cleanup unconfirmed: {cleanup}; keep the overlay loaded until idle is proven") from error
             raise
+
+    def _check_force_acq(self, force_acq):
+        if force_acq and not getattr(self.capabilities, 'force_acquisition_supported', False):
+            raise RuntimeError('Server does not support force acquisition')
 
 
 def link_rpc(pb, link, route):

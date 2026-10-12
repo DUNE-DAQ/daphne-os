@@ -9,12 +9,13 @@ def id_tuple(event):
 
 class PersistentClientMixin:
     def start_session(self, channels, samples, target, trigger_source='software', timeout_ms=30000,
-                      pretrigger=0, job_timeout_ms=0, pressure_timeout_ms=0):
+                      pretrigger=0, job_timeout_ms=0, pressure_timeout_ms=0, force_acq=False):
         if self.job_id is not None:
             raise RuntimeError('ACK or cancel the previous job first')
         if self.capabilities is None or self.capabilities.protocol_revision != 3:
             self.probe(trigger_source, 'persistent', pretrigger)
         self._check_trigger(trigger_source, 'persistent', pretrigger)
+        self._check_force_acq(force_acq)
         self.batch_limit(channels, samples, 'persistent', pretrigger)
         if not 1 <= target <= self.capabilities.maximum_target_waveforms:
             raise ValueError('Persistent N outside advertised range')
@@ -28,6 +29,8 @@ class PersistentClientMixin:
             target_waveforms=target, trigger_source=getattr(p, 'DMA_TRIGGER_' + trigger_source.upper()),
             timeout_ms=timeout_ms, capture_mode=p.DMA_CAPTURE_PERSISTENT, pretrigger_samples=pretrigger,
             protocol_revision=3, job_timeout_ms=job_timeout_ms, pressure_timeout_ms=pressure_timeout_ms)
+        if force_acq:
+            request.force_acquisition = True
         initial = self._call('DMA_ACQUIRE', request, p.DmaJobResponse)
         self.job_id = initial.job_id
         self._stream_request = request
@@ -54,6 +57,8 @@ class PersistentClientMixin:
                 reply.pretrigger_samples != request.pretrigger_samples or reply.job_timeout_ms != request.job_timeout_ms or
                 not reply.HasField('session_progress') or reply.session_progress.target != request.target_waveforms):
             raise RuntimeError('Persistent status identity/contract changed')
+        if getattr(request, 'force_acquisition', False) and not getattr(reply, 'force_acquisition', False):
+            raise RuntimeError('Persistent force acquisition acknowledgement missing')
         if reply.state not in (p.DMA_JOB_RUNNING, p.DMA_JOB_READY):
             raise RuntimeError(reply.message or 'Persistent session failed/cancelled')
         s = reply.session_progress

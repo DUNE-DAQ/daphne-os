@@ -56,6 +56,8 @@ def run_dma_scan(args, afes):
         settleTimeUs=args.settle_us, coarse_step=args.coarse_step,
         apply_best=args.apply_best, accept_partial_config=args.accept_partial_config,
         verification_samples=args.verification_samples, timeout_ms=args.timeout_ms)
+    if getattr(args, 'skip_ramp_verification', False):
+        request.skip_ramp_verification = True
     with V2Client(pb, args.ip, args.port, route=args.route, timeout_ms=min(args.timeout_ms, 5000),
                   identity="dma-scan-" + uuid.uuid4().hex) as transport:
         client = DmaClient(pb, transport.rpc)
@@ -69,6 +71,7 @@ def run_dma_scan(args, afes):
                     "selected_delay": a.selected_delay, "first_passing_tap": a.first_passing_tap,
                     "last_passing_tap": a.last_passing_tap, "approved_lane_mask": a.approved_lane_mask,
                     "applied": a.applied, "lane_eyes": lane_eyes(a)}
+                item['ramp_verification_skipped'] = getattr(a, 'ramp_verification_skipped', False)
                 summary["afes"].append(item)
                 points, eye = selected_eye(a)
                 print_scan_channels(a.afe, a.originalDelay, a.bitslip,
@@ -111,9 +114,12 @@ def run_dma_scan(args, afes):
                 except Exception as error:
                     print(f"[WARN] heatmap not generated: {error}")
             print_scan_artifacts(directory)
-            full = bool(result.afes) and result.success and all(a.approved_lane_mask == 255 for a in result.afes)
+            skipped = any(getattr(a, 'ramp_verification_skipped', False) for a in result.afes)
+            full = bool(result.afes) and result.success and not skipped and all(a.approved_lane_mask == 255 for a in result.afes)
             if full:
                 print("[PASS] every requested AFE has a common eight-channel eye")
+            elif result.success and skipped:
+                print('[UNVERIFIED] timing applied without final ramp verification; use osc.py --force_acq to acquire')
             elif result.success and args.accept_partial_config:
                 print("[PARTIAL] best available channel subsets configured; AFEs with no passing channel were left unchanged")
             else:

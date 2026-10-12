@@ -1,6 +1,9 @@
 #pragma once
 #include "afe_capture.hpp"
 #include <array>
+#include <algorithm>
+#include <sstream>
+#include <functional>
 #include <stdexcept>
 
 namespace daphne_dma {
@@ -28,6 +31,33 @@ inline EyeChoice choose_eye(const std::vector<EyePoint>& points, bool partial) {
     }
   }
   return best;
+}
+template<class Verify>
+inline EyeChoice choose_verified_eye(std::vector<EyeChoice> candidates, Verify verify,
+    std::function<void(const EyeChoice&, const EyePoint&)> rejected = {}) {
+  std::stable_sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
+    if (population(a.mask) != population(b.mask)) return population(a.mask) > population(b.mask);
+    return a.last - a.first > b.last - b.first;
+  });
+  std::ostringstream failures;
+  for (const auto& candidate : candidates) {
+    if (!candidate.mask) continue;
+    const auto point = verify(candidate);
+    bool passed = true;
+    std::ostringstream detail;
+    for (size_t lane = 0; lane < 8; ++lane) {
+      if (!(candidate.mask & (1U << lane))) continue;
+      if (point.failures[lane] || point.low[lane] || point.boundary[lane]) {
+        passed = false;
+        detail << " lane=" << lane << " delta=" << point.failures[lane]
+               << " low=" << point.low[lane] << " boundary=" << point.boundary[lane];
+      }
+    }
+    if (passed) return candidate;
+    if (rejected) rejected(candidate, point);
+    failures << " [slip=" << candidate.slip << " tap=" << candidate.tap << detail.str() << ']';
+  }
+  throw std::runtime_error("Final physical ramp verification failed for every candidate:" + failures.str());
 }
 inline EyePoint analyze_physical_ramp(const AfeCapture& c, const AfeRequest& req, uint32_t tap, uint32_t slip) {
   const auto route = req.channels.at(0) / 16;

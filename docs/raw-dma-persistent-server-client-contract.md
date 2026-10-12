@@ -111,14 +111,43 @@ El fin normal de `--max_waveforms` conserva la salida automática. Después de
 `configure_fe_min_v2.py --dma --skip-alignment`, los AFEs quedan sin alineación
 aprobada; ejecutar el scan DMA antes de volver a abrir `osc.py` para adquirir.
 
+Opciones explícitas para pruebas manuales:
+
+- `scan_afe_delay_eye.py --dma --apply-best --skip-ramp-verification` aplica
+  el candidato de la búsqueda sin ejecutar la verificación larga final. El
+  resultado registra `ramp_verification_skipped`; la admisión queda sin
+  alineación aprobada. El CSV y JSON conservan las mediciones de la búsqueda.
+- `osc.py --dma --force_acq` (alias `--force-acq`) solicita al servidor adquirir
+  sin exigir la máscara de canales alineados, incluyendo AFEs no configurados,
+  fallidos o parcialmente alineados. No cambia ese estado ni otorga aprobación.
+  Se mantienen comprobaciones de identidad, clocks, power, IDELAY-controller,
+  formato ADC, budgets, ownership, guards y reposo. El contrato de archivos
+  forzados registra `force_acquisition=true`, separando el append de datos
+  adquiridos con admisión normal.
+
+Ambas opciones requieren soporte anunciado por el servidor mediante capacidades
+aditivas; un servidor anterior se rechaza explícitamente. `force_acquisition`
+se transmite y se confirma en la respuesta de trabajo, en finite, triggered y
+persistent. No cambia la UAPI del driver ni requiere recompilarlo.
+
+Sin `--skip-ramp-verification`, el scan ordena los mejores candidatos de cada
+bitslip por canales admitidos y ancho de ventana, y prueba hasta 16 con toda
+la longitud solicitada. Selecciona el primer candidato cuyos canales admitidos
+tengan cero errores. Registra contadores delta/low/boundary de los rechazados;
+si ninguno pasa restaura el timing anterior y falla. El presupuesto incluye
+el peor caso antes de MMIO. Un AFE cuyo scan falló puede volver a medirse,
+manteniendo la admisión normal de adquisición bloqueada hasta aprobación.
+
 Corrección de GUI del 2026-10-12: se reprodujo contra daphne-10 el rechazo
 `ALIGNMENT_REQUIRED` tras reconfiguración. Con la corrección, la ventana
 permanece visible, muestra el error, adquiere cero frames y cierra limpiamente
 a petición del usuario. Las siete regresiones Qt pasan. En esa misma sesión,
 el intento posterior de scan AFE0 también fue rechazado con
 `ALIGNMENT_REQUIRED`, desde el PC y desde la placa con sus bindings instalados.
-Ese rechazo de calibración queda pendiente de diagnóstico; no se aplicó timing
-ni se modificaron los ajustes analógicos durante esta comprobación.
+Durante esa comprobación no se aplicó timing ni se modificaron ajustes
+analógicos. La actualización de opciones manuales permite reintentar un scan
+desde `FRONTEND_FAILED`: ese estado bloqueaba también la recalibración en la
+versión anterior. La adquisición normal sigue bloqueada hasta aprobación.
 
 API compartida: `start_session`, `read_batch`, `ack_batch`, `finish_session`.
 Sólo una tanda sin ACK a la vez. El consumidor debe llamar `cancel` en finally

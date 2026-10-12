@@ -11,6 +11,12 @@ privilegiado es `/usr/local/libexec/daphne-manual-mode.py`; no guarda contraseñ
 # "defecto" es un alias de "default"
 ```
 
+El servidor se actualizó el 2026-10-12 para las opciones manuales
+`--skip-ramp-verification` del scan y `--force_acq` de `osc.py`.
+El helper instalado verifica el hash del nuevo binario; el mecanismo de
+transición y las guardas de reposo se conservan. Resultados y configuración
+de esta actualización: [pruebas de opciones manuales](raw-dma-manual-overrides-results-2026-10-12.md).
+
 Solicita sudo. Al entrar en DMA selecciona la imagen `630a9da`, servidor
 experimental en `193.206.157.36:40001`, proveedor acotado y consumidor de sesión
 persistente. Configura VGAIN 1700, offset 2275, trim/bias 0, LPF 10 MHz,

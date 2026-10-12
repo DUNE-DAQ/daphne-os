@@ -47,7 +47,7 @@ void DmaService::start_persistent(const daphne::DmaAcquireRequest& req, const st
   if (ring / options_.period_ticks > 512 || allocation > std::min<uint64_t>(options_.maximum_ring_bytes, session_caps_.pool_max))
     throw std::invalid_argument("Persistent ring exceeds pool budget");
   if (busy()) throw std::runtime_error("BUSY");
-  check_frontend(capture.channels, false); new_job(owner);
+  check_frontend(capture.channels, false, req.force_acquisition()); new_job(owner);
   daphne_dma::AfePersistentRequest request{{capture, req.pretrigger_samples(), source, options_.period_ticks},
       req.target_waveforms(), std::min<uint64_t>(options_.maximum_ring_bytes, session_caps_.pool_max),
       req.pressure_timeout_ms(), options_.cleanup_timeout_ms};
@@ -56,6 +56,7 @@ void DmaService::start_persistent(const daphne::DmaAcquireRequest& req, const st
     samples_ = capture.length; target_ = request.target; capture_mode_ = daphne::DMA_CAPTURE_PERSISTENT;
     pretrigger_ = req.pretrigger_samples(); trigger_source_ = req.trigger_source();
     job_timeout_ms_ = timeout; phase_ = daphne::DMA_PHASE_PREPARING;
+    force_acquisition_ = req.force_acquisition();
   }
   worker_ = std::thread([this, request, layout, timeout] {
     std::unique_ptr<daphne_dma::AfePersistentSession> session;
