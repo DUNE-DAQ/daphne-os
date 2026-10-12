@@ -1,0 +1,15 @@
+# Session sources are handwritten; the parent excludes generated *.h files.
+!daphne_afe_session_uapi.h
+!afe_session_contract.h
+!afe_session_private.h
+!afe_session_impl.h
+
+# Kbuild products are generated from the committed sources.
+*.o
+*.ko
+*.mod
+*.mod.c
+*.order
+Module.symvers
+.*.cmd
+.tmp_versions/

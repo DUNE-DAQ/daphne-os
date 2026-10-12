@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Snapshot server/client/driver sources and matching generated protobufs.
 
-Includes the candidate driver's uncommitted sources explicitly, never data
-directories. LF-normalizes text for Linux and records original/packaged hashes.
+Includes the persistent driver sources and validation tools explicitly, never
+data directories. LF-normalizes text for Linux and records original/packaged hashes.
 """
 import argparse
 import gzip

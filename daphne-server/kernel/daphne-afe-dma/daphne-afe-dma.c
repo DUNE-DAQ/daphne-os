@@ -4,6 +4,7 @@
  * diagnostic jobs while the shared source mux selects physical capture.
  */
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -51,6 +52,7 @@ static_assert(sizeof(struct daphne_afe_trigger_status)==272);
 extern int daphne_bounded_cyclic_api(void);
 struct afe_block { void *cpu; dma_addr_t dma; size_t allocation; u32 length; u64 offset; };
 struct afe_job;
+#include "afe_session_private.h"
 struct afe_route {
  struct afe_job *job;
  struct dma_chan *chan;
@@ -76,6 +78,8 @@ struct afe_job {
  struct daphne_afe_dma_status status;
  struct daphne_afe_trigger_config trigger;
  struct daphne_afe_trigger_status trigger_status;
+ struct afe_session *session;
+ bool closing;
  bool trigger_job;
  bool opened, removed, poisoned, control_owned;
  u32 read_route;
@@ -138,7 +142,7 @@ static void quarantine(struct afe_job *p)
 /* Every DMA must be proven halted with RUN/RESET clear before freeing payloads.
  * Use the bounded Xilinx provider qualified in point 3 for termination.
  */
-static int halt(struct afe_job *p)
+static int halt_job(struct afe_job *p)
 {
  unsigned int r;
  u32 value;
@@ -176,7 +180,7 @@ static void abort_job(struct afe_job *p,int error)
  p->status.state=error?DAPHNE_AFE_ERROR:DAPHNE_AFE_ABORTED;p->status.error=error;
  cancel_delayed_work(&p->watchdog);
  snapshot(p);
- if(!halt(p)) {
+ if(!halt_job(p)) {
   p->status.guards_ok=guards(p);p->status.end_ns=ktime_get_ns();
   for(r=0;r<3;r++) {
    p->status.dma_control[r]=readl(p->monitor[r]);
@@ -265,7 +269,7 @@ static void trigger_complete(struct afe_job *p)
   * cyclic IRQ counts nor a channel reset prove that data reached DDR.
   * Descriptors may now be reset; payload memory remains owned and pinned.
   */
- if(halt(p)) return;
+ if(halt_job(p)) return;
  p->status.guards_ok=guards(p);
  if(!p->status.guards_ok) {abort_job(p,-EIO);return;}
  p->status.end_ns=ktime_get_ns();p->status.state=DAPHNE_AFE_COMPLETE;
@@ -308,7 +312,7 @@ static int prepare(struct afe_job *p,const struct daphne_afe_dma_config *cfg,
  if(total>((u64)max_pool_mib<<20)) return -ENOMEM;
  err=identify(p,cfg->expected_build_id);if(err) return err;
  /* A rejected allocation/config never changes the shared stream mux. */
- if(p->route[0].chan) {err=halt(p);if(err) return err;release_buffers(p);}
+ if(p->route[0].chan) {err=halt_job(p);if(err) return err;release_buffers(p);}
  for(r=0;r<3;r++) {
   struct afe_route *route=&p->route[r];
   char name[4];snprintf(name,sizeof(name),"rx%u",r);
@@ -326,7 +330,7 @@ static int prepare(struct afe_job *p,const struct daphne_afe_dma_config *cfg,
      route->dma_dev->coherent_dma_mask!=DMA_BIT_MASK(40)) {err=-EPROTO;goto fail;}
  }
  p->control_owned=true;
- err=halt(p);if(err) return err;
+ err=halt_job(p);if(err) return err;
  memset(&p->status,0,sizeof(p->status));p->status.abi=1;p->status.format=1;
  p->status.build_id=cfg->expected_build_id;p->status.channel_mask=cfg->channel_mask;p->status.flags=cfg->flags;
  p->config=*cfg;p->trigger_job=!!trigger;
@@ -444,6 +448,7 @@ static int start(struct afe_job *p,bool arm)
  schedule_delayed_work(&p->watchdog,msecs_to_jiffies(10));return 0;
 fail: abort_job(p,err);return err;
 }
+#include "afe_session_impl.h"
 static int job_open(struct inode *inode,struct file *file)
 {
  struct afe_job *p=container_of(file->private_data,struct afe_job,misc);
@@ -458,18 +463,30 @@ static int job_release(struct inode *inode,struct file *file)
 {
  struct afe_job *p=file->private_data;
  mutex_lock(&p->lock);
- if(!p->removed&&!p->poisoned&&p->route[0].chan) abort_job(p,0);
+ while(p->closing) {mutex_unlock(&p->lock);wait_event(p->wait,!READ_ONCE(p->closing));mutex_lock(&p->lock);}
+ p->closing=true;
+ if(p->session) {if(!p->removed&&!p->poisoned) session_cancel(p,0);}
+ else if(!p->removed&&!p->poisoned&&p->route[0].chan) abort_job(p,0);
  mutex_unlock(&p->lock);
  cancel_delayed_work_sync(&p->watchdog);cancel_work_sync(&p->completion);
+ if(p->session) {cancel_delayed_work_sync(&p->session->service);flush_work(&p->session->stop);}
  mutex_lock(&p->lock);
  if(!p->poisoned) {
+  if(p->session) {
+   if(!p->removed&&session_command(p,S_RESET)) {
+    quarantine(p);p->session->status.state=DAPHNE_SESSION_QUARANTINED;
+    p->session->status.error=-EIO;goto retained;
+   }
+   kfree(p->session);p->session=NULL;
+  }
   release_buffers(p);
   if(!p->removed&&p->control_owned) {
    writel(4,p->control+HW_COMMAND);writel(0,p->control+HW_MODE);p->control_owned=false;
   }
   p->status.state=DAPHNE_AFE_IDLE;
  }
- p->opened=false;mutex_unlock(&p->lock);kref_put(&p->ref,destroy);return 0;
+retained:
+ p->opened=false;p->closing=false;wake_up_all(&p->wait);mutex_unlock(&p->lock);kref_put(&p->ref,destroy);return 0;
 }
 static long job_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
 {
@@ -480,7 +497,21 @@ static long job_ioctl(struct file *file,unsigned int cmd,unsigned long arg)
  int err=0;
  mutex_lock(&p->lock);
  if(p->removed) {err=-ENODEV;goto out;}
- if(p->poisoned&&cmd!=DAPHNE_AFE_STATUS&&cmd!=DAPHNE_AFE_TRIGGER_STATUS) {err=-EIO;goto out;}
+ if(p->closing&&cmd!=DAPHNE_AFE_SESSION_STATUS) {err=-EBUSY;goto out;}
+ if(p->poisoned&&cmd!=DAPHNE_AFE_STATUS&&cmd!=DAPHNE_AFE_TRIGGER_STATUS&&cmd!=DAPHNE_AFE_SESSION_STATUS) {err=-EIO;goto out;}
+ if(_IOC_TYPE(cmd)=='A'&&_IOC_NR(cmd)>=0x50&&_IOC_NR(cmd)<=0x58) {
+  err=session_ioctl(p,cmd,(void __user *)arg);goto out;
+ }
+ if(p->session) {
+  if(cmd==DAPHNE_AFE_ABORT) {session_cancel(p,0);goto out;}
+  if(cmd==DAPHNE_AFE_STATUS) {
+   if(copy_to_user((void __user *)arg,&p->status,sizeof(p->status))) err=-EFAULT;
+   goto out;
+  }
+  if(cmd==DAPHNE_AFE_PREPARE||cmd==DAPHNE_AFE_PREPARE_TRIGGER) {
+   err=session_close(p);if(err) goto out;
+  } else {err=-EBUSY;goto out;}
+ }
  if(!p->poisoned) {
   /* Identity admission precedes every controller access, including cold
    * STATUS/failed PREPARE cleanup. Old firmware has no B0080000 slave.
@@ -528,7 +559,7 @@ static ssize_t job_read(struct file *file,char __user *target,size_t size,loff_t
  unsigned int i;
  mutex_lock(&p->lock);
  if(p->removed||p->poisoned) {copied=-ENODEV;goto out;}
- if(p->status.state!=DAPHNE_AFE_COMPLETE) {copied=-EBUSY;goto out;}
+ if(p->session||p->status.state!=DAPHNE_AFE_COMPLETE) {copied=-EBUSY;goto out;}
  route=&p->route[p->read_route];dma_rmb();
  if(p->trigger_job) {
   struct afe_block *b=&route->blocks[0];
@@ -557,6 +588,14 @@ static __poll_t job_poll(struct file *file,poll_table *wait)
  struct afe_job *p=file->private_data;__poll_t mask=0;
  poll_wait(file,&p->wait,wait);mutex_lock(&p->lock);
  if(p->removed||p->poisoned||p->status.state==DAPHNE_AFE_ERROR) mask=EPOLLERR;
+ else if(p->session) {
+  struct afe_session *s=p->session;
+  unsigned int i;
+  if(s->status.error) mask|=EPOLLERR;
+  for(i=0;i<s->config.slots;i++) if(s->slot[i].state==AFE_SLOT_READY&&!s->cancel_requested)
+   mask|=EPOLLIN|EPOLLRDNORM;
+  if(s->quiescent) mask|=EPOLLHUP;
+ }
  else if(p->status.state==DAPHNE_AFE_COMPLETE) mask=EPOLLIN|EPOLLRDNORM;
  else if(p->status.state==DAPHNE_AFE_ABORTED) mask=EPOLLHUP;
  mutex_unlock(&p->lock);return mask;
@@ -641,14 +680,27 @@ static void remove_device(struct platform_device *pdev)
 {
  struct afe_job *p=platform_get_drvdata(pdev);
  misc_deregister(&p->misc);mutex_lock(&p->lock);
- if(!p->poisoned&&p->route[0].chan) abort_job(p,-ENODEV);
+ while(p->closing) {mutex_unlock(&p->lock);wait_event(p->wait,!READ_ONCE(p->closing));mutex_lock(&p->lock);}
+ p->closing=true;
+ if(p->session) {if(!p->poisoned) session_cancel(p,-ENODEV);}
+ else if(!p->poisoned&&p->route[0].chan) abort_job(p,-ENODEV);
  p->removed=true;mutex_unlock(&p->lock);
  cancel_delayed_work_sync(&p->watchdog);cancel_work_sync(&p->completion);
- mutex_lock(&p->lock);release_buffers(p);mutex_unlock(&p->lock);kref_put(&p->ref,destroy);
+ if(p->session) {cancel_delayed_work_sync(&p->session->service);flush_work(&p->session->stop);}
+ mutex_lock(&p->lock);
+ if(p->session&&(p->session->readers||p->session->get_busy)) quarantine(p);
+ if(!p->poisoned) {kfree(p->session);p->session=NULL;release_buffers(p);}
+ p->closing=false;wake_up_all(&p->wait);
+ mutex_unlock(&p->lock);kref_put(&p->ref,destroy);
 }
 static const struct of_device_id match[]={ {.compatible="daphne,afe-dma-capture-v1"},{} };
 MODULE_DEVICE_TABLE(of,match);
-static struct platform_driver afe_driver={ .probe=probe,.remove=remove_device,
+static struct platform_driver afe_driver={ .probe=probe,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,11,0)
+ .remove_new=remove_device,
+#else
+ .remove=remove_device,
+#endif
  .driver={.name="daphne-afe-dma",.of_match_table=match} };
 module_platform_driver(afe_driver);
 MODULE_LICENSE("GPL");

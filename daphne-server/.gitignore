@@ -27,6 +27,8 @@ srcs/protobuf/*_pb2.py
 srcs/protobuf/__pycache__/
 
 # Local runtime artifacts
+/dma_run/
+/triggered_test_01/
 client/__pycache__/waveparse.cpython-313.pyc
 runs.zip
 runs/

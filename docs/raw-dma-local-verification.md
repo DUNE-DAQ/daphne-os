@@ -1,5 +1,11 @@
 # Raw DMA point 3 — workstation verification
 
+The later [first board bring-up record](raw-dma-board-bringup-2026-10-09.md)
+records successful target compilation and a complete board lock-up during
+overlay activation. The following workstation results are historical. The
+[2026-10-12 qualification report](raw-dma-persistent-physical-results-2026-10-12.md)
+records the later working deployment, physical tests and remaining limits.
+
 Date: 2026-10-09. OS base: `0f7f1c6` on `codex/afe0-synthetic-config`, plus
 the working-tree DMA diagnostic changes. Status: **implemented, pending target
 build and board qualification**. No firmware source changes, board connection,
