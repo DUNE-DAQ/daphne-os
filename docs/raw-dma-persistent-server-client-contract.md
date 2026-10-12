@@ -105,6 +105,16 @@ El worker consume/guarda todos los eventos y limita emisiones de plots a
 El eje sigue (j-P)/Fs. Cancelación y cierre siguen en el worker, con errores
 visibles. No cambia el modo indefinido legacy de spybuffer.
 
+En `osc.py`, `triggered` solicita un trabajo de una sola waveform por vuelta:
+PREPARE/ARM, espera del evento, lectura, STOP y ACK, antes del próximo trabajo.
+`persistent` mantiene una única sesión para N y evita repetir PREPARE/STOP por
+evento. La barra muestra `L` como muestras por waveform, `N` como objetivo total
+(`unlimited` si el modo admite ejecución indefinida), `acq` como eventos recibidos
+y el modo seleccionado. `acquireMs` mide la llamada completa de adquisición,
+incluyendo espera del trigger y transporte; no es el RTT de un único RPC ni
+incluye el guardado/ACK posterior. En persistent, la primera llamada incluye
+el inicio de sesión. La ventana del RMS se etiqueta en waveforms, sin reutilizar N.
+
 Un error DMA detiene la adquisición sin rearmarla ni cerrar automáticamente la
 ventana: conserva el mensaje en la barra de estado y lo imprime en stderr.
 El fin normal de `--max_waveforms` conserva la salida automática. Después de

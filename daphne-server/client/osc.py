@@ -520,7 +520,7 @@ class AcquisitionWorker(QtCore.QObject):
         if self.dma:
             self._dma_client = DmaClient(pb_high, link_rpc(pb_high, self._link, self.route), self._stop_evt.is_set,
                 progress_callback=lambda done, total, phase: self.status.emit(
-                    f'{phase_text(pb_high, phase)} ({done}/{total}); displayed waveform is the last completed event'))
+                    f'{phase_text(pb_high, phase)} (job {done}/{total} wf); displayed waveform is the last completed event'))
             self._dma_client.probe(self.dma_trigger_source, self.dma_capture_mode, self.dma_pretrigger)
         self.status.emit(f"Connected to {self.endpoint}")
 
@@ -1398,11 +1398,11 @@ class DaphneOscApp(QtWidgets.QWidget):
 
         self.rms_text.setVisible(True)
         if not self._rms_rolling:
-            self.rms_text.setHtml(f"<b>RMS</b> N={self.rms_window}<br>waiting...")
+            self.rms_text.setHtml(f"<b>RMS</b> window={self.rms_window} wf<br>waiting...")
             self._position_rms_text()
             return
 
-        rows = [f"<b>RMS</b> N={self.rms_window}"]
+        rows = [f"<b>RMS</b> window={self.rms_window} wf"]
         for ch in self.channels:
             value = self._rms_rolling.get(ch)
             if value is None or not np.isfinite(value):
@@ -1431,9 +1431,12 @@ class DaphneOscApp(QtWidgets.QWidget):
             render_age_ms = (time.time_ns() - self._last_render_ns) / 1e6
 
         ch_label = ",".join(str(c) for c in self.channels)
+        target = self.args.max_waveforms if self.args.max_waveforms > 0 else 'unlimited'
+        mode = getattr(self.args, 'capture_mode', 'finite') if self.args.dma else 'spybuffer'
+        timing_label = 'acquireMs' if self.args.dma else 'rttMs'
         status_text = (
-            f"{self._latest_worker_msg} | ch=[{ch_label}] N={self.n_samples} "
-            f"trig={self.trigger_source.upper()} RTT={self._last_rtt_ms:.2f}ms "
+            f"{self._latest_worker_msg} | ch=[{ch_label}] L={self.n_samples} N={target} "
+            f"mode={mode} trig={self.trigger_source.upper()} {timing_label}={self._last_rtt_ms:.2f} "
             f"acq={self._telemetry.get('frames_acquired', 0)} "
             f"saved={writer_frames} saveQ={writer_queue} "
             f"dropPlot={self._plot_drops_ui} "
@@ -1574,7 +1577,7 @@ def main():
     # New multi-channel CSV/range (e.g. --channels 0,8,16,24,32 or --channels 0-7)
     parser.add_argument("--channels", type=str, default="", help="CSV/range of channels, e.g. '0,8,16' or '0-7'")
 
-    parser.add_argument("-L", type=int, required=True, help="Samples per waveform (<= 2048)")
+    parser.add_argument("-L", type=int, required=True, help="Samples per waveform (spybuffer <= 2048; DMA uses advertised limits)")
     parser.add_argument("--dma", action="store_true", help="Acquire long waveforms through raw DMA")
     parser.add_argument("--force_acq", "--force-acq", action="store_true",
                         help="Acquire DMA without approved AFE alignment; hardware readiness checks remain")
@@ -1709,7 +1712,11 @@ def main():
             if args.capture_mode == 'finite':
                 print('DMA software trigger: independent START per waveform')
             else:
-                print(f'DMA triggered: source={args.trigger_source}, P={args.pretrigger}, trigger sample={args.pretrigger}')
+                print(f'DMA {args.capture_mode}: source={args.trigger_source}, L={args.L}, P={args.pretrigger}, trigger sample={args.pretrigger}')
+                if args.capture_mode == 'triggered':
+                    print('DMA triggered: prepare/ARM/read/STOP for each waveform; persistent mode keeps one session for --max_waveforms N')
+                else:
+                    print(f'DMA persistent: one START/STOP for N={args.max_waveforms} waveforms')
                 if args.trigger_source in ('external', 'timing'):
                     print(f'DMA {args.trigger_source}: experimental source; waiting for an event from hardware')
             if args.force_acq:
