@@ -2,6 +2,8 @@
 import time
 import numpy as np
 
+UNBOUNDED_SESSION_TARGET = (1 << 64) - 1
+
 
 def id_tuple(event):
     return event.session, event.sequence, event.generation, event.slot
@@ -17,6 +19,11 @@ class PersistentClientMixin:
         self._check_trigger(trigger_source, 'persistent', pretrigger)
         self._check_force_acq(force_acq)
         self.batch_limit(channels, samples, 'persistent', pretrigger)
+        unbounded = target == 0
+        if unbounded:
+            if self.capabilities.maximum_target_waveforms != UNBOUNDED_SESSION_TARGET:
+                raise RuntimeError('Unbounded session requires the full uint64 target range; no session rollover')
+            target = UNBOUNDED_SESSION_TARGET
         if not 1 <= target <= self.capabilities.maximum_target_waveforms:
             raise ValueError('Persistent N outside advertised range')
         if not 10 <= timeout_ms <= 600000 or not 0 <= job_timeout_ms <= 7*24*3600*1000 or (0 < job_timeout_ms < 10):
@@ -34,6 +41,7 @@ class PersistentClientMixin:
         initial = self._call('DMA_ACQUIRE', request, p.DmaJobResponse)
         self.job_id = initial.job_id
         self._stream_request = request
+        self._stream_unbounded = unbounded
         self._stream_channels = list(channels)
         self._stream_source = trigger_source
         self._stream_sequence = self._stream_read = self._stream_acked = 0
@@ -182,12 +190,15 @@ class PersistentClientMixin:
         self._stream_decode_ns += time.perf_counter_ns() - decode_begin
         self._stream_pending = ids
         self._stream_read += len(ids)
-        return data, dict(backend='dma', capture_mode='persistent', wire_format='raw16_le',
+        metadata = dict(backend='dma', capture_mode='persistent', wire_format='raw16_le',
             saved_format='adc14_u16_le', saved_encoding='offset_binary',
             wire_encoding='adc14_twos_complement_left_shift_2', build_id=c.gateware_build_id,
             job_id=self.job_id, channels=channels, samples=samples, waveforms=metadata,
             trigger_source=self._stream_source, pretrigger_samples=request.pretrigger_samples,
             independent_software_triggers=False, continuous=False, timestamp_reference='adc_index_by_segment')
+        if self._stream_unbounded:
+            metadata['unbounded_session'] = True
+        return data, metadata
 
     def ack_batch(self):
         if not self._stream_pending:
@@ -201,6 +212,8 @@ class PersistentClientMixin:
         return reply
 
     def finish_session(self):
+        if self._stream_unbounded:
+            raise RuntimeError('Unbounded sessions end with cancel, not a finite final ACK')
         if self._stream_pending or self._stream_acked != self._stream_request.target_waveforms:
             raise RuntimeError('Finish requires all events processed and ACKed')
         reply = self.session_status()

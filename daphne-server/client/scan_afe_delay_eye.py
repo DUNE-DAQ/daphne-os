@@ -1087,6 +1087,8 @@ def main() -> int:
             return run_dma_scan(args, afes)
         except (RuntimeError, ValueError, TimeoutError) as error:
             print(f"[FAIL] {error}", file=sys.stderr)
+            if any(word in str(error).lower() for word in ('verification', 'eye', 'alignment_required')):
+                print('[INFO] You may repeat the scan without reconfiguring; use --force_acq to acquire on unverified channels', file=sys.stderr)
             return 1
 
     try:

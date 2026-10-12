@@ -103,9 +103,11 @@ void DmaService::check_frontend(const std::vector<uint32_t>& channels, bool cali
     const uint32_t a = ch / 8;
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      if (!force_acquisition && (states_[a] == daphne::FRONTEND_UNCONFIGURED || (!calibration && states_[a] == daphne::FRONTEND_FAILED) ||
-          (!calibration && !(approved_[a] & (1U << (ch % 8))))))
-        throw std::runtime_error("ALIGNMENT_REQUIRED: configure and run scan_afe_delay_eye.py --dma --apply_best");
+      // Calibration proves timing from the live frontend; it does not require
+      // a previous Configure RPC or approval from an earlier scan.
+      if (!calibration && !force_acquisition && (states_[a] == daphne::FRONTEND_UNCONFIGURED || states_[a] == daphne::FRONTEND_FAILED ||
+          !(approved_[a] & (1U << (ch % 8)))))
+        throw std::runtime_error("ALIGNMENT_REQUIRED: run scan_afe_delay_eye.py --dma --apply_best, or use --force_acq for unverified channels");
     }
 
   }

@@ -20,7 +20,7 @@ STOP = ('daphne-runtime.target', 'daphne.service', 'hermes.service', MANUAL,
         'endpoint.service', 'clockchip.service', 'daphne-gateware-verify.service',
         'firmware.service', 'daphne-gateware-prepare.service')
 HASHES = {
-    RUNTIME / 'daphneServer': 'd273defd534d3b3fb5f14d16db4de966f47e8ab05cb6094a366cb729d4bb0698',
+    RUNTIME / 'daphneServer': '61bdf401c915f91c399c978ac60ace3865641e57a7f49cd3069b7a787d7b56c5',
     RUNTIME / 'daphne-afe-dma-quiesce': '2acd53b90f2f9b9f9f27bbc17c0a6aff27837f3b873e6f21c170898ce92a428a',
     RUNTIME / 'daphne-afe-dma.ko': 'd25ab970bb5288e1d419974f63ab92e9427163a34ec68a9d2a3c0f0f5f9a4255',
     RUNTIME / 'daphne_dma_bounded.ko': '7d26fcfa954c7ad9b5542087a67c9d29d9e52755896f9a57a65faf6cf0cd89fe',

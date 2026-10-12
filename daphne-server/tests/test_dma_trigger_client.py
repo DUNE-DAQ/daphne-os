@@ -75,9 +75,11 @@ class TriggerClientTests(unittest.TestCase):
         add_dma_capture_arguments(parser)
         validate_dma_capture_arguments(parser,parser.parse_args([]))
         validate_dma_capture_arguments(parser,parser.parse_args(['--dma']))
+        for flag in ('--force_acq', '--force-acq'):
+            validate_dma_capture_arguments(parser,parser.parse_args(['--dma',flag]))
         validate_dma_capture_arguments(parser,parser.parse_args(['--dma','--capture-mode','triggered',
                                                                 '--trigger-source','timing','--pretrigger','1024']))
-        for argv in (['--pretrigger','10'],['--dma','--pretrigger','10'],
+        for argv in (['--force_acq'],['--pretrigger','10'],['--dma','--pretrigger','10'],
                      ['--dma','--trigger-source','external'],['--dma','--capture-mode','triggered','--pretrigger','2048'],
                      ['--dma','--capture-mode','triggered','--trigger-source','all'],['--dma','--trigger-timeout-ms','9']):
             with contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):

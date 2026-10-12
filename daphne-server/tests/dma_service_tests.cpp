@@ -166,7 +166,7 @@ void test_explicit_force_and_unverified_scan() {
   DmaService service({0x44415048,0x20000,3,987,80}, {}, std::move(engine),
       [&](const auto&, bool) { if (reject_hardware) throw std::runtime_error("FRONTEND_NOT_READY"); },
       [&](const AfeDelaySweepRequest& req, const std::atomic<bool>&) {
-        ++scans; if (scans == 1) throw std::runtime_error("Final physical ramp verification failed");
+        ++scans; if (scans <= 3) throw std::runtime_error("Final physical ramp verification failed");
         AfeDelaySweepResponse out; out.set_success(true);out.set_backend(ACQUISITION_DMA);
         auto* a=out.add_afes();a->set_afe(0);a->set_applied(true);a->set_approved_lane_mask(1);
         a->set_ramp_verification_skipped(req.skip_ramp_verification());return out;
@@ -179,11 +179,15 @@ void test_explicit_force_and_unverified_scan() {
   require(wait_ready(service,job.job_id()).state()==DMA_JOB_READY);
   DmaControlRequest ctl;ctl.set_job_id(job.job_id());ctl.set_action(DMA_CANCEL);require(rpc(service,MT2_DMA_CONTROL_REQ,ctl).success());
   reject_hardware=true;require(!rpc(service,MT2_DMA_ACQUIRE_REQ,acquire).success());reject_hardware=false;
-  ConfigureRequest cfg;cfg.add_afes()->set_id(0);service.configured(cfg);
   AfeDelaySweepRequest scan;scan.set_backend(ACQUISITION_DMA);scan.add_afes(0);scan.set_firsttap(100);
   scan.set_lasttap(104);scan.set_tapstep(4);scan.set_numberofsamples(2048);scan.set_numberofwaveforms(1);scan.set_apply_best(true);
-  job=rpc(service,MT2_DMA_SCAN_REQ,scan);require(wait_ready(service,job.job_id()).state()==DMA_JOB_FAILED);
-  ctl.set_job_id(job.job_id());ctl.set_action(DMA_CANCEL);require(rpc(service,MT2_DMA_CONTROL_REQ,ctl).success());
+  // A live frontend may be rescanned even when the server has no Configure RPC
+  // in its cache, and repeated failed scans do not require configuration writes.
+  for (unsigned attempt = 0; attempt < 3; ++attempt) {
+    job=rpc(service,MT2_DMA_SCAN_REQ,scan);require(job.success());
+    require(wait_ready(service,job.job_id()).state()==DMA_JOB_FAILED);
+    ctl.set_job_id(job.job_id());ctl.set_action(DMA_CANCEL);require(rpc(service,MT2_DMA_CONTROL_REQ,ctl).success());
+  }
   // A failed scan may be measured again without a configuration rewrite.
   scan.set_skip_ramp_verification(true);
   job=rpc(service,MT2_DMA_SCAN_REQ,scan);require(job.success());

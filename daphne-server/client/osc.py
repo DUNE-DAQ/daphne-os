@@ -287,7 +287,7 @@ class AcquisitionWorker(QtCore.QObject):
     status = QtCore.pyqtSignal(str)
     telemetry = QtCore.pyqtSignal(object)
     fft_update = QtCore.pyqtSignal(object, int)  # (dBFS spectrum, number of averaged waveforms)
-    plot_update = QtCore.pyqtSignal(object, float, int, int)  # (yk, rtt_ms, frame_id, t_ns)
+    plot_update = QtCore.pyqtSignal(object, float, object, object)  # Python counters/timestamps may exceed Qt int32.
     acquisition_finished = QtCore.pyqtSignal(str)
     acquisition_failed = QtCore.pyqtSignal(str)
     stopped = QtCore.pyqtSignal()
@@ -329,6 +329,8 @@ class AcquisitionWorker(QtCore.QObject):
         self.dma_force_acq = dma_force_acq
         self._dma_last_plot = 0.
         self._dma_skipped_plots = 0
+        self._dma_progress_phase = None
+        self._dma_progress_at = 0.
         self._dma_client = None
         self.dma_cleanup_error = ''
         self.period_ms = max(1, int(period_ms))
@@ -519,10 +521,17 @@ class AcquisitionWorker(QtCore.QObject):
         self._link = V2Link(self.endpoint, self.identity.encode(), self.timeout_ms)
         if self.dma:
             self._dma_client = DmaClient(pb_high, link_rpc(pb_high, self._link, self.route), self._stop_evt.is_set,
-                progress_callback=lambda done, total, phase: self.status.emit(
-                    f'{phase_text(pb_high, phase)} (job {done}/{total} wf); displayed waveform is the last completed event'))
+                progress_callback=self._dma_progress)
             self._dma_client.probe(self.dma_trigger_source, self.dma_capture_mode, self.dma_pretrigger)
         self.status.emit(f"Connected to {self.endpoint}")
+
+    def _dma_progress(self, done, total, phase):
+        now = time.monotonic()
+        if phase == self._dma_progress_phase and now - self._dma_progress_at < .1:
+            return
+        self._dma_progress_phase, self._dma_progress_at = phase, now
+        target = 'infinite' if self.dma_capture_mode == 'persistent' and self.max_waveforms == 0 else total
+        self.status.emit(f'{phase_text(pb_high, phase)} (job {done}/{target} wf); displayed waveform is the last completed event')
 
     def _push_save_frame(self, yk, metadata=None):
         if self.save_queue is None:
@@ -584,7 +593,7 @@ class AcquisitionWorker(QtCore.QObject):
 
             metadata = None
             if self.dma:
-                t0 = time.monotonic()
+                t0 = time.perf_counter()
                 if self.dma_capture_mode == 'persistent':
                     if self._dma_client.job_id is None:
                         self._dma_client.start_session(list(self.req.channelList), self.req.numberOfSamples,
@@ -597,7 +606,7 @@ class AcquisitionWorker(QtCore.QObject):
                         1, self.dma_trigger_source, timeout_ms=self.dma_trigger_timeout_ms,
                         capture_mode=self.dma_capture_mode, pretrigger=self.dma_pretrigger,
                         job_timeout_ms=self.dma_job_timeout_ms, force_acq=self.dma_force_acq)
-                rtt_ms = (time.monotonic() - t0) * 1000
+                rtt_ms = (time.perf_counter() - t0) * 1000
                 yk = np.ascontiguousarray(y_all[0])
             else:
                 payload = self.req.SerializeToString()
@@ -664,12 +673,20 @@ class AcquisitionWorker(QtCore.QObject):
 
 
 # ---------------------- Main UI app ----------------------
+def use_osc_dma_session(args):
+    # The scope is a live consumer, including callers using the older triggered
+    # spelling. Per-event DMA jobs remain available in the file client.
+    if args.dma:
+        args.capture_mode = 'persistent'
+
+
 class DaphneOscApp(QtWidgets.QWidget):
     fft_channel_index_changed = QtCore.pyqtSignal(int)
     fft_reset_requested = QtCore.pyqtSignal()
 
     def __init__(self, args):
         super().__init__()
+        use_osc_dma_session(args)
         self.args = args
 
         self.endpoint = f"tcp://{args.ip}:{args.port}"
@@ -1173,7 +1190,7 @@ class DaphneOscApp(QtWidgets.QWidget):
         self._telemetry = telemetry
         self._refresh_status_line()
 
-    @QtCore.pyqtSlot(object, float, int, int)
+    @QtCore.pyqtSlot(object, float, object, object)
     def _on_plot_update(self, yk, rtt_ms, frame_id, timestamp_ns):
         if frame_id > (self._last_seen_frame_id + 1):
             self._plot_drops_ui += (frame_id - self._last_seen_frame_id - 1)
@@ -1431,7 +1448,7 @@ class DaphneOscApp(QtWidgets.QWidget):
             render_age_ms = (time.time_ns() - self._last_render_ns) / 1e6
 
         ch_label = ",".join(str(c) for c in self.channels)
-        target = self.args.max_waveforms if self.args.max_waveforms > 0 else 'unlimited'
+        target = self.args.max_waveforms if self.args.max_waveforms > 0 else 'infinite'
         mode = getattr(self.args, 'capture_mode', 'finite') if self.args.dma else 'spybuffer'
         timing_label = 'acquireMs' if self.args.dma else 'rttMs'
         status_text = (
@@ -1579,9 +1596,8 @@ def main():
 
     parser.add_argument("-L", type=int, required=True, help="Samples per waveform (spybuffer <= 2048; DMA uses advertised limits)")
     parser.add_argument("--dma", action="store_true", help="Acquire long waveforms through raw DMA")
-    parser.add_argument("--force_acq", "--force-acq", action="store_true",
-                        help="Acquire DMA without approved AFE alignment; hardware readiness checks remain")
     add_dma_capture_arguments(parser)
+    parser.set_defaults(capture_mode='persistent' if '--dma' in sys.argv else 'finite')
     add_trigger_source_arguments(parser, include_self="--dma" in sys.argv)
 
     parser.add_argument("-enable_fft", "--enable_fft", action="store_true", help="Show statistically averaged FFT plot")
@@ -1631,10 +1647,11 @@ def main():
     parser.add_argument("--flush_every_frames", type=int, default=128, help="Flush files every N frames")
 
     args = parser.parse_args()
+    if args.dma and args.capture_mode != 'persistent':
+        print(f'DMA osc: {args.capture_mode} selection uses a persistent live session')
+    use_osc_dma_session(args)
     resolve_trigger_source(parser, args)
     validate_dma_capture_arguments(parser, args)
-    if args.force_acq and not args.dma:
-        parser.error('--force_acq requires --dma')
 
     # Parse channels
     if args.channels:
@@ -1716,7 +1733,8 @@ def main():
                 if args.capture_mode == 'triggered':
                     print('DMA triggered: prepare/ARM/read/STOP for each waveform; persistent mode keeps one session for --max_waveforms N')
                 else:
-                    print(f'DMA persistent: one START/STOP for N={args.max_waveforms} waveforms')
+                    target = args.max_waveforms or 'infinite (until closed)'
+                    print(f'DMA persistent: one START/STOP for N={target} waveforms')
                 if args.trigger_source in ('external', 'timing'):
                     print(f'DMA {args.trigger_source}: experimental source; waiting for an event from hardware')
             if args.force_acq:

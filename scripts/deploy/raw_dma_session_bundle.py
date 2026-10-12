@@ -33,6 +33,7 @@ EXTRA = [
     'scripts/deploy/daphne_dma_frontend.py', 'scripts/deploy/test_daphne_manual_mode.py',
     'docs/raw-dma-manual-mode-switch.md',
     'docs/raw-dma-manual-overrides-results-2026-10-12.md',
+    'docs/raw-dma-live-scope-results-2026-10-12.md',
     'scripts/petalinux/prepare_afe_dma_dts.py', 'scripts/petalinux/prepare_raw_dma_dts.py',
     'scripts/validation/run_dma_session_network_campaign.py',
     'scripts/validation/run_dma_session_pattern_campaign.py',

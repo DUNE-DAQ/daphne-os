@@ -114,6 +114,93 @@ class StreamServer(FakeServer):
 
 
 class PersistentTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Qt permits one application per process. Keep a strong reference when
+        # this suite is combined with the window tests on Linux/PyQt6.
+        cls.qt_app=None
+        if importlib.util.find_spec('PyQt6') and importlib.util.find_spec('pyqtgraph'):
+            from PyQt6 import QtWidgets
+            cls.qt_app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+    def test_unbounded_session_stays_open_until_cancel(self):
+        server=StreamServer();client=DmaClient(pb,server.rpc)
+        from dma_persistent_client import UNBOUNDED_SESSION_TARGET
+        initial=client.start_session([32,33,34,35],10000,0,'external',pretrigger=1024)
+        self.assertEqual(initial.session_progress.target,UNBOUNDED_SESSION_TARGET)
+        for _ in range(20):
+            data,metadata=client.read_batch(1)
+            self.assertEqual(data.shape,(1,4,10000))
+            self.assertTrue(metadata['unbounded_session'])
+            client.ack_batch()
+        self.assertEqual(server.starts,1)
+        self.assertEqual(server.acked,20)
+        with self.assertRaisesRegex(RuntimeError,'end with cancel'):
+            client.finish_session()
+        client.cancel()
+        self.assertTrue(server.cancelled)
+        self.assertIsNone(client.job_id)
+
+    def test_unbounded_rejects_limited_target_before_start(self):
+        server=StreamServer();client=DmaClient(pb,server.rpc)
+        client.probe('external','persistent',1024)
+        client.capabilities.maximum_target_waveforms=1000
+        with self.assertRaisesRegex(RuntimeError,'full uint64'):
+            client.start_session([0],2048,0,'external',pretrigger=1024)
+        self.assertEqual(server.starts,0)
+
+    @unittest.skipUnless(importlib.util.find_spec('PyQt6') and importlib.util.find_spec('pyqtgraph'),'Qt optional')
+    def test_osc_unbounded_counter_signal_and_user_stop(self):
+        import osc
+        from PyQt6 import QtWidgets
+        from dma_persistent_client import UNBOUNDED_SESSION_TARGET
+        app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        server=StreamServer()
+        request=pb.DumpSpyBuffersRequest(numberOfSamples=10000,numberOfWaveforms=1,channelList=[32,33,34,35])
+        worker=osc.AcquisitionWorker('fake','mezz/0','fake',1000,request,1,max_waveforms=0,
+            dma=True,dma_capture_mode='persistent',dma_trigger_source='external',dma_pretrigger=1024)
+        worker._link=SimpleNamespace(close=lambda:None)
+        worker._dma_client=DmaClient(pb,server.rpc,worker._stop_evt.is_set,worker._dma_progress)
+        plots=[];messages=[];finished=[]
+        worker.plot_update.connect(lambda data,timing,frame,stamp:plots.append((frame,stamp)))
+        worker.status.connect(messages.append);worker.acquisition_finished.connect(finished.append)
+        worker._frames_acquired=1<<31
+        worker._poll_once()
+        worker._dma_last_plot=0;worker._poll_once()
+        self.assertEqual(server.starts,1)
+        self.assertEqual(server.request.target_waveforms,UNBOUNDED_SESSION_TARGET)
+        self.assertEqual(plots[-1][0],(1<<31)+2)
+        self.assertGreater(plots[-1][1],1<<32)
+        self.assertTrue(any('/infinite wf' in msg for msg in messages))
+        self.assertFalse(finished)
+        worker.request_stop();worker.stop();worker._poll_once()
+        self.assertTrue(server.cancelled);self.assertEqual(server.starts,1)
+        app.processEvents()
+
+    def test_file_cli_force_is_transmitted_and_saved(self):
+        server=StreamServer();original=server.rpc
+        def rpc(t,req,*rest):
+            response=original(t,req,*rest)
+            if t==pb.MT2_ACQUISITION_CAPABILITIES_REQ:response.force_acquisition_supported=True
+            if t in (pb.MT2_DMA_ACQUIRE_REQ,pb.MT2_DMA_STATUS_REQ,pb.MT2_DMA_CONTROL_REQ):
+                response.force_acquisition=server.request.force_acquisition
+            return response
+        class Transport:
+            def __init__(self,*args,**kwargs):pass
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+        Transport.rpc=staticmethod(rpc)
+        with tempfile.TemporaryDirectory(dir=ROOT.parent/'build') as folder,patch('dma_acquire_cli.V2Client',Transport):
+            args=SimpleNamespace(v2=True,legacy=False,legacy_only=False,channel_list=['32,33'],N=3,L=10000,chunk=2,
+                foldername=folder,ip='fake',port=1,route='mezz/0',timeout_ms=1000,trigger_source='external',
+                append_data=False,compress=False,osc_mode=False,capture_mode='persistent',pretrigger=1024,
+                trigger_timeout_ms=30000,job_timeout_ms=0,pressure_timeout_ms=0,force_acq=True)
+            with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(run_dma_acquire(args,pb),0)
+            self.assertTrue(server.request.force_acquisition);self.assertEqual(server.starts,1)
+            contract=json.loads((Path(folder)/'dma_format.json').read_text())['capture_contracts']['32']
+            self.assertTrue(contract['force_acquisition'])
+            self.assertEqual((Path(folder)/'channel_32.dat').stat().st_size,3*10000*2)
+
     def test_persistent_force_is_negotiated_and_echoed_in_status(self):
         server=StreamServer();client=DmaClient(pb,server.rpc)
         with self.assertRaisesRegex(RuntimeError,'does not support force'):

@@ -20,6 +20,11 @@ from test_dma_trigger_client import TriggerServer
 
 @unittest.skipUnless(importlib.util.find_spec('PyQt6') and importlib.util.find_spec('pyqtgraph'), 'Qt optional on the test host')
 class DmaOscTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PyQt6 import QtWidgets
+        cls.qt_app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
     def test_force_flag_reaches_triggered_worker_and_saved_contract(self):
         from PyQt6 import QtWidgets
         import osc
@@ -47,7 +52,8 @@ class DmaOscTests(unittest.TestCase):
         import osc
         from dma_client import DmaClient
         app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-        server=TriggerServer()
+        from test_dma_persistent_client import StreamServer
+        server=StreamServer()
         original=server.rpc
         def rpc(*args):
             if args[0]==pb.MT2_DMA_ACQUIRE_REQ:
@@ -79,8 +85,8 @@ class DmaOscTests(unittest.TestCase):
                 self.assertTrue(window.isVisible())
                 quit_app.assert_not_called()
                 self.assertIn('ALIGNMENT_REQUIRED',window.status.text())
-                self.assertIn('L=2048 N=unlimited',window.status.text())
-                self.assertIn('mode=triggered',window.status.text())
+                self.assertIn('L=2048 N=infinite',window.status.text())
+                self.assertIn('mode=persistent',window.status.text())
                 self.assertIn('acquireMs=',window.status.text())
                 self.assertIn('ALIGNMENT_REQUIRED',terminal.getvalue())
                 self.assertEqual(len(server.calls),calls)
@@ -131,7 +137,8 @@ class DmaOscTests(unittest.TestCase):
         import osc
         from dma_client import DmaClient
         app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-        server=TriggerServer();server.running=True
+        from test_dma_persistent_client import StreamServer
+        server=StreamServer();server.slow=True
         original=server.rpc
         def rpc(*args):
             if args[0]==pb.MT2_DMA_CONTROL_REQ and args[1].action==pb.DMA_CANCEL:

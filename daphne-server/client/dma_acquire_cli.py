@@ -29,6 +29,7 @@ def run_dma_acquire(args, pb):
                   identity="dma-acquire-" + uuid.uuid4().hex) as transport:
         client = DmaClient(pb, transport.rpc)
         client.probe(args.trigger_source, mode, pretrigger)
+        client._check_force_acq(getattr(args, 'force_acq', False))
         print_acquisition_start(args, channels, 'dma')
         batch = min(args.chunk, client.batch_limit(channels, args.L, mode, pretrigger))
         if getattr(args, "osc_mode", False):
@@ -37,7 +38,7 @@ def run_dma_acquire(args, pb):
         offsets = {str(ch): (folder / f'channel_{ch}.dat').stat().st_size // (2*args.L)
                    if args.append_data and (folder / f'channel_{ch}.dat').is_file() else 0 for ch in channels}
         if mode in ('triggered', 'persistent'):
-            print(f'DMA triggered: P={pretrigger}, trigger sample={pretrigger}, source={args.trigger_source}')
+            print(f'DMA {mode}: N={args.N}, L={args.L}, P={pretrigger}, trigger sample={pretrigger}, source={args.trigger_source}')
             if args.trigger_source in ('external', 'timing'):
                 print(f'DMA {args.trigger_source}: experimental source; waiting for an event from hardware')
         try:
@@ -56,7 +57,8 @@ def run_dma_acquire(args, pb):
                     client.start_session(channels, args.L, args.N, args.trigger_source,
                         timeout_ms=getattr(args, 'trigger_timeout_ms', 30000), pretrigger=pretrigger,
                         job_timeout_ms=getattr(args, 'job_timeout_ms', 0),
-                        pressure_timeout_ms=getattr(args, 'pressure_timeout_ms', 0))
+                        pressure_timeout_ms=getattr(args, 'pressure_timeout_ms', 0),
+                        force_acq=getattr(args, 'force_acq', False))
                 while completed < args.N:
                     n = min(batch, args.N - completed)
                     if mode == 'persistent':
@@ -65,7 +67,8 @@ def run_dma_acquire(args, pb):
                     else:
                         data, metadata = client.acquire(channels, args.L, n, args.trigger_source,
                             timeout_ms=getattr(args, 'trigger_timeout_ms', 10000), capture_mode=mode,
-                            pretrigger=pretrigger, job_timeout_ms=getattr(args, 'job_timeout_ms', 0))
+                            pretrigger=pretrigger, job_timeout_ms=getattr(args, 'job_timeout_ms', 0),
+                            force_acq=getattr(args, 'force_acq', False))
                     disk_begin = time.monotonic()
                     for i, ch in enumerate(channels):
                         files[ch].write(data[:, i, :].astype("<u2", copy=False).tobytes())

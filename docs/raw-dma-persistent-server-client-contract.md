@@ -99,27 +99,46 @@ evento, offsets de append y resultado final, con tiempos de cliente total,
 READ RPC (incluye transporte/serialización), validación/decoder y escritura/flush.
 Flush no es un benchmark de persistencia física mediante fsync.
 
-`osc.py --dma --capture-mode persistent` requiere `--max_waveforms N>0`.
+`osc.py --dma` usa siempre una sesión persistente; las opciones antiguas
+`--capture-mode finite` y `triggered` se convierten al modo persistente en el
+osciloscopio. `--max_waveforms 0` es el default y recibe hasta que el usuario
+cierre la ventana. Un valor positivo conserva el fin automático al llegar a N.
+El cliente traduce el objetivo sin límite a `UINT64_MAX`, únicamente cuando
+el servidor anuncia ese máximo. No hace rollover ni abre nuevas sesiones por
+waveform. La ABI actual sigue recibiendo un objetivo positivo de 64 bits;
+no se recompilan firmware ni driver. El objetivo no multiplica la reserva
+de memoria: ring, staging y buffers de cliente mantienen sus límites.
 El worker consume/guarda todos los eventos y limita emisiones de plots a
 `-period_ms`; comunica las actualizaciones visuales omitidas al finalizar.
 El eje sigue (j-P)/Fs. Cancelación y cierre siguen en el worker, con errores
 visibles. No cambia el modo indefinido legacy de spybuffer.
 
-En `osc.py`, `triggered` solicita un trabajo de una sola waveform por vuelta:
+En el cliente de archivos, `triggered` solicita trabajos con N acotado:
 PREPARE/ARM, espera del evento, lectura, STOP y ACK, antes del próximo trabajo.
 `persistent` mantiene una única sesión para N y evita repetir PREPARE/STOP por
 evento. La barra muestra `L` como muestras por waveform, `N` como objetivo total
-(`unlimited` si el modo admite ejecución indefinida), `acq` como eventos recibidos
+(`infinite` en la sesión sin límite del osciloscopio), `acq` como eventos recibidos
 y el modo seleccionado. `acquireMs` mide la llamada completa de adquisición,
 incluyendo espera del trigger y transporte; no es el RTT de un único RPC ni
 incluye el guardado/ACK posterior. En persistent, la primera llamada incluye
 el inicio de sesión. La ventana del RMS se etiqueta en waveforms, sin reutilizar N.
+Los contadores y timestamps de la señal Qt usan enteros Python, sin truncarse
+a 32 bits. La adquisición DMA usa `perf_counter` para medir llamadas cortas
+en Windows. Los metadatos de una sesión sin límite registran `unbounded_session`;
+las ventanas por evento conservan `continuous=false` porque no se garantiza
+que sean adyacentes en el tiempo. Cerrar el osciloscopio cancela la única sesión
+y espera la comprobación de reposo en el worker.
 
 Un error DMA detiene la adquisición sin rearmarla ni cerrar automáticamente la
 ventana: conserva el mensaje en la barra de estado y lo imprime en stderr.
 El fin normal de `--max_waveforms` conserva la salida automática. Después de
 `configure_fe_min_v2.py --dma --skip-alignment`, los AFEs quedan sin alineación
-aprobada; ejecutar el scan DMA antes de volver a abrir `osc.py` para adquirir.
+aprobada; ejecutar el scan DMA o seleccionar `--force_acq` explícitamente.
+La calibración admite repetir el scan aunque el anterior haya fallado o el
+servidor no tenga un Configure RPC en cache. Conserva los checks físicos de
+identidad, clocks, alimentación, IDELAY y formato ADC; una pérdida física de
+readiness sigue bloqueando la operación. Un fallo de timing no obliga a
+reescribir ganancias, DACs ni la configuración analógica.
 
 Opciones explícitas para pruebas manuales:
 
@@ -127,7 +146,8 @@ Opciones explícitas para pruebas manuales:
   el candidato de la búsqueda sin ejecutar la verificación larga final. El
   resultado registra `ramp_verification_skipped`; la admisión queda sin
   alineación aprobada. El CSV y JSON conservan las mediciones de la búsqueda.
-- `osc.py --dma --force_acq` (alias `--force-acq`) solicita al servidor adquirir
+- `osc.py` y `protobuf_acquire_list_channels.py` con `--dma --force_acq`
+  (alias `--force-acq`) solicitan al servidor adquirir
   sin exigir la máscara de canales alineados, incluyendo AFEs no configurados,
   fallidos o parcialmente alineados. No cambia ese estado ni otorga aprobación.
   Se mantienen comprobaciones de identidad, clocks, power, IDELAY-controller,

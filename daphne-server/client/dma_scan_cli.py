@@ -126,6 +126,8 @@ def run_dma_scan(args, afes):
                 print("[FAIL] at least one requested AFE has no common eight-channel eye")
                 if result.message:
                     print(f"[FAIL] {result.message}")
+            if not full:
+                print('[INFO] Repeat the DMA scan without reconfiguring the frontend; use --force_acq for acquisition on unverified channels')
             client.acknowledge()
             return 0 if result.success else 1
         finally:
