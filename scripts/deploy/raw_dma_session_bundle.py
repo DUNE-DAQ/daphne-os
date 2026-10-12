@@ -29,6 +29,9 @@ EXTRA = [
     'scripts/deploy/raw_dma_session_bundle.py', 'scripts/deploy/raw_dma_session_build.sh',
     'scripts/deploy/raw_dma_session_driver_build.sh', 'scripts/deploy/raw_dma_uart_log.py',
     'scripts/deploy/raw_dma_session_activate.py',
+    'scripts/deploy/daphne-mode', 'scripts/deploy/daphne_manual_mode.py',
+    'scripts/deploy/daphne_dma_frontend.py', 'scripts/deploy/test_daphne_manual_mode.py',
+    'docs/raw-dma-manual-mode-switch.md',
     'scripts/petalinux/prepare_afe_dma_dts.py', 'scripts/petalinux/prepare_raw_dma_dts.py',
     'scripts/validation/run_dma_session_network_campaign.py',
     'scripts/validation/run_dma_session_pattern_campaign.py',
@@ -63,7 +66,7 @@ def main():
             raise FileNotFoundError(source)
         data = source.read_bytes()
         original_hashes[name] = hashlib.sha256(data).hexdigest()
-        if source.suffix in ('.py', '.sh', '.c', '.h', '.hpp', '.cpp', '.proto', '.cmake', '.md', '.txt') or source.name in ('Makefile', 'CMakeLists.txt'):
+        if source.suffix in ('.py', '.sh', '.c', '.h', '.hpp', '.cpp', '.proto', '.cmake', '.md', '.txt') or source.name in ('Makefile', 'CMakeLists.txt', 'daphne-mode'):
             data = data.replace(b'\r\n', b'\n')
         files[name] = data
     for stem in ('daphneV3_high_level_confs', 'daphneV3_low_level_confs'):
@@ -85,7 +88,7 @@ def main():
         with tarfile.open(fileobj=compressed,mode='w') as archive:
             for name,data in sorted(files.items()):
                 entry=tarfile.TarInfo(name);entry.size=len(data);entry.mtime=0
-                entry.mode=0o755 if name.endswith(('.sh','.py')) else 0o644
+                entry.mode=0o755 if name.endswith(('.sh','.py')) or Path(name).name == 'daphne-mode' else 0o644
                 archive.addfile(entry,io.BytesIO(data))
     digest = hashlib.sha256(args.output.read_bytes()).hexdigest()
     args.output.with_suffix(args.output.suffix+'.sha256').write_bytes((digest+'  '+args.output.name+'\n').encode('ascii'))

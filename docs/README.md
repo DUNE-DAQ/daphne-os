@@ -16,6 +16,7 @@
 - [Experimental raw DMA diagnostics and board qualification](raw-dma-diagnostics.md)
 - [Persistent DMA session driver](raw-dma-persistent-driver.md)
 - [Persistent DMA physical qualification and recovery](raw-dma-persistent-physical-results-2026-10-12.md)
+- [DAPHNE10 manual DMA/default mode switch](raw-dma-manual-mode-switch.md)
 - [Repository ownership and preserved history](repository-split.md)
 - [Credential audit and public upstream test fixtures](security-audit.md)
 - [Frozen dual-gateware RC1 record](releases/dual-gateware-2026.08.31-rc1.md)

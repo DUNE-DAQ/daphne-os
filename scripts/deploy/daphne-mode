@@ -1,0 +1,9 @@
+#!/bin/sh
+# Installed in /home/petalinux/scripts; the privileged helper is root-owned.
+set -eu
+case "${1:-}" in
+  dma|default|defecto|status) ;;
+  *) echo "Usage: $0 {dma|default|defecto|status}" >&2; exit 2 ;;
+esac
+[ "$#" -eq 1 ] || { echo "Expected one mode argument" >&2; exit 2; }
+exec sudo /usr/bin/python3 /usr/local/libexec/daphne-manual-mode.py "$1"
