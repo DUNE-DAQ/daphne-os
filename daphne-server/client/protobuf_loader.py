@@ -1,5 +1,6 @@
 """Locate generated Python protobuf modules without assuming a build folder."""
 
+import ast
 import importlib
 import os
 from pathlib import Path
@@ -7,6 +8,39 @@ import sys
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+DMA_FIELDS = {
+    "AfeDelaySweepRequest": {"skip_ramp_verification"},
+    "AfeDelaySweepAfeResult": {"ramp_verification_skipped"},
+    "AcquisitionCapabilitiesResponse": {
+        "force_acquisition_supported", "skip_ramp_verification_supported",
+    },
+    "DmaAcquireRequest": {"force_acquisition"},
+    "DmaJobResponse": {"force_acquisition"},
+}
+
+
+def _has_dma_fields(source):
+    # Read the serialized descriptor without importing the candidate: imports
+    # register proto filenames globally, even when their schema is stale.
+    # Parsing bytes also handles protoc escaping the first letter of a field.
+    from google.protobuf import descriptor_pb2
+
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        payload = None
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "AddSerializedFile" and node.args:
+            payload = node.args[0]
+        else:
+            payload = next((k.value for k in node.keywords if k.arg == "serialized_pb"), None)
+        if payload is None:
+            continue
+        descriptor = descriptor_pb2.FileDescriptorProto.FromString(ast.literal_eval(payload))
+        fields = {m.name: {f.name for f in m.field} for m in descriptor.message_type}
+        return all(required <= fields.get(message, set()) for message, required in DMA_FIELDS.items())
+    return False
 
 
 def load_protobuf_modules(require_trigger_source=False, require_synthetic_sipm=False, require_dma=False):
@@ -76,6 +110,16 @@ def load_protobuf_modules(require_trigger_source=False, require_synthetic_sipm=F
             ):
                 errors.append(f"{candidate}: requested RPC schema is out of date")
                 continue
+
+            if require_dma:
+                try:
+                    compatible = _has_dma_fields(high_source)
+                except Exception as exc:
+                    errors.append(f"{candidate}: cannot inspect DMA schema: {exc}")
+                    continue
+                if not compatible:
+                    errors.append(f"{candidate}: DMA schema lacks force acquisition/ramp verification fields")
+                    continue
 
         high_name = "daphneV3_high_level_confs_pb2"
         low_name = "daphneV3_low_level_confs_pb2"

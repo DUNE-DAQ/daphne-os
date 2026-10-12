@@ -47,6 +47,16 @@ If existing server build bindings are found first by `protobuf_loader.py`, set
 `DAPHNE_PROTO_PYTHON_DIR` to the desired output directory to select it explicitly.
 Relative custom output paths are resolved from the working directory.
 
+DMA clients check the generated descriptor before importing bindings. Copies
+without the force acquisition and ramp verification fields are skipped, including
+older paths selected by environment variables. If no compatible copy exists,
+the client reports a local schema error before contacting the server. To select
+the refreshed default bindings explicitly in an existing PowerShell session:
+
+```powershell
+$env:DAPHNE_PROTO_PYTHON_DIR = (Resolve-Path .\srcs\protobuf).Path
+```
+
 The PDS detail/seed configuration helpers additionally require the separate
 PDS source checkout expected by `pds_configure_utils.py`; it is not a PyPI
 dependency in this requirements file.

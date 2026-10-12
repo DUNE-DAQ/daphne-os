@@ -41,6 +41,30 @@ Bindings ARM instalados y copiados al PC:
 
 ## Resultados
 
+### Selección de bindings en la consola del PC
+
+Una ruta antigua seleccionada por `DAPHNE_PROTO_PYTHON_DIR` o un build previo
+podía pasar la comprobación inicial de DMA aunque careciera de los campos
+nuevos. Esto causaba `AttributeError` al asignar `skip_ramp_verification` y un
+falso mensaje de falta de soporte del servidor al interpretar las capacidades
+con ese esquema. La comprobación previa del despliegue no cubría esa prioridad.
+
+El loader ahora inspecciona el descriptor serializado sin importar el módulo,
+descarta esas copias antiguas y continúa hasta encontrar una compatible. Se
+verificó en Windows con una copia real del esquema anterior seleccionada por
+la variable de entorno: eligió `daphne-server/srcs/protobuf`, construyó la
+petición con `skip_ramp_verification=True` y leyó ambas capacidades nuevas como
+`True` desde `193.206.157.36:40001`, sin iniciar un scan ni una adquisición.
+Las 44 pruebas de loader, clientes DMA, Qt y cliente synthetic SiPM pasaron.
+
+Desde `daphne-server/` también puede fijarse explícitamente la ruta actual:
+
+```powershell
+$env:DAPHNE_PROTO_PYTHON_DIR = (Resolve-Path .\srcs\protobuf).Path
+```
+
+### Pruebas del despliegue
+
 - CTest local y ARM: **28/28 PASS**; Qt opcional se verifica por separado.
 - PC y daphne-dev/Python 3.9: **26 pruebas de cliente + 8 Qt PASS**.
 - Admisión normal de canal 0 sin alineación: rechazo `ALIGNMENT_REQUIRED`.
