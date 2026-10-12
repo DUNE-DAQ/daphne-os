@@ -105,6 +105,21 @@ El worker consume/guarda todos los eventos y limita emisiones de plots a
 El eje sigue (j-P)/Fs. Cancelación y cierre siguen en el worker, con errores
 visibles. No cambia el modo indefinido legacy de spybuffer.
 
+Un error DMA detiene la adquisición sin rearmarla ni cerrar automáticamente la
+ventana: conserva el mensaje en la barra de estado y lo imprime en stderr.
+El fin normal de `--max_waveforms` conserva la salida automática. Después de
+`configure_fe_min_v2.py --dma --skip-alignment`, los AFEs quedan sin alineación
+aprobada; ejecutar el scan DMA antes de volver a abrir `osc.py` para adquirir.
+
+Corrección de GUI del 2026-10-12: se reprodujo contra daphne-10 el rechazo
+`ALIGNMENT_REQUIRED` tras reconfiguración. Con la corrección, la ventana
+permanece visible, muestra el error, adquiere cero frames y cierra limpiamente
+a petición del usuario. Las siete regresiones Qt pasan. En esa misma sesión,
+el intento posterior de scan AFE0 también fue rechazado con
+`ALIGNMENT_REQUIRED`, desde el PC y desde la placa con sus bindings instalados.
+Ese rechazo de calibración queda pendiente de diagnóstico; no se aplicó timing
+ni se modificaron los ajustes analógicos durante esta comprobación.
+
 API compartida: `start_session`, `read_batch`, `ack_batch`, `finish_session`.
 Sólo una tanda sin ACK a la vez. El consumidor debe llamar `cancel` en finally
 si falla su procesamiento; los clientes CLI y Qt lo hacen. `acquire` conserva

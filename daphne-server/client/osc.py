@@ -289,6 +289,7 @@ class AcquisitionWorker(QtCore.QObject):
     fft_update = QtCore.pyqtSignal(object, int)  # (dBFS spectrum, number of averaged waveforms)
     plot_update = QtCore.pyqtSignal(object, float, int, int)  # (yk, rtt_ms, frame_id, t_ns)
     acquisition_finished = QtCore.pyqtSignal(str)
+    acquisition_failed = QtCore.pyqtSignal(str)
     stopped = QtCore.pyqtSignal()
 
     def __init__(
@@ -360,13 +361,16 @@ class AcquisitionWorker(QtCore.QObject):
 
         self._setup_fft()
 
-    def _finish_acquisition(self, message):
+    def _finish_acquisition(self, message, failed=False):
         self.status.emit(message)
         self._emit_telemetry(force=True)
         self._stop_evt.set()
         if self._timer is not None:
             self._timer.stop()
-        self.acquisition_finished.emit(message)
+        if failed:
+            self.acquisition_failed.emit(message)
+        else:
+            self.acquisition_finished.emit(message)
 
     def _setup_fft(self):
         if not self._fft_enabled:
@@ -651,7 +655,7 @@ class AcquisitionWorker(QtCore.QObject):
             if self.dma:
                 # A failed DMA job is terminal. Automatic new ARM attempts hide
                 # the error behind the next phase message and repeat bad jobs.
-                self._finish_acquisition(f'[DMA stopped] {exc}')
+                self._finish_acquisition(f'[DMA stopped] {exc}', failed=True)
         finally:
             self._emit_telemetry(force=False)
             self._busy = False
@@ -799,6 +803,7 @@ class DaphneOscApp(QtWidgets.QWidget):
         self.worker.fft_update.connect(self._on_fft_update)
         self.worker.plot_update.connect(self._on_plot_update)
         self.worker.acquisition_finished.connect(self._on_acquisition_finished)
+        self.worker.acquisition_failed.connect(self._on_acquisition_failed)
         self.fft_channel_index_changed.connect(self.worker.set_fft_channel_index)
         self.fft_reset_requested.connect(self.worker.reset_fft_average)
 
@@ -1219,6 +1224,12 @@ class DaphneOscApp(QtWidgets.QWidget):
         self._latest_worker_msg = msg
         self._refresh_status_line()
         QtCore.QTimer.singleShot(100, QtWidgets.QApplication.instance().quit)
+
+    @QtCore.pyqtSlot(str)
+    def _on_acquisition_failed(self, msg):
+        self._latest_worker_msg = msg
+        self._refresh_status_line()
+        print(msg, file=sys.stderr, flush=True)
 
     def _toggle_autoscale(self):
         self.autoscale = not self.autoscale

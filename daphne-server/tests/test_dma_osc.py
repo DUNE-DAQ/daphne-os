@@ -1,5 +1,6 @@
 """Qt worker and disk integration with an offline raw DMA transport."""
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -19,6 +20,55 @@ from test_dma_trigger_client import TriggerServer
 
 @unittest.skipUnless(importlib.util.find_spec('PyQt6') and importlib.util.find_spec('pyqtgraph'), 'Qt optional on the test host')
 class DmaOscTests(unittest.TestCase):
+    def test_unaligned_frontend_error_keeps_window_open_and_reports_to_terminal(self):
+        from PyQt6 import QtWidgets
+        import osc
+        from dma_client import DmaClient
+        app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+        server=TriggerServer()
+        original=server.rpc
+        def rpc(*args):
+            if args[0]==pb.MT2_DMA_ACQUIRE_REQ:
+                server.calls.append(args)
+                return pb.DmaJobResponse(success=False,message='ALIGNMENT_REQUIRED: run the DMA eye scan')
+            return original(*args)
+        def ensure_link(worker):
+            if worker._dma_client is None:
+                worker._link=object()
+                worker._dma_client=DmaClient(pb,rpc,worker._stop_evt.is_set)
+        args=SimpleNamespace(ip='fake',port=1,channels=[0],channel=0,L=2048,trigger_source='external',
+            software_trigger=False,timeout_ms=1000,sampling_rate_hz=62.5e6,route='mezz/0',
+            fft_every=1,autoscale=False,enable_fft=False,fft_channel=None,enable_charge_hist=False,
+            disable_rms=True,rms_window=10,save_dir='',dma=True,capture_mode='triggered',pretrigger=1024,
+            identity='fake',period_ms=20,max_waveforms=0,ui_period_ms=33,fft_full_scale_counts=16384,
+            fft_keep_dc=False,trigger_timeout_ms=30000,job_timeout_ms=0)
+        terminal=io.StringIO()
+        with patch.object(osc.AcquisitionWorker,'_ensure_link',ensure_link), \
+                patch.object(app,'quit') as quit_app, patch('sys.stderr',terminal):
+            window=osc.DaphneOscApp(args);window.show()
+            try:
+                deadline=time.monotonic()+2
+                while 'ALIGNMENT_REQUIRED' not in window._latest_worker_msg and time.monotonic()<deadline:
+                    app.processEvents();time.sleep(.005)
+                calls=len(server.calls)
+                deadline=time.monotonic()+.3
+                while time.monotonic()<deadline:
+                    app.processEvents();time.sleep(.005)
+                self.assertTrue(window.isVisible())
+                quit_app.assert_not_called()
+                self.assertIn('ALIGNMENT_REQUIRED',window.status.text())
+                self.assertIn('ALIGNMENT_REQUIRED',terminal.getvalue())
+                self.assertEqual(len(server.calls),calls)
+                self.assertEqual(window.worker._frames_acquired,0)
+            finally:
+                window.close()
+                deadline=time.monotonic()+3
+                while window.worker_thread.isRunning() and time.monotonic()<deadline:
+                    app.processEvents();time.sleep(.005)
+                app.processEvents()
+                self.assertFalse(window.worker_thread.isRunning())
+                window.close();app.processEvents()
+
     def test_dma_failure_stays_visible_and_never_rearms_automatically(self):
         from PyQt6 import QtWidgets
         import osc
