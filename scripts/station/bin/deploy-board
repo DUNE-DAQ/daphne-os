@@ -24,7 +24,10 @@ def main():
     parser.add_argument('revision', choices=['V2', 'V3'])
     parser.add_argument('--check', action='store_true', help='Read-only server preflight; no board commands')
     parser.add_argument('--clean', action='store_true', help='Erase software storage and FTDI before redeploying; requires a working installed OS')
+    parser.add_argument('--verify-recorded', action='store_true', help='Validate the saved normal-boot log and network port without rebooting')
     args = parser.parse_args()
+    if args.clean and args.verify_recorded:
+        parser.error('--clean and --verify-recorded cannot be combined')
     if not re.fullmatch(r'DAPHNE-[0-9]{3}', args.asset):
         parser.error('Asset must be DAPHNE-NNN')
     address = ipaddress.IPv4Address(args.ip)
@@ -77,6 +80,10 @@ def main():
             print(f'\nStarting {name}', flush=True)
             subprocess.run([str(ROOT / 'bin' / name), *arguments], env=env, check=True)
 
+        if args.verify_recorded:
+            run('verify-normal-boot', args.asset, '--recorded')
+            print(f'FINAL BOOT VERIFICATION PASSED: {args.asset}', flush=True)
+            return
         input('Connect ONE board, select JTAG boot and power it on. Press Enter when ready: ')
         if args.clean:
             run('bootstrap', args.asset)

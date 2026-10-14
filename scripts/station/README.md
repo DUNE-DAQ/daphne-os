@@ -94,6 +94,20 @@ physical reboot is needed for this block. Require **Unattended QSPI boot and
 network controller VERIFIED**. A failed command stops the chain. This continuation
 does not establish that an uninterrupted clean run matched the audited history.
 
+## Finish verification after the normal Linux boot
+
+If Linux reached `daphne-007 login:` but the old verifier reported **Missing
+normal-boot evidence**, use the saved log and check the live controller port:
+
+```bash
+sudo /usr/local/sbin/daphne-deploy DAPHNE-007 192.168.0.207 V2 --verify-recorded
+```
+
+This sends no serial commands and does not reboot or reflash. Require **FINAL
+BOOT VERIFICATION PASSED**. For 006, replace the asset and address with
+`DAPHNE-006 192.168.0.206`. This finishes runtime verification; an uninterrupted
+manual-history rehearsal remains a separate result.
+
 ## Prepare another server (administrator, once)
 
 Install Vivado 2026.1, Python 3.9+ with venv/pip, Git, psmisc, iproute and a
