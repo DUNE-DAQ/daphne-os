@@ -12,9 +12,7 @@ PREP_OUT=$($R/bin/prepare-jtag "$ASSET" "$SERIAL") || {
   exit "$rc"
 }
 printf '%s\n' "$PREP_OUT"
-if [[ -z $SERIAL ]]; then
-  SERIAL=$(printf '%s\n' "$PREP_OUT" | awk -F= '$1 == "UART" {print $2}' | tail -1)
-fi
+SERIAL=$(printf '%s\n' "$PREP_OUT" | awk -F= '$1 == "UART" {print $2}' | tail -1)
 [[ -c $SERIAL ]] || { echo "Serial console not found: ${SERIAL:-unset}" >&2; exit 1; }
 E=$R/evidence/$ASSET/bootstrap-$(date -u +%Y%m%dT%H%M%SZ)
 mkdir -p "$E"

@@ -1,0 +1,22 @@
+#!/usr/bin/python3 -I
+"""Restricted entry point for local deployment operators."""
+import ipaddress
+import os
+import re
+import sys
+
+args = sys.argv[1:]
+if len(args) not in (3, 4) or (len(args) == 4 and args[3] != '--check'):
+    raise SystemExit('Usage: sudo daphne-deploy DAPHNE-NNN IPv4 V2|V3 [--check]')
+if not re.fullmatch(r'DAPHNE-[0-9]{3}', args[0]) or args[2] not in ('V2', 'V3'):
+    raise SystemExit('Invalid asset or revision')
+ipaddress.IPv4Address(args[1])
+if os.geteuid() != 0:
+    raise SystemExit('Run with sudo')
+station = '/srv/daphne-deployment/station'
+env = {'PATH': station + '/.venv/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+       'HOME': '/root', 'LANG': 'C.UTF-8', 'TERM': os.environ.get('TERM', 'dumb'),
+       'SUDO_USER': os.environ.get('SUDO_USER', 'root')}
+os.chdir(station)
+os.execve(station + '/.venv/bin/python',
+          [station + '/.venv/bin/python', '-I', station + '/bin/deploy-board', *args], env)

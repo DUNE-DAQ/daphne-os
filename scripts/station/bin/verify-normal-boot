@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Reboot from the provisioning shell and verify unattended QSPI Linux boot."""
+import json
+from pathlib import Path
+import re
+import serial
+import socket
+import sys
+import time
+from uart_console import Console, ConsoleError
+
+asset, device = sys.argv[1:]
+if not re.fullmatch(r'DAPHNE-[0-9]{3}', asset):
+    raise SystemExit('Asset must be DAPHNE-NNN')
+root = Path(__file__).resolve().parents[1]
+record = json.loads((root / 'records' / asset / 'board-config-v1.json').read_text())
+evidence = root / 'evidence' / asset
+logpath = evidence / 'autonomous-qspi-boot.log'
+try:
+    with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, logpath.open('wb') as log:
+        console = Console(port, log, display=True)
+        console.ready_linux_root(timeout=30)
+        console.run('test -r /proc/self/status || mount -t proc proc /proc')
+        console.run('sync')
+        console.send('reboot -f')
+        output = b''
+        deadline = time.monotonic() + 240
+        marker = (record['network']['hostname'] + ' login:').encode()
+        while time.monotonic() < deadline:
+            output += console.read()
+            if marker in output:
+                break
+        else:
+            raise ConsoleError('Timed out waiting for normal Linux login')
+        for pattern in (rb'Bootmode:\s+QSPI_MODE', rb'Loading Environment from SPIFlash\.\.\. OK',
+                        rb'DAPHNE Slow Controller', rb'Multi-User System'):
+            if not re.search(pattern, output):
+                raise ConsoleError('Missing normal-boot evidence: ' + pattern.decode())
+        if b'Kernel panic' in output or b'bad CRC' in output:
+            raise ConsoleError('Normal boot reported a kernel panic or invalid environment')
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            with socket.create_connection((record['network']['ipv4_address'], 40001), timeout=2):
+                break
+        except OSError:
+            if time.monotonic() >= deadline:
+                raise ConsoleError('DAPHNE network control port 40001 is unreachable')
+            time.sleep(1)
+    (evidence / 'environment-status.txt').write_text('AUTONOMOUS QSPI BOOT VERIFIED; saved environment OK; Linux/controller/network ready\n')
+    print(f'Unattended QSPI boot and network controller VERIFIED: {logpath}')
+except (ConsoleError, serial.SerialException) as exc:
+    raise SystemExit(str(exc))

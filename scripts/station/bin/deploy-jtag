@@ -13,10 +13,9 @@ if (( ${#UARTS[@]} == 0 )); then
   mapfile -t UARTS < <(compgen -G "/dev/serial/by-id/*if01-port0" || true)
   (( ${#UARTS[@]} == 1 )) || { echo "Connect exactly one board"; exit 1; }
   "$R/bin/bootstrap" "$A" "$(readlink -f "${UARTS[0]}")"
-  exit $?
+else
+  "$R/bin/bootstrap" "$A"
 fi
-
-"$R/bin/bootstrap" "$A"
 RECORD=$R/records/$A/board-config-v1.json
 if [[ ! -f $RECORD ]]; then
   "$R/bin/enroll-board" "$A" "$IP" "$REV"

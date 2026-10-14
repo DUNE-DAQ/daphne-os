@@ -41,6 +41,8 @@ def main():
     shutil.copytree(source / 'bin', directory / 'bin', ignore=shutil.ignore_patterns('__pycache__'))
     shutil.copy2(args.config, directory / 'station.json')
     shutil.copy2(source / 'release.json', directory / 'release.json')
+    shutil.copy2(source / 'FOR_DUMMIES.md', directory / 'FOR_DUMMIES.md')
+    shutil.copy2(source / 'README.md', directory / 'README.md')
     for name in ('database', 'records', 'evidence', 'results', 'kit/inventory', 'kit/bin'):
         (directory / name).mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(inventory)) as archive:

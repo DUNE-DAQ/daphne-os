@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""Guided deployment; physical boot switches are the only manual board steps."""
+import argparse
+import datetime
+import fcntl
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'bin'))
+from station_config import load_station
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('asset')
+    parser.add_argument('ip')
+    parser.add_argument('revision', choices=['V2', 'V3'])
+    parser.add_argument('--check', action='store_true', help='Read-only server preflight; no board commands')
+    args = parser.parse_args()
+    if not re.fullmatch(r'DAPHNE-[0-9]{3}', args.asset):
+        parser.error('Asset must be DAPHNE-NNN')
+    address = ipaddress.IPv4Address(args.ip)
+    config = load_station(ROOT)
+    network = ipaddress.IPv4Network(f"{config['fixture_server_ip']}/{config['fixture_prefix']}", strict=False)
+    if address not in network or address in (network.network_address, network.broadcast_address,
+                                             ipaddress.IPv4Address(config['fixture_server_ip'])):
+        parser.error('Board address must be a usable address on the fixture network')
+    release = json.loads((ROOT / 'release.json').read_text())
+    for name, entry in release['artifacts'].items():
+        path = ROOT / ('kit/boot' if name == 'BOOT.BIN' else 'kit/image') / name
+        if path.stat().st_size != entry['size'] or hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
+            raise SystemExit(f'Artifact verification failed: {path}')
+    for path in (Path(config['vivado_root']) / 'bin/xsdb',
+                 Path(config['vivado_root']) / 'bin/program_ftdi', Path(config['fixture_public_key']),
+                 Path(config['tftp_root']) / config['tftp_release_path'] / 'BOOT.BIN'):
+        if not path.exists():
+            raise SystemExit(f'Missing station requirement: {path}')
+    result = subprocess.run(['ip', '-4', '-o', 'address', 'show', 'dev', config['fixture_interface']],
+                            capture_output=True, text=True, check=True)
+    if config['fixture_server_ip'] + '/' not in result.stdout:
+        raise SystemExit('Fixture interface does not have the configured server address')
+    record = ROOT / 'records' / args.asset / 'board-config-v1.json'
+    if record.exists() and json.loads(record.read_text())['network']['ipv4_address'] != args.ip:
+        raise SystemExit('Requested address differs from the existing board record')
+    if record.exists() and json.loads(record.read_text())['asset']['carrier_revision'] != args.revision:
+        raise SystemExit('Requested revision differs from the existing board record')
+    print(f'Preflight passed for {args.asset}: pinned images, tools, network, key and record.', flush=True)
+    if args.check:
+        return
+    if os.geteuid() != 0:
+        raise SystemExit('Use the installed sudo daphne-deploy command')
+    with (ROOT / '.deployment.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit('Another deployment is running')
+        evidence = ROOT / 'evidence' / args.asset
+        evidence.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        audit = evidence / f'manual-command-{timestamp}.json'
+        audit.write_text(json.dumps({'argv': sys.argv, 'operator': os.environ.get('SUDO_USER', 'root'),
+                                    'station_manifest_sha256': hashlib.sha256((ROOT / 'station-manifest.json').read_bytes()).hexdigest()}, indent=2) + '\n')
+        env = os.environ.copy()
+        env['PATH'] = str(ROOT / '.venv/bin') + ':/usr/sbin:/usr/bin:/sbin:/bin'
+        env.pop('DAPHNE_STATION_CONFIG', None)
+        env.pop('PYTHONPATH', None)
+
+        def run(name, *arguments):
+            print(f'\nStarting {name}', flush=True)
+            subprocess.run([str(ROOT / 'bin' / name), *arguments], env=env, check=True)
+
+        input('Connect ONE board, select JTAG boot and power it on. Press Enter when ready: ')
+        run('deploy-jtag', args.asset, args.ip, args.revision)
+        uart_links = list(Path('/dev/serial/by-id').glob('*' + args.asset.replace('-', '') + '*if01-port0'))
+        if len(uart_links) != 1:
+            raise SystemExit('Could not identify exactly one named UART')
+        uart = str(uart_links[0].resolve())
+        input('Readback passed. Power OFF, select QSPI boot, leave power OFF. Press Enter: ')
+        run('capture-qspi-boot', args.asset, uart)
+        run('configure-qspi.py', args.asset, uart)
+        run('boot-provision-shell', args.asset, uart)
+        run('provision-linux', args.asset, uart)
+        run('verify-normal-boot', args.asset, uart)
+        print(f'\nDEPLOYMENT PASSED: {args.asset}. Evidence: {evidence}', flush=True)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, subprocess.CalledProcessError, EOFError) as exc:
+        raise SystemExit(f'STOPPED: {exc}; do not continue with undocumented recovery commands')

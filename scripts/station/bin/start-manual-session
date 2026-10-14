@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Start a fresh Bash and compare its history with the operator manual."""
+import datetime
+import os
+from pathlib import Path
+import re
+import subprocess
+
+root = Path(__file__).resolve().parents[1]
+manual = (root / 'FOR_DUMMIES.md').read_text()
+match = re.search(r'<!-- manual-history:start -->\s*```bash\n(.*?)```\s*<!-- manual-history:end -->', manual, re.S)
+if not match:
+    raise SystemExit('Manual command block is missing')
+expected = match.group(1)
+directory = Path.home() / '.daphne-manual-history'
+directory.mkdir(mode=0o700, exist_ok=True)
+timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
+history = directory / (timestamp + '.bash_history')
+history.touch(mode=0o600, exist_ok=False)
+env = os.environ.copy()
+for name in ('PROMPT_COMMAND', 'HISTTIMEFORMAT', 'BASH_ENV', 'ENV'):
+    env.pop(name, None)
+env.update(HISTFILE=str(history), HISTSIZE='1000', HISTFILESIZE='1000',
+           HISTCONTROL='', HISTIGNORE='', PS1='DAPHNE-manual$ ')
+print(f'Fresh manual history: {history}\nType only these commands:\n{expected}', flush=True)
+subprocess.run(['/bin/bash', '--noprofile', '--norc', '-i'], env=env)
+actual = history.read_text()
+if actual != expected:
+    raise SystemExit(f'HISTORY DOES NOT MATCH THE MANUAL: {history}')
+print(f'HISTORY MATCHES THE MANUAL exactly: {history}')

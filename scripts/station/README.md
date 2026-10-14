@@ -30,11 +30,14 @@ Back up `database/`, `records/`, `evidence/`, and `results/` after each run.
 ## Deploy one board
 
 Use one connected board, booted in JTAG mode. Close other serial programs.
-Run each block separately from a root shell. Set the physical asset label and
-its allocated fixture address; never copy another SOM's identity.
+For the guided command and exact Bash history audit, follow
+[FOR_DUMMIES.md](FOR_DUMMIES.md). The lower-level steps below explain the same
+process for recovery. Use a root shell for these steps. Set the physical asset
+label and its allocated fixture address; never copy another SOM's identity.
 
 ```bash
-cd /home/OPERATOR/daphne-deployment/station
+sudo -s
+cd /srv/daphne-deployment/station
 B=DAPHNE-006
 IP=192.168.0.206
 bin/deploy-jtag "$B" "$IP" V2
@@ -65,16 +68,15 @@ U-Boot input uses CR; Linux input uses LF. The boot helper waits for Linux and
 checks a working root shell. No `stty` workaround is needed. Provisioning sets
 the hostname, network, and supplied public key; it does not set default passwords.
 
-After provisioning succeeds, power-cycle in QSPI mode and let Linux autoboot:
+After provisioning succeeds, reboot and check normal QSPI boot automatically:
 
 ```bash
-bin/linux-console "$B" "$UART" \
-  'cat /proc/1/comm; hostname; ip -4 address; systemctl is-active daphne'
+bin/verify-normal-boot "$B" "$UART"
 ```
 
-Require `systemd`, the allocated hostname/address, and an active server.
-`linux-console` prompts for the board password if required; passwords stay out
-of the repository. Optional full QA uses `bin/run-qa "$B" "$IP"` after installing
+Require QSPI boot mode, a valid saved environment, the allocated hostname,
+the DAPHNE controller startup and reachable TCP port 40001. Optional full QA
+uses `bin/run-qa "$B" "$IP"` after installing
 `requirements-qa.txt` into the station venv. Successful image writes are not
 analog, timing, or DAQ qualification.
 
@@ -85,5 +87,26 @@ The LF handling and Linux readiness correction passes the original 12 simulated
 serial tests. On DAPHNE-006, October 14, remote FTDI reset, RAM boot through TF-A,
 EEPROM capture, QSPI and complete eMMC readback, Linux boot to the provisioning
 shell, and Linux provisioning passed. Logs are in the persistent station's
-`evidence/DAPHNE-006/`. Autonomous QSPI boot, runtime service and DAQ acceptance
-remain separate checks.
+`evidence/DAPHNE-006/`. Autonomous QSPI boot, saved environment, runtime service
+startup and TCP port 40001 also passed. Fresh manual-only clean redeployment and
+analog/timing/DAQ acceptance remain unverified.
+
+## Shared operator access
+
+After assembling and reviewing a station, run `install_shared.sh` as root with
+the existing deployment directory. It creates `/srv/daphne-deployment`, copies
+the source repositories, artifacts and station state, relocates the venv and
+public key, and makes the installation readable by all users with root-only
+writes. Then run `install_operator_access.py` as root from the reviewed source.
+It grants existing regular login accounts the validated `daphne-deploy` command
+through sudo; it does not grant a general root shell. On Cooper, `/tools` uses
+the sticky bit so operators cannot replace another owner's tool directory.
+
+On a new server, provision Vivado, the fixture interface, TFTP service, the two
+hash-pinned release files, and a local fixture public key first. Clone
+`https://github.com/DUNE-DAQ/daphne-os.git` and
+`https://github.com/marroyav/hardware-database.git`; fetch the inventory revision
+named in `release.json`. Assemble with `setup_station.py`, then install shared
+access. The tested Cooper image copies are in `/srv/daphne-deployment/artifacts/`.
+Git contains the deployment process and pinned identities; release binaries and
+per-board state stay in the persistent station.

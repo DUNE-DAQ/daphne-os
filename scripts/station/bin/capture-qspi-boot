@@ -6,8 +6,10 @@ ASSET=${1:?Usage: capture-qspi-boot DAPHNE-NNN SERIAL_DEVICE}
 SERIAL=${2:?Usage: capture-qspi-boot DAPHNE-NNN SERIAL_DEVICE}
 LOG=$ROOT/evidence/$ASSET/qspi-first-boot.log
 mkdir -p "$(dirname "$LOG")"
+if [[ -s $LOG ]]; then cp -p "$LOG" "$LOG.previous-$(date -u +%Y%m%dT%H%M%SZ)"; fi
+: > "$LOG"
 export PYTHONPATH="$ROOT/kit/python${PYTHONPATH:+:$PYTHONPATH}"
 echo "Power on the board in QSPI mode now; waiting for U-Boot..."
-python3 "$ROOT/kit/bin/serial_catch_uboot.py" --device "$SERIAL" --timeout 180 --log "$LOG"
+python3 "$ROOT/kit/bin/serial_catch_uboot.py" --device "$SERIAL" --timeout "${DAPHNE_CATCH_TIMEOUT:-900}" --log "$LOG"
 grep -q 'Bootmode:.*QSPI_MODE' "$LOG"
 echo "Verified QSPI boot: $LOG"
