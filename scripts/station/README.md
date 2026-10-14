@@ -6,7 +6,8 @@ settings, Linux provisioning, and unattended QSPI boot verification.
 
 On Cooper, connect one board: **DAPHNE-006 → 192.168.0.206** or
 **DAPHNE-007 → 192.168.0.207**, with carrier revision **V2**.
-Close other serial programs; keep USB connected. All nine login accounts can
+Close other serial programs; keep USB and the fixture Ethernet cable connected
+to the selected board throughout deployment and the QSPI switch. All nine login accounts can
 run the restricted deployment command. Server files are in
 `/srv/daphne-deployment`; release images and board state stay outside Git.
 
@@ -110,6 +111,12 @@ This sends no serial commands and does not reboot or reflash. Require **FINAL
 BOOT VERIFICATION PASSED**. For 006, replace the asset and address with
 `DAPHNE-006 192.168.0.206`. This finishes runtime verification; an uninterrupted
 manual-history rehearsal remains a separate result.
+
+If the controller port is unreachable, check that the fixture Ethernet cable
+is still connected to the selected board. USB alone does not provide this
+network path. After reconnecting Ethernet, rerun the documented
+`--verify-recorded` command above. A Linux **Link is Up** message from this
+fixed-link interface does not by itself verify end-to-end Ethernet connectivity.
 
 ## Prepare another server (administrator, once)
 
