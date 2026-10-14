@@ -22,7 +22,7 @@ if hashlib.sha256(eeprom).hexdigest() != geometry['som_eeprom_sha256']:
 station = load_station(root)
 for key in ('user_sectors', 'boot0_sectors', 'boot1_sectors'):
     sectors = geometry[key]
-    maximum = 0xffffffff if key == 'user_sectors' else 32768
+    maximum = 0xffffffff if key == 'user_sectors' else 65536
     if type(sectors) is not int or not 32 <= sectors <= maximum:
         raise SystemExit('Invalid recorded eMMC geometry; no erase issued')
 with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, (evidence / 'wipe-software.log').open('wb') as log:

@@ -30,7 +30,7 @@ with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, (evidenc
     geometry['som_eeprom_sha256'] = hashlib.sha256((evidence / 'eeprom/som-eeprom.bin').read_bytes()).hexdigest()
     if not 1000000 <= geometry['user_sectors'] <= 0xffffffff:
         raise SystemExit('Unexpected eMMC size; no erase issued')
-    if any(not 1 <= geometry[key] <= 32768 for key in ('boot0_sectors', 'boot1_sectors')):
+    if any(not 32 <= geometry[key] <= 65536 for key in ('boot0_sectors', 'boot1_sectors')):
         raise SystemExit('Unexpected eMMC boot area size; no erase issued')
     console.run('sync')
     console.run('mount -o remount,ro /')
