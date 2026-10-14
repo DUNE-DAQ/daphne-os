@@ -99,6 +99,9 @@ does not establish that an uninterrupted clean run matched the audited history.
 If Linux reached `daphne-007 login:` but the old verifier reported **Missing
 normal-boot evidence**, use the saved log and check the live controller port:
 
+If the prompt is `DAPHNE-manual$`, enter `exit` first to close that audited
+attempt. At the original root/tmux prompt, run:
+
 ```bash
 sudo /usr/local/sbin/daphne-deploy DAPHNE-007 192.168.0.207 V2 --verify-recorded
 ```
