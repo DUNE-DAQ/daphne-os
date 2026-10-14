@@ -40,9 +40,10 @@ IP=192.168.0.206
 bin/deploy-jtag "$B" "$IP" V2
 ```
 
-If FTDI programming requests a reconnect, reconnect USB and repeat the command.
-A logical USB reconnect can be attempted using `bin/reconnect-ftdi "$B"`.
-Continue only after its serial identity and UART are verified.
+The process attempts a logical reconnect and then a USB bus reset after FTDI
+programming. It verifies the new serial identity and UART before continuing.
+This succeeded remotely on DAPHNE-006 on October 14. If it requests a physical
+reconnect, reconnect USB and repeat the command.
 Require **QSPI AND EMMC FULL READBACK VERIFIED** before changing boot mode.
 
 Power off, select QSPI boot, keep USB connected, and start:

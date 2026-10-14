@@ -54,6 +54,9 @@ if (( PROGRAM )); then
     -vendor Xilinx -board DAPHNEMezz -desc "DAPHNE Mezzanine ${ASSET#DAPHNE-}" \
     -location "$LOCATION" | tee "$LOGDIR/program.log"
   echo
+  if python3 "$ROOT/bin/reconnect-ftdi" "$ASSET"; then
+    exec "$0" "$ASSET"
+  fi
   echo "FTDI programmed. Unplug and reconnect USB, then run this same command again."
   exit 3
 fi
