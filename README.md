@@ -28,6 +28,10 @@ Start with the [PetaLinux build guide](docs/kr260-petalinux-build-guide.md) and
 firmware releases, plus a qualified userspace runtime bundle. The checked-in
 staging sentinels deliberately reject unqualified runtime or overlay inputs.
 
+For a reproducible one-board programming station, use the
+[station process](scripts/station/README.md). Station state and release images
+stay outside Git and outside temporary directories.
+
 Use the [dual-gateware deployment runbook](docs/dual-gateware-deployment.md) for
 campaigns, service checks, application switching, and the separate QSPI U-Boot
 environment step. Flashing, rebooting, service replacement, and qualification

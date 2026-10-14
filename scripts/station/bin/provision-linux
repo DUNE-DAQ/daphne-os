@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""Apply per-board hostname, static fixture network, SSH public key over UART."""
+
+import json
+import os
+import pathlib
+import re
+import serial
+import sys
+import time
+
+from uart_console import Console, ConsoleError
+from station_config import load_station
+
+root = pathlib.Path(__file__).resolve().parents[1]
+if len(sys.argv) != 3:
+    raise SystemExit("Usage: provision-linux DAPHNE-NNN SERIAL_DEVICE")
+asset, device = sys.argv[1:]
+station = load_station(root)
+record_path = root / "records" / asset / "board-config-v1.json"
+record = json.loads(record_path.read_text())
+hostname = record["network"]["hostname"]
+address = record["network"]["ipv4_address"]
+mac = record["network"]["production_mac"]
+
+key_path = pathlib.Path(station['fixture_public_key']).expanduser()
+if not key_path.is_file():
+    raise SystemExit('Set fixture_public_key in station.json to an existing public key')
+public_key = key_path.read_text().strip() + "\n"
+
+network = (
+    "[Match]\n" f"MACAddress={mac}\n\n" "[Network]\n"
+    f"Address={address}/{station['fixture_prefix']}\n" "DHCP=no\nLinkLocalAddressing=no\nIPv6AcceptRA=no\n"
+)
+record_text = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
+
+
+def octal(text):
+    return "".join(f"\\{byte:03o}" for byte in text.encode())
+
+
+commands = [
+    "mkdir -p /root/.ssh /etc/systemd/network",
+    "chmod 700 /root/.ssh",
+    f"printf %b '{octal(hostname + chr(10))}' > /etc/hostname",
+    f"printf %b '{octal(record_text)}' > /etc/daphne-board-config.json",
+    f"printf %b '{octal(network)}' > /etc/systemd/network/10-daphne-fixture.network",
+    f"printf %b '{octal(public_key)}' > /root/.ssh/authorized_keys",
+    "chmod 600 /root/.ssh/authorized_keys",
+    "grep -q '^PermitRootLogin prohibit-password$' /etc/ssh/sshd_config || sed -i '1i PermitRootLogin prohibit-password' /etc/ssh/sshd_config",
+    f"hostname {hostname}",
+    "systemctl enable systemd-networkd sshd daphne 2>/dev/null || true",
+    "sync",
+]
+
+evidence = root / "evidence" / asset / "linux-provision.log"
+evidence.parent.mkdir(parents=True, exist_ok=True)
+try:
+    with serial.Serial(device, 115200, timeout=0.1, exclusive=True) as port, evidence.open("ab") as log:
+        console = Console(port, log)
+        console.ready_linux_root(timeout=180)
+        for index, command in enumerate(commands):
+            console.run(command, label=f"Provisioning step {index + 1}")
+except (ConsoleError, serial.SerialException) as exc:
+    raise SystemExit(str(exc))
+print(f"Provisioned {asset} as {hostname} at {address}; reboot once before QA")

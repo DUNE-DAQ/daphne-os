@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
+ASSET=${1:?Usage: prepare-jtag DAPHNE-NNN}
+SERIAL_HINT=${2:-}
+[[ $ASSET =~ ^DAPHNE-[0-9]{3}$ ]] || { echo "Asset must be DAPHNE-NNN" >&2; exit 2; }
+[[ $EUID -eq 0 ]] || { echo "Run this command from sudo -s" >&2; exit 2; }
+
+source "$(dirname -- "$0")/_environment.sh"
+SERIAL=${ASSET/-/}
+LOGDIR=$ROOT/evidence/$ASSET/ftdi
+mkdir -p "$LOGDIR"
+
+mapfile -t MATCHING_UARTS < <(compgen -G "/dev/serial/by-id/*${SERIAL}*if01-port0" || true)
+PROGRAM=0
+if (( ${#MATCHING_UARTS[@]} == 1 )); then
+  UART_LINK=${MATCHING_UARTS[0]}
+elif [[ -n $SERIAL_HINT ]]; then
+  UART_LINK=$SERIAL_HINT
+  PROGRAM=1
+else
+  mapfile -t ALL_UARTS < <(compgen -G "/dev/serial/by-id/*if01-port0" || true)
+  if (( ${#ALL_UARTS[@]} == 0 )); then
+    echo "No FTDI USB/JTAG adapter detected. Connect the carrier USB cable and rerun bootstrap." >&2
+  else
+    echo "No adapter is labeled $SERIAL and multiple adapters are connected." >&2
+    echo "Rerun as: bin/bootstrap $ASSET /dev/ttyUSBn  (use that adapter.s if01 port)" >&2
+  fi
+  exit 1
+fi
+
+UART=$(readlink -f "$UART_LINK")
+TTY_NAME=$(basename "$UART")
+TTY_PATH=$(readlink -f "/sys/class/tty/$TTY_NAME/device" 2>/dev/null || true)
+[[ -n $TTY_PATH ]] || { echo "Serial device is not an FTDI interface: $UART" >&2; exit 1; }
+USB_INTERFACE=$(basename "$(dirname "$TTY_PATH")")
+USB_DEVICE=${USB_INTERFACE%:1.*}
+for number in 0; do
+  interface="$USB_DEVICE:1.$number"
+  if [[ -e /sys/bus/usb/drivers/ftdi_sio/$interface ]]; then
+    printf '%s' "$interface" > /sys/bus/usb/drivers/ftdi_sio/unbind
+  fi
+done
+
+if (( PROGRAM )); then
+  LIST=$($HW/bin/program_ftdi -list)
+  printf '%s\n' "$LIST" > "$LOGDIR/list-before.log"
+  mapfile -t ROWS < <(printf '%s\n' "$LIST" | awk '$2 ~ /^0x[0-9A-Fa-f]+$/ && $3 == "FT4232H" {print}')
+  (( ${#ROWS[@]} == 1 )) || { echo "Could not uniquely select the FTDI behind $UART" >&2; exit 1; }
+  read -r _ LOCATION _ CURRENT_SERIAL _ <<< "${ROWS[0]}"
+  echo "Programming FTDI identity for $ASSET at $LOCATION"
+  $HW/bin/program_ftdi -write -ftdi FT4232H -serial "$SERIAL" \
+    -vendor Xilinx -board DAPHNEMezz -desc "DAPHNE Mezzanine ${ASSET#DAPHNE-}" \
+    -location "$LOCATION" | tee "$LOGDIR/program.log"
+  echo
+  echo "FTDI programmed. Unplug and reconnect USB, then run this same command again."
+  exit 3
+fi
+
+if ! ss -ltn | grep -q ":$HW_SERVER_PORT "; then
+  nohup "$HW/bin/hw_server" -s "tcp::$HW_SERVER_PORT" > "$LOGDIR/hw-server.log" 2>&1 </dev/null &
+  sleep 3
+fi
+TARGETS=$($HW/bin/xsdb -eval "connect -url tcp:localhost:$HW_SERVER_PORT; puts [jtag targets]")
+printf '%s\n' "$TARGETS" | tee "$LOGDIR/jtag-targets.log"
+[[ -n ${TARGETS//[[:space:]]/} ]] || { echo "No JTAG target. Check board power and JTAG boot mode." >&2; exit 1; }
+
+echo "JTAG ready"
+echo "UART=$UART"

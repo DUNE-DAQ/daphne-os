@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname -- "$0")/_environment.sh"
+umask 022
+R=$(cd -- "$(dirname "$0")/.." && pwd)
+ASSET=${1:?Usage: bootstrap DAPHNE-NNN [SERIAL_DEVICE]}
+SERIAL=${2:-}
+[[ $ASSET =~ ^DAPHNE-[0-9]{3}$ ]] || exit 2
+PREP_OUT=$($R/bin/prepare-jtag "$ASSET" "$SERIAL") || {
+  rc=$?
+  printf '%s\n' "$PREP_OUT"
+  exit "$rc"
+}
+printf '%s\n' "$PREP_OUT"
+if [[ -z $SERIAL ]]; then
+  SERIAL=$(printf '%s\n' "$PREP_OUT" | awk -F= '$1 == "UART" {print $2}' | tail -1)
+fi
+[[ -c $SERIAL ]] || { echo "Serial console not found: ${SERIAL:-unset}" >&2; exit 1; }
+E=$R/evidence/$ASSET/bootstrap-$(date -u +%Y%m%dT%H%M%SZ)
+mkdir -p "$E"
+export PYTHONPATH="$R/kit/python${PYTHONPATH:+:$PYTHONPATH}"
+if fuser "$SERIAL" >/dev/null 2>&1; then echo "UART busy: $SERIAL"; exit 1; fi
+test -r "$SERIAL" && test -w "$SERIAL"
+# Run from an interactive Cooper terminal, or SSH with -tt and stty dimensions.
+if test -t 0; then stty cols 120 rows 40; fi
+python3 "$R/kit/bin/serial_catch_uboot.py" --device "$SERIAL" --timeout 180 --log "$E/serial.log" >"$E/catcher.log" 2>&1 &
+catcher=$!
+trap 'kill "$catcher" 2>/dev/null || true' EXIT
+"$HW/bin/xsdb" "$R/qualified-ram/bootstrap-qualified-ram.tcl"  -fsbl "$R/kit/boot/zynqmp_fsbl.elf" -pmufw "$R/kit/boot/pmufw.elf"  -bl31 "$R/kit/boot/bl31.elf"  -bitstream "$R/kit/boot/system.bin" -uboot "$R/qualified-ram/qualified-uboot.bin"  -dtb "$R/qualified-ram/BOOT-BIN-fdt-7b8100.dtb" -hw-server "tcp:localhost:$HW_SERVER_PORT" >"$E/xsdb.log" 2>&1
+wait "$catcher"
+trap - EXIT
+python3 "$R/bin/capture-eeprom" "$ASSET" "$SERIAL" "$E/eeprom" >"$E/eeprom-capture.log" 2>&1
+# flash-verified.py uses this stable EEPROM path; refuse silent SoM replacement.
+python3 - "$R" "$ASSET" "$E/eeprom" <<'PY'
+import sys,shutil
+from pathlib import Path
+r,asset,e=Path(sys.argv[1]),sys.argv[2],Path(sys.argv[3])
+dest=r/'evidence'/asset/'eeprom'
+if dest.exists():
+ if (dest/'som-eeprom.bin').read_bytes()!=(e/'som-eeprom.bin').read_bytes():
+  raise SystemExit('Different SoM: record its replacement before proceeding')
+else: shutil.copytree(e,dest)
+print('U-Boot ready; EEPROM captured:',dest)
+PY

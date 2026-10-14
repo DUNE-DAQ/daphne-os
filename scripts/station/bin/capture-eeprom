@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+"""Capture and decode the SOM identity at the U-Boot prompt."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+from station_config import load_station
+
+asset, device, output = sys.argv[1:]
+root = Path(__file__).resolve().parents[1]
+station = load_station(root)
+output = Path(output)
+output.mkdir(parents=True, exist_ok=False)
+subprocess.run([sys.executable, str(root / 'kit/bin/uboot_dump_i2c_eeprom.py'),
+                '--device', device, '--i2c-bus', str(station['eeprom_i2c_bus']),
+                '--size', '8192', '--output', str(output / 'som-eeprom.bin'),
+                '--log', str(output / 'serial.log')], check=True)
+result = subprocess.run([sys.executable, str(root / 'kit/inventory/tools/daphne_production_cli.py'),
+                         'eeprom-decode', '--input', str(output / 'som-eeprom.bin'),
+                         '--asset-id', asset, '--station-id', station['station_id'],
+                         '--operator', os.environ.get('SUDO_USER') or os.environ.get('USER', 'operator')],
+                        check=True, capture_output=True, text=True)
+decoded = json.loads(result.stdout)
+if decoded['eeprom']['fru_checksum_valid'] is not True:
+    raise SystemExit('Invalid SOM EEPROM checksum')
+decoded['discover'] = {
+    'som_uuid': decoded['som']['uuid'], 'som_serial': decoded['som']['serial'],
+    'som_product': decoded['som']['product'], 'som_revision': decoded['som']['revision'],
+    'factory_mac': decoded['som']['factory_mac_id_0'], 'eeprom_sha256': decoded['eeprom']['sha256'],
+}
+(output / 'som-eeprom-decoded.json').write_text(json.dumps(decoded, indent=2) + '\n')

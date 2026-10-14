@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname -- "$0")/_environment.sh"
+umask 022
+ROOT_DIR=$(cd -- "$(dirname -- "$0")/.." && pwd)
+ASSET=${1:?Usage: run-qa DAPHNE-NNN IP}
+TARGET=${2:?Usage: run-qa DAPHNE-NNN IP}
+[[ $ASSET =~ ^DAPHNE-[0-9]{3}$ ]] || exit 2
+QA=$ROOT_DIR/qa
+# Full config/readback and 2000 captures of all 40 channels.
+RUN_DIR=$ROOT_DIR/results/$ASSET/$(date -u +%Y%m%dT%H%M%SZ)-vgain900-14bit
+mkdir -p "$(dirname "$RUN_DIR")"
+set +e
+python3 "$QA/bin/daphne-qaqc" full --asset "$ASSET" --target "$TARGET" --port 40001 --firmware-mode self-trigger --profile "$QA/profiles/cern-vst-selftrigger-reference.json" --confirm-write "$ASSET" --capture-channels 0-39 --waveforms 2000 --fft-avg-waves 2000 --samples 2048 --trigger software --confirm-trigger "$ASSET" --python python3 --output "$RUN_DIR"
+rc=$?
+set -e
+status=failed
+if test "$rc" = 0; then status=passed; fi
+if test -d "$RUN_DIR"; then
+  python3 "$ROOT_DIR/bin/index-run" --asset "$ASSET" --run "$RUN_DIR" --kind qaqc-vgain900-14bit --status "$status"
+fi
+exit "$rc"

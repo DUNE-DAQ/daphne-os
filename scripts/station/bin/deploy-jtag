@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname -- "$0")/_environment.sh"
+R=$(cd -- "$(dirname -- "$0")/.." && pwd)
+A=${1:?Usage: deploy-jtag DAPHNE-NNN IP [REVISION]}
+IP=${2:?Usage: deploy-jtag DAPHNE-NNN IP [REVISION]}
+REV=${3:-V2}
+SERIAL=${A/-/}
+export PYTHONPATH="$R/kit/python${PYTHONPATH:+:$PYTHONPATH}"
+
+mapfile -t UARTS < <(compgen -G "/dev/serial/by-id/*${SERIAL}*if01-port0" || true)
+if (( ${#UARTS[@]} == 0 )); then
+  mapfile -t UARTS < <(compgen -G "/dev/serial/by-id/*if01-port0" || true)
+  (( ${#UARTS[@]} == 1 )) || { echo "Connect exactly one board"; exit 1; }
+  "$R/bin/bootstrap" "$A" "$(readlink -f "${UARTS[0]}")"
+  exit $?
+fi
+
+"$R/bin/bootstrap" "$A"
+RECORD=$R/records/$A/board-config-v1.json
+if [[ ! -f $RECORD ]]; then
+  "$R/bin/enroll-board" "$A" "$IP" "$REV"
+else
+  python3 - "$RECORD" "$IP" <<'PY'
+import json,sys
+record=json.load(open(sys.argv[1]))
+actual=record["network"]["ipv4_address"]
+if actual != sys.argv[2]:
+    raise SystemExit(f"Record IP is {actual}, requested {sys.argv[2]}")
+PY
+fi
+UART=$(readlink -f /dev/serial/by-id/*${SERIAL}*if01-port0)
+exec python3 "$R/bin/flash-verified.py" "$A" "$UART"

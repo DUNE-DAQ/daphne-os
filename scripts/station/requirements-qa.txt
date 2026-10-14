@@ -1,0 +1,7 @@
+pyzmq==25.1.2
+protobuf==6.33.5
+numpy==1.26.4
+matplotlib==3.8.3
+importlib-resources==6.5.2
+zipp==3.23.0
+tqdm==4.67.1

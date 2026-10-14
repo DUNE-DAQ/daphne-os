@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Log into Linux over UART and return the requested command's exit status."""
+
+import re
+import getpass
+import serial
+import sys
+
+from uart_console import Console, ConsoleError
+
+
+def main():
+    if len(sys.argv) < 4:
+        raise SystemExit("Usage: linux-console DAPHNE-NNN SERIAL_DEVICE COMMAND")
+    asset, device, command = sys.argv[1], sys.argv[2], " ".join(sys.argv[3:])
+    if not re.fullmatch(r"DAPHNE-[0-9]{3}", asset):
+        raise SystemExit("Asset must be DAPHNE-NNN")
+    with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port:
+        console = Console(port)
+        stage = console.prompt(timeout=180, allow_login=True)
+        if stage == "login":
+            console.send("root")
+            stage = console.prompt(timeout=30, allow_login=True, wake=False)
+        if stage == "password":
+            console.send(getpass.getpass("Board root password: "))
+            stage = console.prompt(timeout=30, allow_login=True, wake=False)
+        if stage != "root":
+            raise ConsoleError("Linux root login failed")
+        console.verify_linux_root()
+        output = console.run(command, timeout=60, label="Linux console command")
+        print(output.decode(errors="replace"))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except ConsoleError as exc:
+        if exc.output:
+            print(exc.output.decode(errors="replace"), file=sys.stderr)
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(exc.status)
+    except serial.SerialException as exc:
+        raise SystemExit(str(exc))

@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Enroll the EEPROM captured by bin/bootstrap and render its board record."""
+
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+from station_config import load_station
+
+root = pathlib.Path(__file__).resolve().parents[1]
+station = load_station(root)
+if len(sys.argv) not in (3, 4):
+    raise SystemExit("Usage: enroll-board DAPHNE-NNN 192.168.0.NNN [V2]")
+asset, address = sys.argv[1:3]
+revision = sys.argv[3] if len(sys.argv) == 4 else "V2"
+if not re.fullmatch(r"DAPHNE-[0-9]{3}", asset):
+    raise SystemExit("Asset must be DAPHNE-NNN")
+
+db = root / "database" / "daphne-production.db"
+cli = root / "kit" / "inventory" / "tools" / "daphne_production_cli.py"
+decoded_path = root / "evidence" / asset / "eeprom" / "som-eeprom-decoded.json"
+if not decoded_path.is_file():
+    raise SystemExit(
+        f"Missing {decoded_path}. Run 'bin/bootstrap {asset}' successfully first."
+    )
+decoded = json.loads(decoded_path.read_text())
+discover = decoded["discover"]
+operator = os.environ.get("SUDO_USER") or os.environ.get("USER") or "operator"
+common = [sys.executable, str(cli), "--database-url", str(db)]
+
+
+def call(*args, capture=False):
+    return subprocess.run(common + list(args), check=True, text=True,
+                          capture_output=capture)
+
+
+def status():
+    proc = subprocess.run(common + ["status", "--asset-id", asset], text=True,
+                          capture_output=True)
+    return json.loads(proc.stdout) if proc.returncode == 0 else None
+
+
+state = status()
+if state is None:
+    call("asset-add", "--asset-id", asset, "--carrier-revision", revision,
+         "--operation-id", f"mass:{asset}:asset-add", "--station-id", station["station_id"],
+         "--operator", operator)
+    state = status()
+
+if not state.get("active_som_uuid"):
+    args = [
+        "discover", "--asset-id", asset,
+        "--som-uuid", discover["som_uuid"], "--som-serial", discover["som_serial"],
+        "--som-product", discover["som_product"], "--som-revision", discover["som_revision"],
+        "--factory-mac", discover["factory_mac"], "--fru-checksum-valid",
+        "--eeprom-sha256", discover["eeprom_sha256"],
+        "--operation-id", f"mass:{asset}:discover", "--station-id", station["station_id"],
+        "--operator", operator, "--evidence-uri", str(decoded_path.with_name("som-eeprom.bin")),
+        "--evidence-sha256", discover["eeprom_sha256"],
+    ]
+    call(*args)
+    state = status()
+
+if not state.get("assignment"):
+    number = int(asset.rsplit("-", 1)[1])
+    call("allocate", "--asset-id", asset, "--mac-source", "som_eeprom",
+         "--production-mac", discover["factory_mac"], "--ipv4-address", address,
+         "--hostname", asset.lower(), "--timing-endpoint", f"0x{number:03X}",
+         "--firmware-release", json.loads((root / "release.json").read_text())["release_id"],
+         "--operation-id", f"mass:{asset}:allocate", "--station-id", station["station_id"],
+         "--operator", operator)
+    state = status()
+
+assignment = state["assignment"]
+if assignment["ipv4_address"] != address or assignment["production_mac"] != discover["factory_mac"]:
+    raise SystemExit("Existing database assignment disagrees with requested IP or EEPROM MAC")
+
+output = root / "records" / asset
+record = output / "board-config-v1.json"
+if not record.exists():
+    output.mkdir(parents=True, exist_ok=True)
+    call("render", "--asset-id", asset, "--output-dir", str(output),
+         "--operation-id", f"mass:{asset}:render", "--station-id", station["station_id"],
+         "--operator", operator)
+print(record)

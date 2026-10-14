@@ -1,0 +1,12 @@
+{
+  "station_id": "cooper-fixture-01",
+  "vivado_root": "/tools/2026.1/Vivado",
+  "fixture_interface": "enp11s0",
+  "fixture_server_ip": "192.168.0.104",
+  "fixture_prefix": 24,
+  "hw_server_port": 3121,
+  "eeprom_i2c_bus": 0,
+  "tftp_root": "/var/lib/tftpboot",
+  "tftp_release_path": "daphne/releases/common/daphne-minimal-copper-20260917",
+  "fixture_public_key": "/path/to/fixture_ed25519.pub"
+}

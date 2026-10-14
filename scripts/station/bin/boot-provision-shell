@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Boot the temporary provisioning shell and verify Linux is ready."""
+
+import pathlib
+import re
+import serial
+import sys
+
+from uart_console import Console, ConsoleError
+
+
+def main():
+    if len(sys.argv) != 3:
+        raise SystemExit("Usage: boot-provision-shell DAPHNE-NNN SERIAL_DEVICE")
+    asset, device = sys.argv[1:]
+    if not re.fullmatch(r"DAPHNE-[0-9]{3}", asset):
+        raise SystemExit("Asset must be DAPHNE-NNN")
+    root = pathlib.Path(__file__).resolve().parents[1]
+    logpath = root / "evidence" / asset / "provision-shell-boot.log"
+    logpath.parent.mkdir(parents=True, exist_ok=True)
+    commands = [
+        "mmc dev 0 0",
+        "fatload mmc 0:1 0x18000000 Image",
+        "fatload mmc 0:1 0x40000000 system.dtb",
+        "setenv bootargs earlycon console=ttyPS1,115200 root=/dev/mmcblk0p2 rootwait rw init=/bin/sh",
+    ]
+    with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, logpath.open("ab") as log:
+        console = Console(port, log, display=True)
+        console.prompt(linux=False)
+        for number, command in enumerate(commands):
+            console.run(command, linux=False, label=f"U-Boot preparation step {number + 1}")
+        console.send("booti 0x18000000 - 0x40000000", linux=False)
+        console.ready_linux_root(timeout=180)
+    print(f"Linux provisioning shell READY for {asset}; UART released. Run bin/provision-linux next.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ConsoleError, serial.SerialException) as exc:
+        raise SystemExit(str(exc))

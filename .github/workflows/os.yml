@@ -29,6 +29,7 @@ jobs:
           /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/deploy -v
           /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/petalinux -v
           /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/remote -v
+          /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/station -v
           /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/migration -v
           /tmp/daphne-os-tests/bin/python -m unittest discover -s tests/security -v
           python3 scripts/check_documentation.py

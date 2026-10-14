@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname -- "$0")/_environment.sh"
+ROOT=$(cd -- "$(dirname -- "$0")/.." && pwd)
+ASSET=${1:?Usage: capture-qspi-boot DAPHNE-NNN SERIAL_DEVICE}
+SERIAL=${2:?Usage: capture-qspi-boot DAPHNE-NNN SERIAL_DEVICE}
+LOG=$ROOT/evidence/$ASSET/qspi-first-boot.log
+mkdir -p "$(dirname "$LOG")"
+export PYTHONPATH="$ROOT/kit/python${PYTHONPATH:+:$PYTHONPATH}"
+echo "Power on the board in QSPI mode now; waiting for U-Boot..."
+python3 "$ROOT/kit/bin/serial_catch_uboot.py" --device "$SERIAL" --timeout 180 --log "$LOG"
+grep -q 'Bootmode:.*QSPI_MODE' "$LOG"
+echo "Verified QSPI boot: $LOG"

@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Register a campaign run and its actual artifacts; never infer QA acceptance."""
+import argparse,datetime,hashlib,json,sqlite3
+from pathlib import Path
+p=argparse.ArgumentParser()
+p.add_argument('--asset',required=True)
+p.add_argument('--run',required=True,type=Path)
+p.add_argument('--kind',required=True)
+p.add_argument('--status',required=True)
+a=p.parse_args()
+root=Path(__file__).resolve().parents[1]
+run=a.run.resolve()
+if not run.is_dir(): p.error('run directory does not exist')
+with sqlite3.connect(root/'database/daphne-production.db',timeout=30) as db:
+ db.execute('PRAGMA foreign_keys=ON')
+ db.executescript("""
+ CREATE TABLE IF NOT EXISTS campaign_runs (
+ run_path TEXT PRIMARY KEY, asset_id TEXT NOT NULL REFERENCES assets(asset_id),
+ som_uuid TEXT NOT NULL REFERENCES soms(som_uuid), kind TEXT NOT NULL,
+ status TEXT NOT NULL, indexed_at TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS campaign_artifacts (
+ run_path TEXT NOT NULL REFERENCES campaign_runs(run_path), relative_path TEXT NOT NULL,
+ filename TEXT NOT NULL, absolute_path TEXT NOT NULL, sha256 TEXT NOT NULL,
+ size_bytes INTEGER NOT NULL, PRIMARY KEY(run_path,relative_path));
+ CREATE TABLE IF NOT EXISTS campaign_channel_results (
+ run_path TEXT NOT NULL REFERENCES campaign_runs(run_path), channel INTEGER NOT NULL,
+ measurements_json TEXT NOT NULL, PRIMARY KEY(run_path,channel));
+ """)
+ som=db.execute('SELECT som_uuid FROM installations WHERE asset_id=? AND removed_at IS NULL',(a.asset,)).fetchone()
+ if not som: p.error('asset has no registered SoM')
+ previous=db.execute('SELECT asset_id,som_uuid FROM campaign_runs WHERE run_path=?',(str(run),)).fetchone()
+ if previous and previous!=(a.asset,som[0]): p.error('run identity mismatch')
+ db.execute('INSERT INTO campaign_runs VALUES(?,?,?,?,?,?) ON CONFLICT(run_path) DO UPDATE SET status=excluded.status,indexed_at=excluded.indexed_at',
+  (str(run),a.asset,som[0],a.kind,a.status,datetime.datetime.now(datetime.timezone.utc).isoformat()))
+ count=0
+ for f in sorted(run.rglob('*')):
+  if not f.is_file(): continue
+  h=hashlib.sha256()
+  with f.open('rb') as stream:
+   for chunk in iter(lambda:stream.read(1024*1024),b''): h.update(chunk)
+  db.execute('INSERT INTO campaign_artifacts VALUES(?,?,?,?,?,?) ON CONFLICT(run_path,relative_path) DO UPDATE SET sha256=excluded.sha256,size_bytes=excluded.size_bytes',
+   (str(run),str(f.relative_to(run)),f.name,str(f),h.hexdigest(),f.stat().st_size))
+  count+=1
+  if f.name=='channel_records.jsonl':
+   for line in f.read_text().splitlines():
+    rec=json.loads(line)
+    db.execute('INSERT INTO campaign_channel_results VALUES(?,?,?) ON CONFLICT(run_path,channel) DO UPDATE SET measurements_json=excluded.measurements_json',
+      (str(run),int(rec['channel']),json.dumps(rec,allow_nan=False)))
+ print(json.dumps({'asset':a.asset,'som_uuid':som[0],'status':a.status,'artifacts':count,'run':str(run)}))

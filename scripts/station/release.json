@@ -1,0 +1,20 @@
+{
+  "release_id": "daphne-minimal-copper-20260917",
+  "hardware_database_revision": "d801dd634f60241b60dba69569a4ca19f2da6fe0",
+  "hardware_database_repository": "https://github.com/marroyav/hardware-database.git",
+  "artifacts": {
+    "BOOT.BIN": {
+      "sha256": "da30be96dfd9e02d76e957d0cbb3d38d2bfe6d8c9019b1ac417108ca64024da8",
+      "size": 9661828
+    },
+    "rootfs.wic.gz": {
+      "sha256": "a8a287d622526d31670043359a01740a356b6584c2f89a0010b89e74112803c6",
+      "size": 84096756
+    }
+  },
+  "recovered_payload_sha256": {
+    "qualified-uboot.bin": "cd1fddfc5ee98650bc0ebbeb60a94956c04b1f3fa1ee53d134ed62d9b79d0a66",
+    "BOOT-BIN-fdt-7b8100.dtb": "0b09b4ea47ac718bb9194a6e94efae8b9cc36526f35ebb503864a8654adb82f4"
+  },
+  "qualification": "Recovered process; console correction simulated. Reconstructed bootstrap requires hardware regression."
+}

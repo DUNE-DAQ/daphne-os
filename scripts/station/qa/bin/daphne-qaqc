@@ -1,0 +1,860 @@
+#!/usr/bin/env python3
+"""Operator wrapper for DAPHNE slow-control QA/QC.
+
+The default readback action only issues read requests. Configuration and
+spy-buffer capture require explicit, asset-specific confirmations.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import hashlib
+import ipaddress
+import json
+import math
+import os
+import platform
+import re
+import shlex
+import subprocess
+import sys
+import time
+import uuid
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Sequence
+
+
+QA_ROOT = Path(__file__).resolve().parents[1]
+VENDOR_ROOT = QA_ROOT / "vendor" / "daphne-server"
+CLIENT_ROOT = VENDOR_ROOT / "client"
+DEFAULT_PROFILE = QA_ROOT / "profiles" / "cern-vst-selftrigger-reference.json"
+SOURCE_SUMS = QA_ROOT / "SOURCE-SHA256SUMS"
+WHEELHOUSE_SUMS = QA_ROOT / "WHEELHOUSE-SHA256SUMS"
+QA_SUMS = QA_ROOT / "QA-SHA256SUMS"
+ASSET_RE = re.compile(r"DAPHNE-[0-9]{3}")
+DEFAULT_PORT = 40001
+DEFAULT_ROUTE = "mezz/0"
+
+
+class QaError(RuntimeError):
+    pass
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def utc_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def validate_asset(asset: str) -> str:
+    if not ASSET_RE.fullmatch(asset):
+        raise QaError(f"invalid asset ID: {asset!r}; expected DAPHNE-NNN")
+    return asset
+
+
+def validate_target(target: str) -> str:
+    try:
+        parsed = ipaddress.ip_address(target)
+    except ValueError as exc:
+        raise QaError(f"target must be an IP address: {target!r}") from exc
+    if parsed.version != 4:
+        raise QaError("only IPv4 targets are supported")
+    return str(parsed)
+
+
+def parse_channels(expression: str) -> list[int]:
+    channels: set[int] = set()
+    for raw in expression.split(","):
+        token = raw.strip()
+        if not token:
+            continue
+        if "-" in token:
+            lo_raw, hi_raw = token.split("-", 1)
+            lo, hi = int(lo_raw), int(hi_raw)
+            if lo > hi:
+                lo, hi = hi, lo
+            channels.update(range(lo, hi + 1))
+        else:
+            channels.add(int(token))
+    result = sorted(channels)
+    if not result or result[0] < 0 or result[-1] > 39:
+        raise QaError("channels must select one or more values in the range 0..39")
+    return result
+
+
+def load_reference(path: Path) -> tuple[str, dict[str, Any]]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise QaError(f"cannot load reference profile {path}: {exc}") from exc
+    if not isinstance(raw, dict) or len(raw) != 1:
+        raise QaError(f"reference profile must contain exactly one board: {path}")
+    key, config = next(iter(raw.items()))
+    if not isinstance(config, dict):
+        raise QaError(f"invalid board configuration in {path}")
+    return str(key), config
+
+
+def render_profile(
+    source: Path,
+    target: str,
+    asset: str,
+    slot: int | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    source_key, reference = load_reference(source)
+    rendered = copy.deepcopy(reference)
+    rendered["ip"] = target
+    if slot is not None:
+        if slot < 0 or slot > 65535:
+            raise QaError("slot must be in the range 0..65535")
+        rendered["slot_id"] = slot
+    output = {asset: rendered}
+    provenance = {
+        "contract": "daphne.qa-profile-render",
+        "version": 1,
+        "asset": asset,
+        "target": target,
+        "source_board_key": source_key,
+        "source_path": str(source),
+        "source_sha256": sha256(source),
+        "source_slot_id": reference.get("slot_id"),
+        "rendered_slot_id": rendered.get("slot_id"),
+        "changes": ["top-level board key", "ip"] + (["slot_id"] if slot is not None else []),
+        "note": "DAQ geometry is preserved from CERN VST unless --slot is explicit.",
+    }
+    return output, provenance
+
+
+def command_text(command: Sequence[str]) -> str:
+    return shlex.join(str(item) for item in command)
+
+
+def qa_environment(run_dir: Path | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    paths = [str(QA_ROOT / "python"), str(VENDOR_ROOT)]
+    if env.get("PYTHONPATH"):
+        paths.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(paths)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["MPLBACKEND"] = "Agg"
+    if run_dir is not None:
+        mpl_dir = run_dir / ".matplotlib"
+        mpl_dir.mkdir(parents=True, exist_ok=True)
+        env["MPLCONFIGDIR"] = str(mpl_dir)
+    return env
+
+
+@dataclass
+class Stage:
+    label: str
+    command: list[str]
+    started_at: str
+    ended_at: str
+    elapsed_seconds: float
+    returncode: int
+    log: str
+    dry_run: bool
+
+
+class EvidenceRun:
+    def __init__(self, args: argparse.Namespace, action: str):
+        self.args = args
+        self.action = action
+        self.started_at = utc_now()
+        self.started_monotonic = time.monotonic()
+        if args.output:
+            self.path = Path(args.output).expanduser().resolve()
+        else:
+            self.path = QA_ROOT / "evidence" / args.asset / f"{utc_stamp()}-{action}"
+        self.path.mkdir(parents=True, exist_ok=False)
+        self.stages: list[Stage] = []
+        self.analog_configuration: dict[str, Any] | None = None
+
+    def run(self, label: str, command: Sequence[str]) -> tuple[int, str]:
+        cmd = [str(item) for item in command]
+        log_path = self.path / f"{len(self.stages) + 1:02d}-{label}.log"
+        start_wall = utc_now()
+        start = time.monotonic()
+        print(f"\n[{label}] $ {command_text(cmd)}", flush=True)
+        if self.args.dry_run:
+            output = "DRY RUN: command not executed\n"
+            log_path.write_text(command_text(cmd) + "\n" + output, encoding="utf-8")
+            rc = 0
+        else:
+            process = subprocess.Popen(
+                cmd,
+                cwd=VENDOR_ROOT,
+                env=qa_environment(self.path),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+            lines: list[str] = []
+            assert process.stdout is not None
+            with log_path.open("w", encoding="utf-8") as log:
+                for line in process.stdout:
+                    print(line, end="", flush=True)
+                    log.write(line)
+                    lines.append(line)
+            rc = process.wait()
+            output = "".join(lines)
+        elapsed = time.monotonic() - start
+        self.stages.append(
+            Stage(
+                label=label,
+                command=cmd,
+                started_at=start_wall,
+                ended_at=utc_now(),
+                elapsed_seconds=round(elapsed, 3),
+                returncode=rc,
+                log=log_path.name,
+                dry_run=bool(self.args.dry_run),
+            )
+        )
+        if rc != 0:
+            raise QaError(f"{label} failed with exit status {rc}; see {log_path}")
+        return rc, output
+
+    def finish(self, status: str, details: dict[str, Any] | None = None) -> None:
+        summary = {
+            "contract": "daphne.qaqc-result",
+            "version": 1,
+            "action": self.action,
+            "asset": self.args.asset,
+            "target": self.args.target,
+            "port": self.args.port,
+            "route": self.args.route,
+            "status": status,
+            "started_at": self.started_at,
+            "ended_at": utc_now(),
+            "elapsed_seconds": round(time.monotonic() - self.started_monotonic, 3),
+            "stages": [asdict(stage) for stage in self.stages],
+            "qualification_scope": [
+                "slow-control protocol and readback",
+                "configuration equality for exposed readback fields",
+                "spy-buffer transport and waveform file integrity",
+                "offline waveform metrics and plots",
+            ],
+            "not_qualified_without_external_inputs": [
+                "absolute analog gain",
+                "linearity",
+                "timing endpoint lock",
+                "channel response to a calibrated pulser or light source",
+            ],
+        }
+        if details:
+            summary["details"] = details
+        write_json(self.path / "qa-summary.json", summary)
+        print(f"\nQA evidence: {self.path}")
+
+
+def python_command(args: argparse.Namespace, script: str, *extra: str) -> list[str]:
+    return [args.python, str(CLIENT_ROOT / script), *extra]
+
+
+def ensure_dependencies(python: str, plots: bool = True) -> None:
+    modules = [
+        "zmq",
+        "google.protobuf",
+        "srcs.protobuf.daphneV3_high_level_confs_pb2",
+        "srcs.protobuf.daphneV3_low_level_confs_pb2",
+    ]
+    if plots:
+        modules.extend(["numpy", "matplotlib", "tqdm"])
+    imports = "; ".join(f"import {module}" for module in modules)
+    result = subprocess.run(
+        [python, "-c", imports],
+        env=qa_environment(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise QaError(
+            f"QA Python dependencies are missing for {python}: {result.stderr.strip()}\n"
+            f"Run: {QA_ROOT / 'bin' / 'setup-python'} --python {shlex.quote(python)}"
+        )
+
+
+def parse_last_json(text: str) -> dict[str, Any]:
+    decoder = json.JSONDecoder()
+    candidate: dict[str, Any] | None = None
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and not text[index + end :].strip():
+            candidate = value
+    if candidate is None:
+        raise QaError("command did not end with a JSON object")
+    return candidate
+
+
+def run_read_state(args: argparse.Namespace, run: EvidenceRun, label: str = "fe-state") -> dict[str, Any]:
+    _, output = run.run(
+        label,
+        python_command(
+            args,
+            "read_fe_state_v2.py",
+            "--host",
+            args.target,
+            "--port",
+            str(args.port),
+            "--route",
+            args.route,
+            "--timeout",
+            str(args.timeout_ms),
+            "--json",
+        ),
+    )
+    if args.dry_run:
+        return {}
+    snapshot = json.loads(output)
+    write_json(run.path / f"{label}.json", snapshot)
+    return snapshot
+
+
+def compare_snapshot(profile: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
+    expected = next(iter(profile.values()))
+    checks: dict[str, dict[str, Any]] = {}
+
+    def add(name: str, wanted: Any, observed: Any) -> None:
+        checks[name] = {
+            "expected": wanted,
+            "observed": observed,
+            "match": wanted == observed,
+        }
+
+    expected_channels = expected["channel_analog_conf"]
+    observed_channels = snapshot.get("channel_analog_conf", {})
+    expected_afes = expected["afes"]
+    observed_afes = snapshot.get("afes", {})
+    add("channel_offsets", expected_channels.get("offsets"), observed_channels.get("offsets"))
+    add("channel_trims", expected_channels.get("trims"), observed_channels.get("trims"))
+    add("afe_attenuators", expected_afes.get("attenuators"), observed_afes.get("attenuators"))
+    add("afe_bias_set", expected_afes.get("v_biases"), observed_afes.get("v_biases"))
+    add("bias_control", expected.get("bias_ctrl"), snapshot.get("bias_ctrl"))
+    mismatches = [name for name, item in checks.items() if not item["match"]]
+    return {
+        "contract": "daphne.configuration-readback",
+        "version": 1,
+        "pass": not mismatches,
+        "checks": checks,
+        "mismatches": mismatches,
+        "not_exposed_by_fe_state_readback": [
+            "ADC resolution/output format/bit order",
+            "PGA and LNA function fields",
+            "self-trigger threshold and correlation settings",
+            "DAQ geometry fields",
+        ],
+    }
+
+
+def execute_readback(args: argparse.Namespace, run: EvidenceRun) -> dict[str, Any]:
+    representative = parse_channels(args.channels)
+    full_cmd = python_command(
+        args,
+        "protobuf_full_smoketest_v2.py",
+        "-ip",
+        args.target,
+        "-port",
+        str(args.port),
+        "--route",
+        args.route,
+        "--timeout_ms",
+        str(args.timeout_ms),
+        "--channels",
+        *[str(ch) for ch in representative],
+        "--afes",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+    )
+    if args.firmware_mode == "full-stream":
+        full_cmd.append("--skip-trigger-counters")
+    for afe in range(5):
+        for reg in (4, 51, 52):
+            full_cmd.extend(["--afe-reg", str(afe), hex(reg)])
+    _, smoke_output = run.run("full-read-smoke", full_cmd)
+    if not args.dry_run and re.search(r"^\[FAIL\]", smoke_output, re.MULTILINE):
+        raise QaError("one or more protobuf read checks reported FAIL")
+
+    run.run(
+        "general-info",
+        python_command(
+            args,
+            "read_general_info_v2.py",
+            "--ip",
+            args.target,
+            "--port",
+            str(args.port),
+            "--route",
+            args.route,
+            "--timeout",
+            str(args.timeout_ms),
+        ),
+    )
+    snapshot = run_read_state(args, run)
+    details: dict[str, Any] = {
+        "firmware_mode": args.firmware_mode,
+        "readback": "complete" if not args.dry_run else "dry-run",
+        "trigger_counters": (
+            "read" if args.firmware_mode == "self-trigger" else "not present in this mode"
+        ),
+    }
+    if args.compare_profile:
+        rendered, provenance = render_profile(
+            Path(args.compare_profile).resolve(), args.target, args.asset, args.slot
+        )
+        report = compare_snapshot(rendered, snapshot) if not args.dry_run else {"pass": None}
+        write_json(run.path / "readback-comparison.json", report)
+        write_json(run.path / "profile-provenance.json", provenance)
+        details["configuration_compare_pass"] = report["pass"]
+        if report["pass"] is False:
+            raise QaError("configuration readback does not match the expected profile")
+    return details
+
+
+def execute_configure(args: argparse.Namespace, run: EvidenceRun) -> dict[str, Any]:
+    run.analog_configuration = None
+    if args.confirm_write != args.asset:
+        raise QaError(f"configuration requires --confirm-write {args.asset}")
+    profile, provenance = render_profile(Path(args.profile).resolve(), args.target, args.asset, args.slot)
+    rendered_path = run.path / "rendered-config.json"
+    write_json(rendered_path, profile)
+    write_json(run.path / "profile-provenance.json", provenance)
+
+    _, configure_output = run.run(
+        "configure",
+        python_command(
+            args,
+            "configure_fe_from_output.py",
+            str(rendered_path),
+            "--board-id",
+            args.asset,
+            "--host",
+            args.target,
+            "--port",
+            str(args.port),
+            "--route",
+            args.route,
+            "--timeout",
+            str(args.timeout_ms),
+            "--json",
+        ),
+    )
+    if not args.dry_run:
+        response = parse_last_json(configure_output)
+        write_json(run.path / "configure-response.json", response)
+        success = bool(response.get(args.asset, {}).get("configure_response", {}).get("success"))
+        if not success:
+            raise QaError("daphneServer returned an unsuccessful configuration response")
+
+    snapshot = run_read_state(args, run, label="post-config-fe-state")
+    report = compare_snapshot(profile, snapshot) if not args.dry_run else {"pass": None}
+    write_json(run.path / "configuration-readback.json", report)
+    if report["pass"] is False:
+        raise QaError("post-configuration readback does not match the rendered profile")
+    run.analog_configuration = {
+        "status": "dry-run" if args.dry_run else "configured",
+        "completed_at": utc_now(),
+        "profile": profile,
+        "rendered_profile_sha256": sha256(rendered_path),
+        "readback": report,
+    }
+    return {
+        "configuration_response": "success" if not args.dry_run else "dry-run",
+        "configuration_compare_pass": report["pass"],
+    }
+
+
+def validate_capture_options(args: argparse.Namespace) -> list[int]:
+    if args.confirm_trigger != args.asset:
+        raise QaError(f"capture requires --confirm-trigger {args.asset}")
+    channels = parse_channels(args.capture_channels)
+    if args.waveforms < 1 or args.samples < 32:
+        raise QaError("capture requires at least 1 waveform and 32 samples")
+    if not math.isfinite(args.sampling_rate) or args.sampling_rate <= 0:
+        raise QaError("sampling rate must be finite and positive")
+    if args.fft_avg_waves < 0 or args.fft_avg_waves > args.waveforms:
+        raise QaError("--fft-avg-waves must be between 0 (all captured) and --waveforms")
+    if not math.isfinite(args.fft_full_scale_counts) or args.fft_full_scale_counts <= 0:
+        raise QaError("FFT full-scale counts must be finite and positive")
+    if not 0 <= args.fft_skip_bins < args.samples // 2 + 1:
+        raise QaError("FFT skipped bins must leave at least one displayed bin")
+    if args.fft_y_limits and (not all(map(math.isfinite, args.fft_y_limits)) or args.fft_y_limits[0] >= args.fft_y_limits[1]):
+        raise QaError("FFT y limits must be finite and increasing")
+    return channels
+
+
+def execute_capture(args: argparse.Namespace, run: EvidenceRun) -> dict[str, Any]:
+    channels = validate_capture_options(args)
+    configuration = getattr(run, "analog_configuration", None)
+    expected_status = "dry-run" if args.dry_run else "configured"
+    if not configuration or configuration.get("status") != expected_status or (
+        not args.dry_run and configuration.get("readback", {}).get("pass") is not True
+    ):
+        raise QaError("analog chain must be configured and read back successfully in this run before capture")
+    waveform_dir = run.path / "waveforms"
+    waveform_dir.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        "contract": "daphne.waveform-run",
+        "version": 1,
+        "run_id": str(uuid.uuid4()),
+        "asset": args.asset,
+        "target": args.target,
+        "port": args.port,
+        "route": args.route,
+        "channels": channels,
+        "number_of_waveforms": args.waveforms,
+        "samples_per_waveform": args.samples,
+        "sampling_rate_hz": args.sampling_rate,
+        "trigger": args.trigger,
+        "analog_configuration": configuration,
+        "sample_storage": "uint16 little-endian",
+        "fft_window_function": args.fft_window,
+        "fft_avg_waves_requested": args.fft_avg_waves,
+        "fft_average_from": args.fft_average_from,
+        "fft_normalization": args.fft_normalization,
+        "fft_full_scale_counts": args.fft_full_scale_counts,
+        "fft_remove_dc": not args.fft_keep_dc,
+        "fft_skip_bins": args.fft_skip_bins,
+        "fft_log_x": args.fft_log_x,
+        "fft_y_limits_dbfs": args.fft_y_limits,
+        "started_at": utc_now(),
+    }
+    write_json(waveform_dir / "run_metadata.json", metadata)
+
+    command = python_command(
+        args,
+        "protobuf_acquire_list_channels.py",
+        "-ip",
+        args.target,
+        "-port",
+        str(args.port),
+        "-foldername",
+        str(waveform_dir),
+        "-channel_list",
+        *[str(ch) for ch in channels],
+        "-N",
+        str(args.waveforms),
+        "-L",
+        str(args.samples),
+        "--timeout_ms",
+        str(max(args.timeout_ms, 30000)),
+        "--route",
+        args.route,
+        "--osc_mode",
+        "-debug",
+    )
+    if args.trigger == "software":
+        command.append("-software_trigger")
+    run.run("capture", command)
+
+    expected_bytes = args.waveforms * args.samples * 2
+    integrity: dict[str, Any] = {
+        "expected_bytes_per_channel": expected_bytes,
+        "channels": {},
+        "pass": True,
+    }
+    if not args.dry_run:
+        for channel in channels:
+            path = waveform_dir / f"channel_{channel}.dat"
+            observed = path.stat().st_size if path.is_file() else None
+            matched = observed == expected_bytes
+            integrity["channels"][str(channel)] = {
+                "path": path.name,
+                "observed_bytes": observed,
+                "match": matched,
+            }
+            integrity["pass"] = bool(integrity["pass"] and matched)
+    else:
+        integrity["pass"] = None
+    write_json(run.path / "capture-integrity.json", integrity)
+    if integrity["pass"] is False:
+        raise QaError("one or more waveform files have an unexpected size")
+
+    analyze_command = python_command(
+            args,
+            "analyze_waveform_dataset.py",
+            "--folder",
+            str(waveform_dir),
+            "--channels",
+            ",".join(str(ch) for ch in channels),
+            "-L",
+            str(args.samples),
+            "--fs",
+            str(args.sampling_rate),
+            "--fft_window",
+            args.fft_window,
+            "--fft_avg_waves", str(args.fft_avg_waves),
+            "--fft_average_from", args.fft_average_from,
+            "--fft_full_scale_counts", str(args.fft_full_scale_counts),
+            "--fft_skip_bins", str(args.fft_skip_bins),
+            "--interpret",
+            args.interpret,
+            "--no-show",
+            "--channel-artifacts",
+            "--waveform_plot_count", "5",
+            "--fft_frequency_unit",
+            "Hz",
+            "--fft_normalization",
+            args.fft_normalization,
+            "--title",
+            f"{args.asset} QA/QC",
+        )
+    if args.fft_keep_dc:
+        analyze_command.append("--fft_keep_dc")
+    if args.fft_log_x:
+        analyze_command.append("--fft_log_x")
+    if args.fft_y_limits:
+        analyze_command.extend(["--fft_y_limits", *map(str, args.fft_y_limits)])
+    run.run("analyze", analyze_command)
+    records_path = waveform_dir / "channel_records.jsonl"
+    if not args.dry_run:
+        records = [json.loads(line) for line in records_path.read_text().splitlines() if line.strip()]
+        if sorted(row["channel"] for row in records) != channels:
+            raise QaError("FFT database records do not match captured channels")
+        for row in records:
+            if row["run_id"] != metadata["run_id"] or row["asset"] != args.asset:
+                raise QaError("FFT database record identity does not match this capture")
+            if row["fft_avg_waves_used"] != (args.fft_avg_waves or args.waveforms):
+                raise QaError("FFT averaging count does not match the requested capture")
+            if row.get("analog_configuration") != configuration:
+                raise QaError("FFT database record is missing this run's analog configuration")
+            if set(row["artifacts"]) != {"raw_waveforms", "waveform_plot", "fft_plot", "fft_overlay"}:
+                raise QaError("FFT database record is missing required artifacts")
+            for artifact in row["artifacts"].values():
+                path = (waveform_dir / artifact["path"]).resolve()
+                if waveform_dir not in path.parents or not path.is_file() or sha256(path) != artifact["sha256"]:
+                    raise QaError(f"missing or corrupt waveform/FFT artifact: {artifact['path']}")
+    return {
+        "run_id": metadata["run_id"],
+        "capture_integrity_pass": integrity["pass"],
+        "channels": channels,
+        "waveforms": args.waveforms,
+        "samples": args.samples,
+        "analog_configuration_status": configuration["status"],
+        "analog_configuration_sha256": configuration["rendered_profile_sha256"],
+        "channel_records": "waveforms/channel_records.jsonl",
+        "fft_overlay": "waveforms/fft_overlay.png",
+        "artifact_paths_relative_to": "waveforms/",
+    }
+
+
+def verify_sum_file(sum_file: Path) -> list[str]:
+    failures: list[str] = []
+    if not sum_file.is_file():
+        return [f"missing {sum_file}"]
+    for number, raw in enumerate(sum_file.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw.strip():
+            continue
+        match = re.fullmatch(r"([0-9a-f]{64})  (.+)", raw)
+        if not match:
+            failures.append(f"invalid checksum line {number}")
+            continue
+        expected, relative = match.groups()
+        path = QA_ROOT / relative
+        if not path.is_file():
+            failures.append(f"missing source file: {relative}")
+        elif sha256(path) != expected:
+            failures.append(f"source checksum mismatch: {relative}")
+    return failures
+
+
+def action_doctor(args: argparse.Namespace) -> int:
+    failures = (
+        verify_sum_file(QA_SUMS)
+        + verify_sum_file(SOURCE_SUMS)
+        + verify_sum_file(WHEELHOUSE_SUMS)
+    )
+    for failure in failures:
+        print(f"FAIL  {failure}")
+    if not failures:
+        print("PASS  CERN reference, vendored clients, and wheelhouse checksums match")
+    try:
+        ensure_dependencies(args.python, plots=True)
+    except QaError as exc:
+        print(f"FAIL  {exc}")
+        failures.append(str(exc))
+    else:
+        print(f"PASS  QA Python dependencies import with {args.python}")
+    print(f"INFO  Python {platform.python_version()} running wrapper")
+    print("INFO  doctor is offline and did not contact a DAPHNE board")
+    return 1 if failures else 0
+
+
+def add_common(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--target", required=True, help="DAPHNE Linux IPv4 address")
+    parser.add_argument("--asset", required=True, help="Asset ID, e.g. DAPHNE-007")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"daphneServer port (default {DEFAULT_PORT})")
+    parser.add_argument("--route", default=DEFAULT_ROUTE, help=f"Envelope V2 route (default {DEFAULT_ROUTE})")
+    parser.add_argument("--timeout-ms", type=int, default=6000, help="Per-request timeout")
+    parser.add_argument("--python", default=os.environ.get("DAPHNE_QA_PYTHON", sys.executable))
+    parser.add_argument("--output", help="Evidence directory (must not already exist)")
+    parser.add_argument("--dry-run", action="store_true", help="Render evidence and commands without network access")
+
+
+def add_capture(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--capture-channels", default="0-39", help="Channel CSV/ranges (default 0-39)")
+    parser.add_argument("--waveforms", type=int, default=2000, help="Waveforms captured per channel (default 2000)")
+    parser.add_argument("--fft-avg-waves", type=int, default=2000, help="Spectra to power-average per channel (0 = all captured; default 2000)")
+    parser.add_argument("--fft-average-from", choices=["first", "last"], default="last")
+    parser.add_argument("--fft-window", choices=["NONE", "HANNING", "HAMMING", "BLACKMAN", "BLACKMAN-HARRIS"], default="BLACKMAN-HARRIS")
+    parser.add_argument("--fft-normalization", choices=["osc", "dbfs", "legacy"], default="osc",
+                        help="osc matches osc.py; dbfs uses coherent-gain sine-amplitude normalization")
+    parser.add_argument("--fft-full-scale-counts", type=float, default=16384.0)
+    parser.add_argument("--fft-keep-dc", action="store_true")
+    parser.add_argument("--fft-skip-bins", type=int, default=4, help="Leading bins omitted from both plots (osc.py: 4)")
+    parser.add_argument("--fft-log-x", action=argparse.BooleanOptionalAction, default=True,
+                        help="Use a logarithmic frequency axis (default: enabled)")
+    parser.add_argument("--fft-y-limits", type=float, nargs=2, metavar=("MIN", "MAX"),
+                        help="Optional common dBFS limits for individual plots and overlay")
+    parser.add_argument("--samples", type=int, default=2048)
+    parser.add_argument("--sampling-rate", type=float, default=62.5e6)
+    parser.add_argument("--trigger", choices=["software", "external"], default="software")
+    parser.add_argument("--interpret", choices=["unsigned", "signed"], default="unsigned")
+    parser.add_argument("--confirm-trigger", help="Must exactly match --asset")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    doctor = sub.add_parser("doctor", help="Offline source and Python dependency checks")
+    doctor.add_argument("--python", default=os.environ.get("DAPHNE_QA_PYTHON", sys.executable))
+
+    profile = sub.add_parser("render-profile", help="Render the CERN VST profile for one target; offline")
+    profile.add_argument("--target", required=True)
+    profile.add_argument("--asset", required=True)
+    profile.add_argument("--profile", default=str(DEFAULT_PROFILE))
+    profile.add_argument("--slot", type=int)
+    profile.add_argument("--output", required=True)
+
+    readback = sub.add_parser("readback", help="Read-only slow-control and FE-state snapshot")
+    add_common(readback)
+    readback.add_argument("--channels", default="0,8,16,24,32", help="Representative channels")
+    readback.add_argument(
+        "--firmware-mode",
+        choices=["self-trigger", "full-stream"],
+        required=True,
+        help="Select the loaded register map; full-stream skips self-trigger counters",
+    )
+    readback.add_argument("--compare-profile", help="Optional expected seed/output JSON")
+    readback.add_argument("--slot", type=int, help="Optional slot override for comparison")
+
+    configure = sub.add_parser("configure", help="Apply the reference configuration and verify exposed fields")
+    add_common(configure)
+    configure.add_argument("--profile", default=str(DEFAULT_PROFILE))
+    configure.add_argument("--slot", type=int, help="Override CERN VST DAQ slot")
+    configure.add_argument("--confirm-write", help="Must exactly match --asset")
+
+    capture = sub.add_parser("capture", help="Configure analog chain, verify readback, capture buffers and analyze")
+    add_common(capture)
+    capture.add_argument("--profile", default=str(DEFAULT_PROFILE))
+    capture.add_argument("--slot", type=int, help="Override CERN VST DAQ slot")
+    capture.add_argument("--confirm-write", help="Must exactly match --asset")
+    add_capture(capture)
+
+    full = sub.add_parser("full", help="Configure, read back, capture, and analyze")
+    add_common(full)
+    full.add_argument("--profile", default=str(DEFAULT_PROFILE))
+    full.add_argument("--slot", type=int, help="Override CERN VST DAQ slot")
+    full.add_argument("--confirm-write", help="Must exactly match --asset")
+    full.add_argument("--channels", default="0,8,16,24,32", help="Representative readback channels")
+    full.add_argument(
+        "--firmware-mode",
+        choices=["self-trigger", "full-stream"],
+        required=True,
+        help="Select the loaded register map; full-stream skips self-trigger counters",
+    )
+    full.add_argument("--compare-profile", help=argparse.SUPPRESS)
+    add_capture(full)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.action == "doctor":
+        return action_doctor(args)
+
+    try:
+        args.asset = validate_asset(args.asset)
+        args.target = validate_target(args.target)
+        if args.action == "render-profile":
+            output = Path(args.output).expanduser().resolve()
+            if output.exists():
+                raise QaError(f"refusing to overwrite {output}")
+            profile, provenance = render_profile(
+                Path(args.profile).resolve(), args.target, args.asset, args.slot
+            )
+            write_json(output, profile)
+            write_json(output.with_suffix(output.suffix + ".source.json"), provenance)
+            print(f"Rendered profile: {output}")
+            print("No DAPHNE board was contacted.")
+            return 0
+
+        if not (1 <= args.port <= 65535):
+            raise QaError("port must be in the range 1..65535")
+
+        if args.action in {"capture", "full"}:
+            # Validate the whole measurement request before configuring hardware.
+            validate_capture_options(args)
+            if args.confirm_write != args.asset:
+                raise QaError(f"analog configuration requires --confirm-write {args.asset}")
+
+        if not args.dry_run:
+            ensure_dependencies(args.python, plots=(args.action in {"capture", "full"}))
+        run = EvidenceRun(args, args.action)
+        details: dict[str, Any] = {}
+        try:
+            if args.action == "readback":
+                details.update(execute_readback(args, run))
+            elif args.action == "configure":
+                details.update(execute_configure(args, run))
+            elif args.action == "capture":
+                details.update(execute_configure(args, run))
+                details.update(execute_capture(args, run))
+            elif args.action == "full":
+                details.update(execute_configure(args, run))
+                args.compare_profile = args.profile
+                details.update(execute_readback(args, run))
+                details.update(execute_capture(args, run))
+            else:
+                raise QaError(f"unsupported action: {args.action}")
+        except Exception as exc:
+            run.finish("failed", {**details, "error": str(exc)})
+            raise
+        run.finish("dry-run" if args.dry_run else "passed", details)
+        return 0
+    except (QaError, OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
