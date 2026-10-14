@@ -2,7 +2,8 @@
 
 Run this after verifying reliable QSPI boot with the saved environment and a
 reachable controller. It requires the currently installed working OS to read
-exact eMMC geometry before erasing. Connect only DAPHNE-006, keep USB connected,
+exact eMMC geometry before the first erase. A retry uses retained geometry only
+after matching the live SoM identity. Connect only DAPHNE-006, keep USB connected,
 and close other serial programs.
 
 The command erases the full 64 MiB QSPI and eMMC user/boot areas, and clears FTDI

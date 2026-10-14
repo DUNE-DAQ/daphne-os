@@ -20,6 +20,11 @@ eeprom = (evidence / 'eeprom/som-eeprom.bin').read_bytes()
 if hashlib.sha256(eeprom).hexdigest() != geometry['som_eeprom_sha256']:
     raise SystemExit('Geometry/SoM identity mismatch; no erase issued')
 station = load_station(root)
+for key in ('user_sectors', 'boot0_sectors', 'boot1_sectors'):
+    sectors = geometry[key]
+    maximum = 0xffffffff if key == 'user_sectors' else 32768
+    if type(sectors) is not int or not 32 <= sectors <= maximum:
+        raise SystemExit('Invalid recorded eMMC geometry; no erase issued')
 with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, (evidence / 'wipe-software.log').open('wb') as log:
     console = Console(port, log, display=True)
     console.prompt(linux=False)
@@ -41,8 +46,6 @@ with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, (evidenc
     blanks = {f'{zlib.crc32(bytes(16384)):08x}', f'{zlib.crc32(bytes([255]) * 16384):08x}'}
     for partition, key in ((0, 'user_sectors'), (1, 'boot0_sectors'), (2, 'boot1_sectors')):
         sectors = geometry[key]
-        if not isinstance(sectors, int) or not 32 <= sectors <= 0xffffffff:
-            raise SystemExit('Invalid recorded eMMC geometry')
         console.run(f'mmc dev 0 {partition}', linux=False)
         console.run(f'mmc erase 0 0x{sectors:x}', linux=False, timeout=1200,
                     label=f'full eMMC partition {partition} erase')

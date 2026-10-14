@@ -84,9 +84,12 @@ def main():
             if len(links) != 1:
                 raise SystemExit('Could not identify the named UART before clean rehearsal')
             uart = str(links[0].resolve())
-            run('boot-provision-shell', args.asset, uart)
-            run('collect-wipe-geometry', args.asset, uart)
-            run('bootstrap', args.asset)
+            if not (evidence / 'wipe-geometry.json').exists():
+                run('boot-provision-shell', args.asset, uart)
+                run('collect-wipe-geometry', args.asset, uart)
+                run('bootstrap', args.asset)
+            else:
+                print('Using retained geometry; wipe-software verifies its SoM identity before erasing.', flush=True)
             run('wipe-software', args.asset, uart)
             run('erase-ftdi', args.asset)
         run('deploy-jtag', args.asset, args.ip, args.revision)
