@@ -27,6 +27,9 @@ targets -set -nocase -filter {name =~ "*Cortex-A53*#0*"}
 dow $opt(-bl31)
 dow -data $opt(-uboot) 0x08000000
 dow -data $opt(-dtb) 0x00100000
-rwr r0 0x00100000
-con -addr 0x08000000
-puts "U-Boot started in RAM; inspect serial console."
+# Enter TF-A first. It installs the secure monitor/PSCI interface and hands
+# off to the nonsecure U-Boot image. Direct U-Boot entry leaves Linux without
+# a working SMC conduit.
+rwr r0 0
+con -addr 0xfffea000
+puts "TF-A started in RAM; inspect serial console for U-Boot."
