@@ -23,6 +23,7 @@ def main():
     parser.add_argument('ip')
     parser.add_argument('revision', choices=['V2', 'V3'])
     parser.add_argument('--check', action='store_true', help='Read-only server preflight; no board commands')
+    parser.add_argument('--clean', action='store_true', help='Erase software storage and FTDI before redeploying; requires a working installed OS')
     args = parser.parse_args()
     if not re.fullmatch(r'DAPHNE-[0-9]{3}', args.asset):
         parser.error('Asset must be DAPHNE-NNN')
@@ -77,6 +78,17 @@ def main():
             subprocess.run([str(ROOT / 'bin' / name), *arguments], env=env, check=True)
 
         input('Connect ONE board, select JTAG boot and power it on. Press Enter when ready: ')
+        if args.clean:
+            run('bootstrap', args.asset)
+            links = list(Path('/dev/serial/by-id').glob('*' + args.asset.replace('-', '') + '*if01-port0'))
+            if len(links) != 1:
+                raise SystemExit('Could not identify the named UART before clean rehearsal')
+            uart = str(links[0].resolve())
+            run('boot-provision-shell', args.asset, uart)
+            run('collect-wipe-geometry', args.asset, uart)
+            run('bootstrap', args.asset)
+            run('wipe-software', args.asset, uart)
+            run('erase-ftdi', args.asset)
         run('deploy-jtag', args.asset, args.ip, args.revision)
         uart_links = list(Path('/dev/serial/by-id').glob('*' + args.asset.replace('-', '') + '*if01-port0'))
         if len(uart_links) != 1:

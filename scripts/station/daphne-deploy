@@ -6,8 +6,8 @@ import re
 import sys
 
 args = sys.argv[1:]
-if len(args) not in (3, 4) or (len(args) == 4 and args[3] != '--check'):
-    raise SystemExit('Usage: sudo daphne-deploy DAPHNE-NNN IPv4 V2|V3 [--check]')
+if len(args) not in (3, 4, 5) or any(flag not in ('--check', '--clean') for flag in args[3:]) or len(set(args[3:])) != len(args[3:]):
+    raise SystemExit('Usage: sudo daphne-deploy DAPHNE-NNN IPv4 V2|V3 [--check] [--clean]')
 if not re.fullmatch(r'DAPHNE-[0-9]{3}', args[0]) or args[2] not in ('V2', 'V3'):
     raise SystemExit('Invalid asset or revision')
 ipaddress.IPv4Address(args[1])

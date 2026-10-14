@@ -42,6 +42,7 @@ def main():
     shutil.copy2(args.config, directory / 'station.json')
     shutil.copy2(source / 'release.json', directory / 'release.json')
     shutil.copy2(source / 'FOR_DUMMIES.md', directory / 'FOR_DUMMIES.md')
+    shutil.copy2(source / 'CLEAN_REHEARSAL.md', directory / 'CLEAN_REHEARSAL.md')
     shutil.copy2(source / 'README.md', directory / 'README.md')
     for name in ('database', 'records', 'evidence', 'results', 'kit/inventory', 'kit/bin'):
         (directory / name).mkdir(parents=True, exist_ok=True)
@@ -64,7 +65,7 @@ def main():
                         ignore=shutil.ignore_patterns('__pycache__', '*.log'))
     if not args.no_install:
         subprocess.run([sys.executable, '-m', 'venv', str(directory / '.venv')], check=True)
-        subprocess.run([str(directory / '.venv/bin/python'), '-m', 'pip', 'install',
+        subprocess.run([str(directory / '.venv/bin/python'), '-I', '-m', 'pip', 'install',
                         '-r', str(source / 'requirements.txt')], check=True)
     for p in (directory / 'bin').iterdir():
         if p.is_file():

@@ -35,6 +35,10 @@ For the guided command and exact Bash history audit, follow
 process for recovery. Use a root shell for these steps. Set the physical asset
 label and its allocated fixture address; never copy another SOM's identity.
 
+After reliable normal boot, [CLEAN_REHEARSAL.md](CLEAN_REHEARSAL.md) describes the
+full software-storage and FTDI erase followed by deployment. Physical boot-mode
+switch changes remain operator steps. The clean rehearsal is not yet verified.
+
 ```bash
 sudo -s
 cd /srv/daphne-deployment/station

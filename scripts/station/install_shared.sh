@@ -11,7 +11,7 @@ for name in repo hardware-database artifacts station; do
 done
 rm -rf -- "$destination/station/.venv"
 python3 -m venv "$destination/station/.venv"
-"$destination/station/.venv/bin/python" -m pip install --no-index "$destination/artifacts/pyserial-3.5-py2.py3-none-any.whl"
+"$destination/station/.venv/bin/python" -I -m pip install --no-index "$destination/artifacts/pyserial-3.5-py2.py3-none-any.whl"
 python3 - "$destination" <<'PY'
 import json, pathlib, shutil, sys
 root = pathlib.Path(sys.argv[1])

@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Read exact eMMC geometry from the existing OS before the clean rehearsal."""
+import hashlib
+import json
+from pathlib import Path
+import re
+import serial
+import sys
+from uart_console import Console
+
+asset, device = sys.argv[1:]
+if not re.fullmatch(r'DAPHNE-[0-9]{3}', asset):
+    raise SystemExit('Asset must be DAPHNE-NNN')
+root = Path(__file__).resolve().parents[1]
+evidence = root / 'evidence' / asset
+with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, (evidence / 'wipe-geometry.log').open('wb') as log:
+    console = Console(port, log, display=True)
+    console.ready_linux_root()
+    console.run('test -r /sys/class/block/mmcblk0/size || mount -t sysfs sysfs /sys')
+    output = console.run("printf '\\nDAPHNE_GEOMETRY %s %s %s %s\\n' "
+                         '"$(cat /sys/class/block/mmcblk0/size)" '
+                         '"$(cat /sys/class/block/mmcblk0boot0/size)" '
+                         '"$(cat /sys/class/block/mmcblk0boot1/size)" '
+                         '"$(cat /sys/class/block/mmcblk0/device/cid)"')
+    match = re.search(rb'[\r\n]DAPHNE_GEOMETRY ([0-9]+) ([0-9]+) ([0-9]+) ([0-9a-f]{32})[\r\n]', output)
+    if not match:
+        raise SystemExit('Could not read exact eMMC user/boot geometry; no erase issued')
+    geometry = dict(zip(('user_sectors', 'boot0_sectors', 'boot1_sectors'), map(int, match.groups()[:3])))
+    geometry['cid'] = match[4].decode()
+    geometry['som_eeprom_sha256'] = hashlib.sha256((evidence / 'eeprom/som-eeprom.bin').read_bytes()).hexdigest()
+    if not 1000000 <= geometry['user_sectors'] <= 0xffffffff:
+        raise SystemExit('Unexpected eMMC size; no erase issued')
+    if any(not 1 <= geometry[key] <= 32768 for key in ('boot0_sectors', 'boot1_sectors')):
+        raise SystemExit('Unexpected eMMC boot area size; no erase issued')
+    console.run('sync')
+    console.run('mount -o remount,ro /')
+(evidence / 'wipe-geometry.json').write_text(json.dumps(geometry, indent=2) + '\n')
+print('Exact eMMC geometry captured; root filesystem remounted read-only. No erase issued.')

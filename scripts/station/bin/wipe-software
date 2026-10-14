@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Erase QSPI and eMMC software areas from RAM U-Boot; preserve factory identity."""
+import hashlib
+import json
+from pathlib import Path
+import re
+import serial
+import sys
+import zlib
+from station_config import load_station
+from uart_console import Console
+
+asset, device = sys.argv[1:]
+if not re.fullmatch(r'DAPHNE-[0-9]{3}', asset):
+    raise SystemExit('Asset must be DAPHNE-NNN')
+root = Path(__file__).resolve().parents[1]
+evidence = root / 'evidence' / asset
+geometry = json.loads((evidence / 'wipe-geometry.json').read_text())
+eeprom = (evidence / 'eeprom/som-eeprom.bin').read_bytes()
+if hashlib.sha256(eeprom).hexdigest() != geometry['som_eeprom_sha256']:
+    raise SystemExit('Geometry/SoM identity mismatch; no erase issued')
+station = load_station(root)
+with serial.Serial(device, 115200, timeout=.1, exclusive=True) as port, (evidence / 'wipe-software.log').open('wb') as log:
+    console = Console(port, log, display=True)
+    console.prompt(linux=False)
+    console.run('i2c dev ' + str(station['eeprom_i2c_bus']), linux=False)
+    output = console.run('i2c md 0x50 0x0.2 0x100', linux=False).decode(errors='replace')
+    data = b''.join(bytes.fromhex(x) for x in re.findall(r'^\s*[0-9a-f]{4}: ((?:[0-9a-f]{2} ){15}[0-9a-f]{2})', output, re.M))
+    if data != eeprom[:256]:
+        raise SystemExit('Live SoM identity mismatch; no erase issued')
+    output = console.run('sf probe 0 0 0', linux=False)
+    if not re.search(rb'total 64 MiB', output):
+        raise SystemExit('Unexpected QSPI capacity; no erase issued')
+    console.run('mmc dev 0 0', linux=False)
+    console.run('mmc info', linux=False)
+    print('ERASE STARTING: complete 64 MiB QSPI and eMMC user/boot areas. Factory EEPROM preserved.', flush=True)
+    console.run('sf erase 0 0x4000000', linux=False, timeout=600, label='full QSPI erase')
+    console.run('mw.b 0x10000000 0xff 0x4000000', linux=False)
+    console.run('sf read 0x18000000 0 0x4000000', linux=False, timeout=180)
+    console.run('cmp.b 0x10000000 0x18000000 0x4000000', linux=False, timeout=180, label='full QSPI blank check')
+    blanks = {f'{zlib.crc32(bytes(16384)):08x}', f'{zlib.crc32(bytes([255]) * 16384):08x}'}
+    for partition, key in ((0, 'user_sectors'), (1, 'boot0_sectors'), (2, 'boot1_sectors')):
+        sectors = geometry[key]
+        if not isinstance(sectors, int) or not 32 <= sectors <= 0xffffffff:
+            raise SystemExit('Invalid recorded eMMC geometry')
+        console.run(f'mmc dev 0 {partition}', linux=False)
+        console.run(f'mmc erase 0 0x{sectors:x}', linux=False, timeout=1200,
+                    label=f'full eMMC partition {partition} erase')
+        for start in (0, sectors - 32):
+            console.run(f'mmc read 0x18000000 0x{start:x} 0x20', linux=False)
+            output = console.run('crc32 0x18000000 0x4000', linux=False)
+            match = re.search(rb'==> ([0-9a-fA-F]{8})', output)
+            if not match or match[1].decode().lower() not in blanks:
+                raise SystemExit(f'eMMC partition {partition} blank sample failed')
+    console.run('mmc dev 0 0', linux=False)
+(evidence / 'wipe-status.txt').write_text('QSPI full blank check passed; eMMC user/boot full-range erase commands and first/last 16 KiB blank samples passed; factory identity and RPMB/OTP preserved\n')
+print('SOFTWARE ERASE VERIFIED; factory EEPROM and irreversible identity areas preserved.')

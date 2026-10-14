@@ -10,7 +10,9 @@ import time
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('asset')
+p.add_argument('--blank', action='store_true', help='Verify factory default identity after erase')
 a = p.parse_args()
+expected = '' if a.blank else a.asset.replace('-', '')
 if not re.fullmatch(r'DAPHNE-[0-9]{3}', a.asset):
     p.error('Asset must be DAPHNE-NNN')
 devices = [d for d in Path('/sys/bus/usb/devices').iterdir()
@@ -25,7 +27,7 @@ time.sleep(1)
 subprocess.run(['udevadm', 'settle'], check=True)
 serial_file = device / 'serial'
 serial = serial_file.read_text().strip() if serial_file.is_file() else ''
-if serial != a.asset.replace('-', ''):
+if serial != expected:
     bus = int((device / 'busnum').read_text())
     number = int((device / 'devnum').read_text())
     try:
@@ -39,12 +41,16 @@ if serial != a.asset.replace('-', ''):
 deadline = time.monotonic() + 10
 while time.monotonic() < deadline:
     subprocess.run(['udevadm', 'settle'], check=True)
-    links = list(Path('/dev/serial/by-id').glob('*' + a.asset.replace('-', '') + '*if01-port0'))
+    links = list(Path('/dev/serial/by-id').glob(('*' if a.blank else '*' + expected + '*') + 'if01-port0'))
     serial_file = device / 'serial'
     serial = serial_file.read_text().strip() if serial_file.is_file() else ''
-    if serial == a.asset.replace('-', '') and len(links) == 1:
+    if serial == expected and len(links) == 1:
         break
     time.sleep(.2)
 else:
     raise SystemExit('New FTDI identity not visible; physical USB reconnect is required')
 print(f'FTDI verified: {serial}; UART={links[0].resolve()}')
+if any(not (Path('/sys/bus/usb/devices') / (device.name + ':1.' + str(index))).exists()
+       for index in range(4)):
+    raise SystemExit('FT4232H did not enumerate all four USB interfaces')
+print('FT4232H USB interfaces 0, 1, 2 and 3 verified')
