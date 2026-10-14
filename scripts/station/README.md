@@ -55,6 +55,36 @@ Follow the same JTAG/QSPI prompts above. The first run reads exact eMMC geometry
 from the installed OS; retries retain that geometry and verify the live SoM
 identity before erasing. A fully blank board uses normal deployment instead.
 
+## Continue after an interrupted QSPI capture (root/tmux)
+
+Use when flash readback passed and the guided command was stopped while waiting
+for QSPI boot. Stop the old catcher first. Remove main power for **10 seconds**,
+keep USB connected, select **QSPI**, and leave main power off. In root/tmux:
+
+```bash
+cd /srv/daphne-deployment/station
+UART=$(readlink -f /dev/serial/by-id/*DAPHNE006*if01-port0)
+bin/capture-qspi-boot DAPHNE-006 "$UART"
+```
+
+Power on only when **Power on the board in QSPI mode now** appears. Wait for
+**Verified QSPI boot** and the host shell prompt. A bad environment CRC and
+random MAC are expected after erasure; the next block saves the correct settings.
+In the same root terminal, paste:
+
+```bash
+source bin/_environment.sh
+python3 bin/configure-qspi.py DAPHNE-006 "$UART" &&
+bin/boot-provision-shell DAPHNE-006 "$UART" &&
+python3 bin/provision-linux DAPHNE-006 "$UART" &&
+bin/verify-normal-boot DAPHNE-006 "$UART"
+```
+
+This saves U-Boot settings, provisions Linux, and reboots automatically. No
+physical reboot is needed for this block. Require **Unattended QSPI boot and
+network controller VERIFIED**. A failed command stops the chain. This continuation
+does not establish that an uninterrupted clean run matched the audited history.
+
 ## Prepare another server (administrator, once)
 
 Install Vivado 2026.1, Python 3.9+ with venv/pip, Git, psmisc, iproute and a
