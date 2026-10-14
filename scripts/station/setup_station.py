@@ -48,6 +48,9 @@ def main():
             if member.issym() or member.islnk() or Path(member.name).is_absolute() or '..' in Path(member.name).parts:
                 raise ValueError('Unsafe inventory archive member')
         archive.extractall(directory / 'kit/inventory')
+    subprocess.run([sys.executable, str(directory / 'kit/inventory/tools/daphne_production_cli.py'),
+                    '--database-url', str(directory / 'database/daphne-production.db'),
+                    'migrate'], check=True)
     repo = source.parents[1]
     for name in ('serial_catch_uboot.py', 'uboot_dump_i2c_eeprom.py', 'uboot_serial.py'):
         shutil.copy2(repo / 'scripts/remote' / name, directory / 'kit/bin' / name)
