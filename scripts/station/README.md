@@ -82,6 +82,8 @@ analog, timing, or DAQ qualification.
 
 The campaign wrappers were recovered from the September 30 saved source record.
 The LF handling and Linux readiness correction passes the original 12 simulated
-serial tests. The RAM bootstrap TCL and ELF wrappers are reconstructed from the
-repository sequence and the pinned BOOT.BIN partitions. Their hardware regression
-is recorded separately; do not infer it from successful offline assembly.
+serial tests. On DAPHNE-006, October 14, remote FTDI reset, RAM boot through TF-A,
+EEPROM capture, QSPI and complete eMMC readback, Linux boot to the provisioning
+shell, and Linux provisioning passed. Logs are in the persistent station's
+`evidence/DAPHNE-006/`. Autonomous QSPI boot, runtime service and DAQ acceptance
+remain separate checks.
