@@ -129,7 +129,10 @@ def prepare(artifacts, destination, release):
         'kit/boot/pmufw.elf': elf([(0xffdc0000, pmu)], 0xffdc0000, 189, 32),
         'kit/boot/bl31.elf': elf([(0xfffea000, boot[0x7abc00:0x7abc00 + 0x9000]),
                                (0xffff3000, boot[0x7b4c00:0x7b4c00 + 0x34e0])], 0xfffea000),
-        'kit/boot/system.bin': boot[0x3c040:0x3c040 + 0x76fbbc],
+        # Bootgen stores configuration words in little-endian order for the
+        # bootloader; XSDB's standalone configuration stream uses big endian.
+        'kit/boot/system.bin': b''.join(boot[pos:pos + 4][::-1]
+                                      for pos in range(0x3c040, 0x3c040 + 0x76fbbc, 4)),
         'kit/boot/BOOT.BIN': boot,
         'kit/image/rootfs.wic.gz': inputs['rootfs.wic.gz'],
     }
