@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Assemble the versioned process in a persistent station directory."""
 import argparse
+import datetime
+import fcntl
 import hashlib
 import io
 import json
@@ -12,6 +14,40 @@ import tarfile
 from prepare_release import prepare
 
 
+def update_process(source, directory, release):
+    """Replace versioned code only; retain identity, geometry, inventory and logs."""
+    manifest_path = directory / 'station-manifest.json'
+    previous = json.loads(manifest_path.read_text())
+    if previous['hardware_database_revision'] != release['hardware_database_revision']:
+        raise SystemExit('Inventory revision changed; an explicit migration is required')
+    with (directory / '.deployment.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        archive = directory / 'evidence/process-updates'
+        archive.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
+        shutil.copy2(manifest_path, archive / (timestamp + '.json'))
+        shutil.copytree(source / 'bin', directory / 'bin', dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('__pycache__'))
+        shutil.copy2(source / 'bootstrap-qualified-ram.tcl', directory / 'qualified-ram/bootstrap-qualified-ram.tcl')
+        for name in ('README.md', 'release.json'):
+            shutil.copy2(source / name, directory / name)
+        for name in ('FOR_DUMMIES.md', 'CLEAN_REHEARSAL.md'):
+            (directory / name).unlink(missing_ok=True)
+        previous['source_revision'] = subprocess.check_output(
+            ['git', '-C', str(source.parents[1]), 'rev-parse', 'HEAD'], text=True).strip()
+        previous['qualification'] = release['qualification']
+        previous['process_sha256'] = {str(p.relative_to(directory)): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(directory.rglob('*')) if p.is_file()
+            and not set(p.relative_to(directory).parts).intersection(
+                {'.venv', '__pycache__', 'database', 'records', 'evidence', 'results'})
+            and p.name not in ('station-manifest.json', '.deployment.lock')}
+        manifest_path.write_text(json.dumps(previous, indent=2) + '\n')
+        for p in (directory / 'bin').iterdir():
+            if p.is_file():
+                p.chmod(0o755)
+    print(f'Process updated: {directory}. Board state preserved; no board commands sent.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--directory', type=Path, required=True)
@@ -19,11 +55,12 @@ def main():
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--inventory-repo', type=Path, required=True, help='hardware-database Git checkout')
     parser.add_argument('--no-install', action='store_true', help='Use existing Python dependencies')
+    parser.add_argument('--update-process', action='store_true', help='Update code while retaining existing station state')
     args = parser.parse_args()
     directory = args.directory.expanduser().resolve()
     if str(directory).startswith(('/tmp/', '/var/tmp/')):
         parser.error('Use a persistent directory outside /tmp and /var/tmp')
-    if directory.exists() and any(directory.iterdir()):
+    if directory.exists() and any(directory.iterdir()) and not args.update_process:
         parser.error('Choose a new empty station directory; existing state is never overwritten')
     source = Path(__file__).resolve().parent
     release = json.loads((source / 'release.json').read_text())
@@ -33,6 +70,9 @@ def main():
         if len(data) != expected['size'] or hashlib.sha256(data).hexdigest() != expected['sha256']:
             parser.error(f'Artifact mismatch: {name}')
     revision = release['hardware_database_revision']
+    if args.update_process:
+        update_process(source, directory, release)
+        return
     inventory = subprocess.run(['git', '-C', str(args.inventory_repo), 'archive', revision,
                                'tools/daphne_production', 'tools/daphne_production_cli.py',
                                'schemas/daphne-production', 'migrations/production'],
@@ -41,8 +81,6 @@ def main():
     shutil.copytree(source / 'bin', directory / 'bin', ignore=shutil.ignore_patterns('__pycache__'))
     shutil.copy2(args.config, directory / 'station.json')
     shutil.copy2(source / 'release.json', directory / 'release.json')
-    shutil.copy2(source / 'FOR_DUMMIES.md', directory / 'FOR_DUMMIES.md')
-    shutil.copy2(source / 'CLEAN_REHEARSAL.md', directory / 'CLEAN_REHEARSAL.md')
     shutil.copy2(source / 'README.md', directory / 'README.md')
     for name in ('database', 'records', 'evidence', 'results', 'kit/inventory', 'kit/bin'):
         (directory / name).mkdir(parents=True, exist_ok=True)

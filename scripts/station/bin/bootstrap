@@ -25,7 +25,11 @@ python3 "$R/kit/bin/serial_catch_uboot.py" --device "$SERIAL" --timeout 180 --lo
 catcher=$!
 trap 'kill "$catcher" 2>/dev/null || true' EXIT
 "$HW/bin/xsdb" "$R/qualified-ram/bootstrap-qualified-ram.tcl"  -fsbl "$R/kit/boot/zynqmp_fsbl.elf" -pmufw "$R/kit/boot/pmufw.elf"  -bl31 "$R/kit/boot/bl31.elf"  -bitstream "$R/kit/boot/system.bin" -uboot "$R/qualified-ram/qualified-uboot.bin"  -dtb "$R/qualified-ram/BOOT-BIN-fdt-7b8100.dtb" -hw-server "tcp:localhost:$HW_SERVER_PORT" >"$E/xsdb.log" 2>&1
-wait "$catcher"
+if ! wait "$catcher"; then
+  tail -n 30 "$E/serial.log" >&2
+  echo "RAM U-Boot failed; inspect $E/xsdb.log and $E/serial.log" >&2
+  exit 1
+fi
 trap - EXIT
 python3 "$R/bin/capture-eeprom" "$ASSET" "$SERIAL" "$E/eeprom" >"$E/eeprom-capture.log" 2>&1
 # flash-verified.py uses this stable EEPROM path; refuse silent SoM replacement.

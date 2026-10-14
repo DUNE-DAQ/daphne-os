@@ -10,6 +10,11 @@ foreach key {-fsbl -pmufw -bl31 -bitstream -uboot -dtb} {
 }
 connect -url $opt(-hw-server)
 targets -set -nocase -filter {name =~ "*PSU*"}
+# Clear peripheral state left by Linux, storage erase, and previous RAM boots.
+# In JTAG boot mode, BootROM waits for this complete RAM-loading sequence.
+rst -system
+after 1000
+targets -set -nocase -filter {name =~ "*PSU*"}
 mwr 0xffca0038 0x1ff
 targets -set -nocase -filter {name =~ "*MicroBlaze PMU*"}
 dow $opt(-pmufw)

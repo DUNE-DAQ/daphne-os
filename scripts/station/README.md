@@ -1,116 +1,102 @@
-# DAPHNE deployment process
+# DAPHNE deployment — copy and paste
 
-Clone `daphne-os` and `hardware-database` on the programming server. Install
-Vivado 2026.1, Python 3.9 or newer with venv/pip, `psmisc`, and `iproute`.
-Python 3.9–3.12 supports the optional pinned QA dependencies.
+This is the single operator guide. The scripts automate FTDI programming and
+remote USB reset, JTAG RAM boot, identity capture, flash/readback, U-Boot
+settings, Linux provisioning, and unattended QSPI boot verification.
 
-Keep the release images and station state outside Git and outside `/tmp`.
-The required `BOOT.BIN` and `rootfs.wic.gz` hashes are in `release.json`.
-They are the September 17 minimal copper release, not the dual-gateware RC.
+On Cooper, use one connected **DAPHNE-006**, **V2**, **192.168.0.206**.
+Close other serial programs; keep USB connected. All nine login accounts can
+run the restricted deployment command. Server files are in
+`/srv/daphne-deployment`; release images and board state stay outside Git.
 
-## Prepare the server
+## Deploy on Cooper
 
-Copy `station.example.json` to a local file and set its tool, network, TFTP,
-and fixture SSH public-key paths. Configure the fixture interface with the
-specified server address, and enable the server's TFTP service.
+Open the isolated terminal with
+`/srv/daphne-deployment/station/bin/start-manual-session`, then paste these
+lines one at a time, waiting for each command to finish:
 
+<!-- manual-history:normal:start -->
 ```bash
-python3 scripts/station/setup_station.py \
-  --directory "$HOME/daphne-deployment/station" \
-  --artifacts "$HOME/daphne-deployment/artifacts" \
-  --config /path/to/station.json \
-  --inventory-repo /path/to/hardware-database
+sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2 --check
+sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2
+exit
 ```
+<!-- manual-history:normal:end -->
 
-The installer checks the frozen image hashes, snapshots the pinned database
-source, recovers boot payloads and Linux readback references, and records source
-and file hashes. It sends no board commands and never overwrites station state.
-Back up `database/`, `records/`, `evidence/`, and `results/` after each run.
+When prompted: select **JTAG** with power off, power on, then press Enter.
+After flash readback passes: power off, select **QSPI**, leave power off, and
+press Enter. Power on only after **Power on the board in QSPI mode now**.
+The process catches U-Boot automatically; do not type board commands.
 
-## Deploy one board
+Require **DEPLOYMENT PASSED** and, after `exit`, **HISTORY MATCHES THE MANUAL
+exactly**. Logs are in `station/evidence/DAPHNE-006/`. On failure, stop, fix
+the versioned process, and start a fresh manual terminal. For another board,
+change its physical asset label, allocated IP, and carrier revision in both
+commands and in this guide before the history audit.
 
-Use one connected board, booted in JTAG mode. Close other serial programs.
-For the guided command and exact Bash history audit, follow
-[FOR_DUMMIES.md](FOR_DUMMIES.md). The lower-level steps below explain the same
-process for recovery. Use a root shell for these steps. Set the physical asset
-label and its allocated fixture address; never copy another SOM's identity.
+## Erase and redeploy rehearsal
 
-After reliable normal boot, [CLEAN_REHEARSAL.md](CLEAN_REHEARSAL.md) describes the
-full software-storage and FTDI erase followed by deployment. Physical boot-mode
-switch changes remain operator steps. The clean rehearsal is not yet verified.
+Use after reliable QSPI boot has passed. This erases the entire 64 MiB QSPI,
+eMMC user/boot areas, and FTDI EEPROM before redeployment. It preserves factory
+SoM identity EEPROM, RPMB, OTP and eFuses. QSPI has a full blank check; eMMC
+uses full-range erase commands with beginning/end blank samples.
+
+Open `/srv/daphne-deployment/station/bin/start-manual-session --clean`, then:
+
+<!-- manual-history:clean:start -->
+```bash
+sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2 --check --clean
+sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2 --clean
+exit
+```
+<!-- manual-history:clean:end -->
+
+Follow the same JTAG/QSPI prompts above. The first run reads exact eMMC geometry
+from the installed OS; retries retain that geometry and verify the live SoM
+identity before erasing. A fully blank board uses normal deployment instead.
+
+## Prepare another server (administrator, once)
+
+Install Vivado 2026.1, Python 3.9+ with venv/pip, Git, psmisc, iproute and a
+TFTP server. Configure the fixture interface and enable TFTP. Supply the
+September 17 minimal-copper `BOOT.BIN` and `rootfs.wic.gz`; the installer checks
+their frozen hashes. Cooper copies are in `/srv/daphne-deployment/artifacts/`.
+
+Run as root in a new persistent deployment directory; put the two release
+files in its `artifacts/` directory before the installer command. Set the
+station JSON's tool, interface/address, TFTP and fixture public-key paths.
 
 ```bash
 sudo -s
-cd /srv/daphne-deployment/station
-B=DAPHNE-006
-IP=192.168.0.206
-bin/deploy-jtag "$B" "$IP" V2
+D=/srv/daphne-deployment
+install -d -m 0755 "$D/artifacts"
+git clone --branch marroyav/reproducible-deployment-station-20261014 https://github.com/DUNE-DAQ/daphne-os.git "$D/repo"
+git clone --branch marroyav/daphne-production-qa https://github.com/marroyav/hardware-database.git "$D/hardware-database"
+cp "$D/repo/scripts/station/station.example.json" "$D/station.json"
+vi "$D/station.json"
+python3 "$D/repo/scripts/station/setup_station.py" --directory "$D/station" --artifacts "$D/artifacts" --config "$D/station.json" --inventory-repo "$D/hardware-database"
+find "$D" -type d -exec chmod 0755 {} +
+find "$D" -type f -exec chmod a+r,go-w {} +
+python3 "$D/repo/scripts/station/install_operator_access.py"
 ```
 
-The process attempts a logical reconnect and then a USB bus reset after FTDI
-programming. It verifies the new serial identity and UART before continuing.
-This succeeded remotely on DAPHNE-006 on October 14. If it requests a physical
-reconnect, reconnect USB and repeat the command.
-Require **QSPI AND EMMC FULL READBACK VERIFIED** before changing boot mode.
+Keep fixture private keys outside this shared directory. Stage both release
+files under the configured TFTP release path, readable by the TFTP service.
+Protect shared tool directories against replacement by unprivileged users;
+on Cooper `/tools` is mode 1777. Back up `database/`, `records/`, `evidence/`
+and `results/` after runs. Never install the station under `/tmp`.
 
-Power off, select QSPI boot, keep USB connected, and start:
+To update only the process while retaining board state (administrator):
 
 ```bash
-UART=$(readlink -f /dev/serial/by-id/*${B/-/}*if01-port0)
-bin/capture-qspi-boot "$B" "$UART"
+D=/srv/daphne-deployment
+git -C "$D/repo" pull --ff-only
+python3 "$D/repo/scripts/station/setup_station.py" --directory "$D/station" --artifacts "$D/artifacts" --config "$D/station/station.json" --inventory-repo "$D/hardware-database" --no-install --update-process
+python3 "$D/repo/scripts/station/install_operator_access.py"
 ```
 
-Power on when it is waiting. After **Verified QSPI boot**:
-
-```bash
-python3 bin/configure-qspi.py "$B" "$UART"
-bin/boot-provision-shell "$B" "$UART" &&
-python3 bin/provision-linux "$B" "$UART"
-```
-
-U-Boot input uses CR; Linux input uses LF. The boot helper waits for Linux and
-checks a working root shell. No `stty` workaround is needed. Provisioning sets
-the hostname, network, and supplied public key; it does not set default passwords.
-
-After provisioning succeeds, reboot and check normal QSPI boot automatically:
-
-```bash
-bin/verify-normal-boot "$B" "$UART"
-```
-
-Require QSPI boot mode, a valid saved environment, the allocated hostname,
-the DAPHNE controller startup and reachable TCP port 40001. Optional full QA
-uses `bin/run-qa "$B" "$IP"` after installing
-`requirements-qa.txt` into the station venv. Successful image writes are not
-analog, timing, or DAQ qualification.
-
-## Recovery provenance
-
-The campaign wrappers were recovered from the September 30 saved source record.
-The LF handling and Linux readiness correction passes the original 12 simulated
-serial tests. On DAPHNE-006, October 14, remote FTDI reset, RAM boot through TF-A,
-EEPROM capture, QSPI and complete eMMC readback, Linux boot to the provisioning
-shell, and Linux provisioning passed. Logs are in the persistent station's
-`evidence/DAPHNE-006/`. Autonomous QSPI boot, saved environment, runtime service
-startup and TCP port 40001 also passed. Fresh manual-only clean redeployment and
-analog/timing/DAQ acceptance remain unverified.
-
-## Shared operator access
-
-After assembling and reviewing a station, run `install_shared.sh` as root with
-the existing deployment directory. It creates `/srv/daphne-deployment`, copies
-the source repositories, artifacts and station state, relocates the venv and
-public key, and makes the installation readable by all users with root-only
-writes. Then run `install_operator_access.py` as root from the reviewed source.
-It grants existing regular login accounts the validated `daphne-deploy` command
-through sudo; it does not grant a general root shell. On Cooper, `/tools` uses
-the sticky bit so operators cannot replace another owner's tool directory.
-
-On a new server, provision Vivado, the fixture interface, TFTP service, the two
-hash-pinned release files, and a local fixture public key first. Clone
-`https://github.com/DUNE-DAQ/daphne-os.git` and
-`https://github.com/marroyav/hardware-database.git`; fetch the inventory revision
-named in `release.json`. Assemble with `setup_station.py`, then install shared
-access. The tested Cooper image copies are in `/srv/daphne-deployment/artifacts/`.
-Git contains the deployment process and pinned identities; release binaries and
-per-board state stay in the persistent station.
+Individual programming, full image readback, Linux provisioning and normal QSPI
+boot passed on DAPHNE-006 on October 14, 2026. Complete software/FTDI erase also
+passed; the full clean redeployment is still in progress. Analog, timing and
+DAQ qualification are separate checks. U-Boot uses CR and Linux uses LF;
+no console workaround or default password is required.

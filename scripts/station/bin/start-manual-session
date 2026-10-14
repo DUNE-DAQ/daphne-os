@@ -10,8 +10,9 @@ import sys
 if sys.argv[1:] not in ([], ['--clean']):
     raise SystemExit('Usage: start-manual-session [--clean]')
 root = Path(__file__).resolve().parents[1]
-manual = (root / ('CLEAN_REHEARSAL.md' if '--clean' in sys.argv else 'FOR_DUMMIES.md')).read_text()
-match = re.search(r'<!-- manual-history:start -->\s*```bash\n(.*?)```\s*<!-- manual-history:end -->', manual, re.S)
+manual = (root / 'README.md').read_text()
+mode = 'clean' if '--clean' in sys.argv else 'normal'
+match = re.search(r'<!-- manual-history:' + mode + r':start -->\s*```bash\n(.*?)```\s*<!-- manual-history:' + mode + r':end -->', manual, re.S)
 if not match:
     raise SystemExit('Manual command block is missing')
 expected = match.group(1)
