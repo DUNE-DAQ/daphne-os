@@ -27,6 +27,6 @@ targets -set -nocase -filter {name =~ "*Cortex-A53*#0*"}
 dow $opt(-bl31)
 dow -data $opt(-uboot) 0x08000000
 dow -data $opt(-dtb) 0x00100000
-rwr x0 0x00100000
+rwr r0 0x00100000
 con -addr 0x08000000
 puts "U-Boot started in RAM; inspect serial console."
