@@ -4,21 +4,29 @@ This is the single operator guide. The scripts automate FTDI programming and
 remote USB reset, JTAG RAM boot, identity capture, flash/readback, U-Boot
 settings, Linux provisioning, and unattended QSPI boot verification.
 
-On Cooper, use one connected **DAPHNE-006**, **V2**, **192.168.0.206**.
+On Cooper, connect one board: **DAPHNE-006 → 192.168.0.206** or
+**DAPHNE-007 → 192.168.0.207**, with carrier revision **V2**.
 Close other serial programs; keep USB connected. All nine login accounts can
 run the restricted deployment command. Server files are in
 `/srv/daphne-deployment`; release images and board state stay outside Git.
 
 ## Deploy on Cooper
 
-Open the isolated terminal with
-`/srv/daphne-deployment/station/bin/start-manual-session`, then paste these
+Stay in the same root/tmux pane. Stop any running serial command with Ctrl-C;
+power off and disconnect DAPHNE-006 before connecting only DAPHNE-007. Select
+JTAG with power off, then power on. Open the audited shell in this same pane:
+
+```bash
+/srv/daphne-deployment/station/bin/start-manual-session DAPHNE-007 192.168.0.207 V2
+```
+
+For DAPHNE-006, use `DAPHNE-006 192.168.0.206 V2` instead. Then paste these
 lines one at a time, waiting for each command to finish:
 
 <!-- manual-history:normal:start -->
 ```bash
-sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2 --check
-sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2
+sudo /usr/local/sbin/daphne-deploy "$DAPHNE_ASSET" "$DAPHNE_IP" "$DAPHNE_REVISION" --check
+sudo /usr/local/sbin/daphne-deploy "$DAPHNE_ASSET" "$DAPHNE_IP" "$DAPHNE_REVISION"
 exit
 ```
 <!-- manual-history:normal:end -->
@@ -29,10 +37,10 @@ press Enter. Power on only after **Power on the board in QSPI mode now**.
 The process catches U-Boot automatically; do not type board commands.
 
 Require **DEPLOYMENT PASSED** and, after `exit`, **HISTORY MATCHES THE MANUAL
-exactly**. Logs are in `station/evidence/DAPHNE-006/`. On failure, stop, fix
-the versioned process, and start a fresh manual terminal. For another board,
-change its physical asset label, allocated IP, and carrier revision in both
-commands and in this guide before the history audit.
+exactly**. Logs are in `station/evidence/<asset>/`. On failure, stop, fix
+the versioned process, and start a fresh audited shell in the same pane.
+The startup command sets the asset, IP and revision; history uses the same
+three literal commands for each board.
 
 ## Erase and redeploy rehearsal
 
@@ -41,12 +49,13 @@ eMMC user/boot areas, and FTDI EEPROM before redeployment. It preserves factory
 SoM identity EEPROM, RPMB, OTP and eFuses. QSPI has a full blank check; eMMC
 uses full-range erase commands with beginning/end blank samples.
 
-Open `/srv/daphne-deployment/station/bin/start-manual-session --clean`, then:
+For DAPHNE-006, open
+`/srv/daphne-deployment/station/bin/start-manual-session DAPHNE-006 192.168.0.206 V2 --clean`, then:
 
 <!-- manual-history:clean:start -->
 ```bash
-sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2 --check --clean
-sudo /usr/local/sbin/daphne-deploy DAPHNE-006 192.168.0.206 V2 --clean
+sudo /usr/local/sbin/daphne-deploy "$DAPHNE_ASSET" "$DAPHNE_IP" "$DAPHNE_REVISION" --check --clean
+sudo /usr/local/sbin/daphne-deploy "$DAPHNE_ASSET" "$DAPHNE_IP" "$DAPHNE_REVISION" --clean
 exit
 ```
 <!-- manual-history:clean:end -->
