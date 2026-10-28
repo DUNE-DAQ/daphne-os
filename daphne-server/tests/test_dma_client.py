@@ -1,5 +1,6 @@
 """Offline protocol tests; no physical driver, overlay or MMIO access."""
 import copy
+import io
 import os
 from pathlib import Path
 import sys
@@ -73,6 +74,26 @@ class FakeServer:
 
 
 class DmaClientTests(unittest.TestCase):
+    def test_readback_warning_is_visible_and_saved_without_relaxing_fragments(self):
+        notice = 'WARNING: DMA AFE readback policy=warn; configuration not guaranteed.'
+        server = FakeServer()
+        def rpc(*args):
+            response = server.rpc(*args)
+            response.message = notice
+            return response
+        client = DmaClient(pb, rpc)
+        with patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            data, metadata = client.acquire([0], 17)
+            client.acknowledge()
+        self.assertEqual(data.shape, (1,1,17))
+        self.assertEqual(stderr.getvalue().count('policy=warn'), 1)
+        self.assertEqual(metadata['afe_readback_policy'], 'warn')
+        self.assertFalse(metadata['afe_register_configuration_verified'])
+        server.corrupt = lambda r: setattr(r, 'sample_format', 2)
+        with self.assertRaises(RuntimeError):
+            client.acquire([0], 17)
+        self.assertEqual(server.calls[-1][1].action, pb.DMA_CANCEL)
+
     def test_skip_ramp_requires_support_and_is_sent_explicitly(self):
         server=FakeServer(); client=DmaClient(pb,server.rpc)
         request=pb.AfeDelaySweepRequest(backend=pb.ACQUISITION_DMA,afes=[0],skip_ramp_verification=True)

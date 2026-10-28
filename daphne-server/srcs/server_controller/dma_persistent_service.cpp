@@ -125,6 +125,7 @@ void DmaService::read_persistent(const daphne::DmaReadRequest& req, daphne::DmaR
   if (!width || req.tick_offset() >= samples_ || maximum < width) throw std::invalid_argument("Invalid fragment geometry");
   const uint32_t count = std::min<uint32_t>(samples_ - req.tick_offset(), maximum / width);
   out.set_success(true); out.set_backend(daphne::ACQUISITION_DMA); out.set_job_id(job_id_);
+  out.set_message(afe_readback_notice(options_.afe_readback_policy));
   out.set_route(r); out.set_fragment_sequence(fragment_sequence_++); out.set_target_waveforms(target_);
   for (auto ch : c.layout.channels[r]) out.add_channels(ch);
   out.set_samples(samples_); out.set_tick_offset(req.tick_offset()); out.set_tick_count(count);

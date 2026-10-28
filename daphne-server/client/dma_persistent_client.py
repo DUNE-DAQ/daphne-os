@@ -196,6 +196,7 @@ class PersistentClientMixin:
             job_id=self.job_id, channels=channels, samples=samples, waveforms=metadata,
             trigger_source=self._stream_source, pretrigger_samples=request.pretrigger_samples,
             independent_software_triggers=False, continuous=False, timestamp_reference='adc_index_by_segment')
+        metadata.update(self._afe_readback_metadata())
         if self._stream_unbounded:
             metadata['unbounded_session'] = True
         return data, metadata

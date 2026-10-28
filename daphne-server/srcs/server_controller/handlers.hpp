@@ -7,6 +7,7 @@
 
 #include "daphneV3_high_level_confs.pb.h"
 #include "server_controller/gateware.hpp"
+#include "server_controller/afe_readback_policy.hpp"
 
 class Daphne;
 
@@ -17,6 +18,7 @@ using V2Handler = std::function<void(const std::string& req_payload, std::string
 
 std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     GatewareMode mode,
-    std::shared_ptr<Mmio32> full_stream_mmio = nullptr);
+    std::shared_ptr<Mmio32> full_stream_mmio = nullptr,
+    AfeReadbackPolicy afe_readback_policy = AfeReadbackPolicy::kStrict);
 
 }  // namespace daphne_sc

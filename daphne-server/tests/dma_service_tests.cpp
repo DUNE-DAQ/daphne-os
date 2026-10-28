@@ -2,6 +2,7 @@
 #include "server_controller/dma_control_policy.hpp"
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 
 using namespace daphne_sc;
 using namespace daphne;
@@ -199,7 +200,51 @@ void test_explicit_force_and_unverified_scan() {
   acquire.set_force_acquisition(true);job=rpc(service,MT2_DMA_ACQUIRE_REQ,acquire);require(job.success());
   require(wait_ready(service,job.job_id()).state()==DMA_JOB_READY);
 }
+void test_readback_policy_and_alignment_are_independent() {
+  for (auto policy : {AfeReadbackPolicy::kStrict, AfeReadbackPolicy::kWarn}) {
+    std::ostringstream warnings;
+    AfeReadbackVerifier readback(policy, "injected ADC", warnings);
+    bool spi_timeout = false;
+    auto engine = std::make_unique<Engine>(); auto* fake = engine.get();
+    DmaServiceOptions options; options.afe_readback_policy = policy;
+    DmaService service({0x44415048,0x20000,3,987,80}, options, std::move(engine),
+        [&](const auto& channels, bool) {
+          if (spi_timeout) throw std::runtime_error("SPI timeout");
+          for (auto ch : channels)
+            readback.check(ch / 8, "SERIALIZED_DATA_RATE", 1, 0, "injected readback mismatch");
+        }, {}, [] {}, [] { return true; });
+    ConfigureRequest configuration; configuration.add_afes()->set_id(1);
+    service.configured(configuration);
+    DmaAcquireRequest acquire; acquire.set_backend(ACQUISITION_DMA); acquire.add_channels(8);
+    acquire.set_samples(17); acquire.set_waveforms(1);
+    auto rejected = rpc(service, MT2_DMA_ACQUIRE_REQ, acquire);
+    require(!rejected.success() && fake->starts == 0);
+    require(rejected.message().find(policy == AfeReadbackPolicy::kStrict ?
+            "injected readback mismatch" : "ALIGNMENT_REQUIRED") != std::string::npos);
+    require(service.capabilities().afes(1).state() == FRONTEND_CONFIGURED_UNALIGNED);
+    acquire.set_force_acquisition(true);
+    auto job = rpc(service, MT2_DMA_ACQUIRE_REQ, acquire);
+    if (policy == AfeReadbackPolicy::kStrict) {
+      require(!job.success() && fake->starts == 0); continue;
+    }
+    require(job.success() && job.message().find("policy=warn") != std::string::npos);
+    require(wait_ready(service,job.job_id()).state() == DMA_JOB_READY);
+    DmaReadRequest read; read.set_job_id(job.job_id());
+    auto fragment = rpc<DmaReadRequest,DmaReadResponse>(service,MT2_DMA_READ_REQ,read);
+    require(fragment.success() && fragment.message().find("not guaranteed") != std::string::npos);
+    require(service.capabilities(3).message().find("policy=warn") != std::string::npos);
+    require(service.capabilities().afes(1).state() == FRONTEND_CONFIGURED_UNALIGNED);
+    DmaControlRequest control; control.set_job_id(job.job_id()); control.set_action(DMA_ACK);
+    require(rpc(service,MT2_DMA_CONTROL_REQ,control).success());
+    spi_timeout = true;
+    rejected = rpc(service,MT2_DMA_ACQUIRE_REQ,acquire);
+    require(!rejected.success() && rejected.message().find("SPI timeout") != std::string::npos);
+    require(fake->starts == 1);
+  }
+}
+
 int main() {
+  test_readback_policy_and_alignment_are_independent();
   test_triggered();
   test_triggered_admission_after_calibration();
   test_long_scan_verification_budget();

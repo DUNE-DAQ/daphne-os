@@ -1,3 +1,9 @@
+add_executable(afe_readback_policy_tests afe_readback_policy_tests.cpp)
+target_include_directories(afe_readback_policy_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../srcs)
+target_link_libraries(afe_readback_policy_tests PRIVATE Threads::Threads)
+add_test(NAME afe_readback_policy_unit COMMAND afe_readback_policy_tests)
+set_tests_properties(afe_readback_policy_unit PROPERTIES LABELS unit)
+
 add_executable(hdmezz_driver_tests
   hdmezz_driver_tests.cpp
 )

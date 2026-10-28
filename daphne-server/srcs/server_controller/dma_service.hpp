@@ -12,12 +12,14 @@
 #include <condition_variable>
 #include "daphneV3_high_level_confs.pb.h"
 #include "server_controller/gateware.hpp"
+#include "server_controller/afe_readback_policy.hpp"
 #include "../../dma/afe_capture.hpp"
 
 class Daphne;
 namespace daphne_sc {
 
 struct DmaServiceOptions {
+  AfeReadbackPolicy afe_readback_policy = AfeReadbackPolicy::kStrict;
   uint64_t maximum_job_bytes = 64ULL << 20;
   uint32_t maximum_waveforms = 256;
   uint32_t maximum_fragment_bytes = 1U << 20;

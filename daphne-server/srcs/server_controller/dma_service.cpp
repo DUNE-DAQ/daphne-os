@@ -94,6 +94,7 @@ daphne::AcquisitionCapabilitiesResponse DmaService::capabilities(uint32_t maximu
     auto* s = r.add_afes(); s->set_afe(a); s->set_state(states_[a]);
     s->set_approved_lane_mask(approved_[a]); s->set_configuration_generation(generations_[a]);
   }
+  r.set_message(with_afe_readback_notice(r.message(), options_.afe_readback_policy));
   return r;
 }
 void DmaService::check_frontend(const std::vector<uint32_t>& channels, bool calibration, bool force_acquisition) {
@@ -293,7 +294,7 @@ void DmaService::fill_status(daphne::DmaJobResponse& out) const {
   out.set_success(true); out.set_backend(daphne::ACQUISITION_DMA); out.set_job_id(job_id_);
   out.set_force_acquisition(force_acquisition_);
   out.set_state(state_); out.set_completed_waveforms(completed_); out.set_expected_waveforms(expected_);
-  out.set_message(message_);
+  out.set_message(with_afe_readback_notice(message_, options_.afe_readback_policy));
   out.set_capture_mode(capture_mode_); out.set_trigger_source(trigger_source_);
   out.set_pretrigger_samples(pretrigger_); out.set_phase(phase_);
   out.set_contract_version(2); out.set_job_timeout_ms(job_timeout_ms_);
@@ -336,6 +337,7 @@ void DmaService::read(const daphne::DmaReadRequest& req, const std::string& owne
   const uint32_t count = std::min<uint32_t>(samples_ - req.tick_offset(), maximum / width);
   if (!count) throw std::invalid_argument("DMA fragment budget cannot hold a full tick");
   out.set_success(true); out.set_job_id(job_id_); out.set_backend(daphne::ACQUISITION_DMA);
+  out.set_message(afe_readback_notice(options_.afe_readback_policy));
   out.set_waveform(req.waveform()); out.set_route(r); out.set_sequence(read_sequence_++);
   for (auto ch : c.layout.channels[r]) out.add_channels(ch);
   out.set_samples(samples_); out.set_expected_waveforms(expected_);

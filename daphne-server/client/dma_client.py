@@ -4,6 +4,7 @@ RPC is injected so CLI and Qt use the same decoder and validation. ACK belongs
 to the caller, after processing and any requested file writes have succeeded.
 """
 import time
+import sys
 import numpy as np
 from dma_persistent_client import PersistentClientMixin
 
@@ -15,6 +16,7 @@ class DmaClient(PersistentClientMixin):
         self.job_id = None
         self.progress_callback = progress_callback
         self._last_keepalive = time.monotonic()
+        self._afe_readback_warning = None
 
     def _call(self, name, request, response_class):
         p = self.pb
@@ -22,7 +24,23 @@ class DmaClient(PersistentClientMixin):
                             getattr(p, "MT2_" + name + "_RESP"), response_class)
         if not response.success:
             raise RuntimeError(response.message or "DMA RPC rejected (old schema/server?)")
+        # A successful RPC with tolerant ADC readback is not evidence of a
+        # verified register configuration. Surface the notice once per client
+        # and retain it in capture metadata without weakening fragment checks.
+        message = getattr(response, 'message', '')
+        if message.startswith('WARNING: DMA AFE readback policy=warn'):
+            notice = message.splitlines()[0]
+            if self._afe_readback_warning is None:
+                print(notice, file=sys.stderr)
+            self._afe_readback_warning = notice
         return response
+
+    def _afe_readback_metadata(self):
+        if self._afe_readback_warning is None:
+            return {}
+        return {'afe_readback_policy': 'warn',
+                'afe_register_configuration_verified': False,
+                'afe_readback_warning': self._afe_readback_warning}
 
     def probe(self, trigger_source=None, capture_mode="finite", pretrigger=0):
         p = self.pb
@@ -313,7 +331,8 @@ class DmaClient(PersistentClientMixin):
                 "waveforms": metadata, "trigger_source": trigger_source,
                 "capture_mode": capture_mode, "independent_software_triggers": trigger_source == 'software',
                 "continuous": False, "pretrigger_samples": pretrigger,
-                "timestamp_reference": "first_stream_tick" if capture_mode == 'triggered' else "finite_capture"}
+                "timestamp_reference": "first_stream_tick" if capture_mode == 'triggered' else "finite_capture",
+                **self._afe_readback_metadata()}
         except BaseException as error:
             try:
                 self.cancel()

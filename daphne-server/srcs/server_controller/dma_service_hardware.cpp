@@ -9,7 +9,8 @@ namespace daphne_sc {
 DmaService::DmaService(Daphne& d, GatewareIdentity id, DmaServiceOptions opts,
                        std::unique_ptr<daphne_dma::AfeCaptureEngine> engine)
     : DmaService(id, opts, engine ? std::move(engine) : daphne_dma::make_linux_afe_engine(opts.maximum_job_bytes),
-        [&d, id](const std::vector<uint32_t>& channels, bool) {
+        [&d, id, readback = std::make_shared<AfeReadbackVerifier>(opts.afe_readback_policy, "DMA admission")]
+        (const std::vector<uint32_t>& channels, bool) {
           require_live_gateware(id, GatewareMode::kRawDma);
           DevMemWindowMmio32 clocks(0x84000004, 4);
           if ((clocks.read32(0x84000004) & 3) != 3 ||
@@ -26,8 +27,8 @@ DmaService::DmaService(Daphne& d, GatewareIdentity id, DmaServiceOptions opts,
                 {"LSB_MSB_FIRST",0}, {"ADC_COMPLETE_PDN",0}, {"LVDS_OUTPUT_DISABLE",0},
                 {"ADC_PDN_CH",0}, {"PARTIAL_PDN",0}, {"POWER-DOWN_LVDS",0},
                 {"TEST_PATTERN_MODES",0}, {"SYNC_PATTERN",0}})
-              if (d.getAfe()->getAFEFunction(pl, f.first) != f.second)
-                throw std::runtime_error("DMA frontend/format readback changed: " + f.first);
+              readback->check(a, f.first, f.second, d.getAfe()->getAFEFunction(pl, f.first),
+                              "DMA frontend/format readback changed: " + f.first);
           }
         }, {}, [id] { require_live_gateware(id, GatewareMode::kRawDma); },
         [] { return std::filesystem::exists("/dev/daphne-afe-dma"); }) {

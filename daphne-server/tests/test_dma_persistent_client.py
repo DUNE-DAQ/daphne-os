@@ -114,6 +114,24 @@ class StreamServer(FakeServer):
 
 
 class PersistentTests(unittest.TestCase):
+    def test_readback_warning_is_retained_in_persistent_metadata(self):
+        server = StreamServer()
+        def rpc(*args):
+            response = server.rpc(*args)
+            response.message = 'WARNING: DMA AFE readback policy=warn; configuration not guaranteed.'
+            return response
+        client = DmaClient(pb, rpc)
+        with patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            client.probe('software', 'persistent')
+            client.start_session([0], 2048, 1)
+            data, metadata = client.read_batch(1)
+            client.ack_batch()
+            client.finish_session()
+        self.assertEqual(data.shape, (1,1,2048))
+        self.assertEqual(metadata['afe_readback_policy'], 'warn')
+        self.assertFalse(metadata['afe_register_configuration_verified'])
+        self.assertEqual(stderr.getvalue().count('policy=warn'), 1)
+
     @classmethod
     def setUpClass(cls):
         # Qt permits one application per process. Keep a strong reference when

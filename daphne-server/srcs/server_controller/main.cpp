@@ -36,6 +36,8 @@ int main(int argc, char* argv[]) {
   std::string expected_gateware_build_id_value;
   bool disable_monitoring = false;
   bool dma = false;
+  std::string dma_afe_readback_policy_value = "strict";
+  daphne_sc::DmaServiceOptions dma_options;
   int monitor_period_ms = 200;
 
   daphne_sc::RouterServerOptions server_opts;
@@ -48,6 +50,9 @@ int main(int argc, char* argv[]) {
                  "Optional expected 32-bit gateware build ID (decimal or 0x-prefixed hex)");
   app.add_flag("--disable-monitoring", disable_monitoring, "Disable background I2C monitoring threads");
   app.add_flag("--dma", dma, "Explicitly select raw-DMA acquisition (requires raw-dma gateware)");
+  app.add_option("--dma-afe-readback-policy", dma_afe_readback_policy_value,
+                 "ADC SPI value mismatches: strict (fail) or warn (continue with warnings); DMA only")
+      ->default_val("strict");
   app.add_option("--monitor-period-ms", monitor_period_ms, "Monitoring period in milliseconds")
       ->default_val(monitor_period_ms);
 
@@ -70,6 +75,9 @@ int main(int argc, char* argv[]) {
     gateware_mode = daphne_sc::parse_gateware_mode(gateware_mode_value);
     if (dma != (gateware_mode == daphne_sc::GatewareMode::kRawDma))
       throw std::invalid_argument("BACKEND_MISMATCH: raw-dma requires --dma; other modes must omit it");
+    dma_options.afe_readback_policy = daphne_sc::parse_afe_readback_policy(dma_afe_readback_policy_value);
+    if (!dma && dma_options.afe_readback_policy != daphne_sc::AfeReadbackPolicy::kStrict)
+      throw std::invalid_argument("DMA AFE readback policy warn requires --dma and raw-dma gateware");
     if (!expected_gateware_build_id_value.empty()) {
       expected_gateware_build_id =
           daphne_sc::parse_gateware_build_id(expected_gateware_build_id_value);
@@ -121,7 +129,7 @@ int main(int argc, char* argv[]) {
   daphne_sc::set_raw_dma_register_policy(dma);
   Daphne daphne(!dma);
   std::unique_ptr<daphne_sc::DmaService> dma_service;
-  if (dma) dma_service = std::make_unique<daphne_sc::DmaService>(daphne, identity);
+  if (dma) dma_service = std::make_unique<daphne_sc::DmaService>(daphne, identity, dma_options);
   server_opts.dma = dma_service.get(); server_opts.stop = &stopping;
   std::signal(SIGINT, request_stop); std::signal(SIGTERM, request_stop);
 
@@ -134,6 +142,11 @@ int main(int argc, char* argv[]) {
   }
 
   std::cout << "Starting daphneServer\n";
+  if (dma) {
+    std::cout << "DMA AFE readback policy: " << dma_afe_readback_policy_value << '\n';
+    const auto notice = daphne_sc::afe_readback_notice(dma_options.afe_readback_policy);
+    if (!notice.empty()) std::cerr << notice << std::endl;
+  }
   std::cout << "Bind: " << bind_endpoint << "\n";
   std::cout << "Gateware: " << daphne_sc::gateware_mode_name(gateware_mode)
             << ", register ABI 0x" << std::hex << identity.abi << ", build 0x"
@@ -144,7 +157,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Monitoring period: " << monitor_period_ms << " ms\n";
   }
 
-  const auto handlers = daphne_sc::make_v2_handlers(gateware_mode, full_stream_mmio);
+  const auto handlers = daphne_sc::make_v2_handlers(gateware_mode, full_stream_mmio, dma_options.afe_readback_policy);
   try { daphne_sc::run_router_server(context, bind_endpoint, daphne, handlers, server_opts); }
   catch (const std::exception& e) { std::cerr << "Router stopped: " << e.what() << '\n'; }
   stopping.store(true);

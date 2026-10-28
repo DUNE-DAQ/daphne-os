@@ -737,7 +737,9 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
                      Daphne& daphne,
                      GatewareMode mode,
                      Mmio32* full_stream_mmio,
+                     AfeReadbackPolicy afe_readback_policy,
                      std::string& response_str) {
+  AfeReadbackVerifier readback(afe_readback_policy, "configuration");
   try {
     std::ostringstream out;
     bool ok_all = true;
@@ -901,7 +903,8 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
           << "\n";
       if (mode == GatewareMode::kRawDma) {
         r = daphne.getAfe()->setAFEFunction(afe_pl, "PGA_GAIN_CONTROL", afe_config.pga().gain() ? 1U : 0U);
-        if (r != (afe_config.pga().gain() ? 1U : 0U)) throw std::runtime_error("DMA PGA gain readback mismatch");
+        readback.check(afe_board, "PGA_GAIN_CONTROL", afe_config.pga().gain() ? 1U : 0U,
+                       r, "DMA PGA gain readback mismatch");
       }
       r = daphne.getAfe()->setAFEFunction(afe_pl,
                                           "PGA_INTEGRATOR_DISABLE",
@@ -931,8 +934,8 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
       for (const auto& a : requested_cfg.afes()) {
         const auto pl = afe_definitions::AFE_board2PL_map.at(a.id());
         for (const char* name : {"ADC_COMPLETE_PDN", "LVDS_OUTPUT_DISABLE", "ADC_PDN_CH", "PARTIAL_PDN", "POWER-DOWN_LVDS", "TEST_PATTERN_MODES", "SYNC_PATTERN"})
-          if (daphne.getAfe()->setAFEFunction(pl, name, 0) != 0)
-            throw std::runtime_error(std::string("DMA AFE readback mismatch: ") + name);
+          readback.check(a.id(), name, 0, daphne.getAfe()->setAFEFunction(pl, name, 0),
+                         std::string("DMA AFE readback mismatch: ") + name);
         const std::vector<std::pair<std::string, uint32_t>> checks = {
           {"SERIALIZED_DATA_RATE", 1}, {"ADC_RESOLUTION_RESET", 0}, {"ADC_OUTPUT_FORMAT", 0}, {"LSB_MSB_FIRST", 0},
           {"LPF_PROGRAMMABILITY", a.pga().lpf_cut_frequency()}, {"PGA_GAIN_CONTROL", a.pga().gain() ? 1U : 0U},
@@ -940,8 +943,9 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
           {"PGA_CLAMP_LEVEL", a.pga().has_clamp() ? a.pga().clamp() : 2U}, {"ACTIVE_TERMINATION_ENABLE", 0},
           {"LNA_INPUT_CLAMP_SETTING", a.lna().clamp()}, {"LNA_GAIN", a.lna().gain()},
           {"LNA_INTEGRATOR_DISABLE", a.lna().integrator_disable() ? 1U : 0U}};
-        for (const auto& c : checks) if (daphne.getAfe()->getAFEFunction(pl, c.first) != c.second)
-          throw std::runtime_error("DMA AFE readback mismatch: " + c.first);
+        for (const auto& c : checks)
+          readback.check(a.id(), c.first, c.second, daphne.getAfe()->getAFEFunction(pl, c.first),
+                         "DMA AFE readback mismatch: " + c.first);
       }
       daphne.getAfe()->setPowerState(1);
       daphne.getFrontEnd()->doResetDelayCtrl();
@@ -975,10 +979,11 @@ bool configureDaphne(const ConfigureRequest& requested_cfg,
       }
     }
 
-    response_str = out.str();
+    response_str = (mode == GatewareMode::kRawDma ? readback.summary() : "") + out.str();
     return ok_all;
   } catch (const std::exception& e) {
-    response_str = std::string("Caught Exception:\n") + e.what();
+    response_str = (mode == GatewareMode::kRawDma ? readback.summary() : "") +
+        std::string("Caught Exception:\n") + e.what();
     return false;
   }
 }
@@ -2561,8 +2566,12 @@ std::string serialize_error_with_success_field(Msg& msg, const std::string& err)
 
 std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     GatewareMode mode,
-    std::shared_ptr<Mmio32> full_stream_mmio) {
+    std::shared_ptr<Mmio32> full_stream_mmio,
+    AfeReadbackPolicy afe_readback_policy) {
   using daphne::MessageTypeV2;
+
+  if (mode != GatewareMode::kRawDma && afe_readback_policy != AfeReadbackPolicy::kStrict)
+    throw std::invalid_argument("AFE readback policy warn is available only in raw-dma mode");
 
   if (mode == GatewareMode::kFullStream && !full_stream_mmio) {
     throw std::invalid_argument("Full-stream mode requires an A002 MMIO window");
@@ -2622,7 +2631,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
   };
 
   handlers[daphne::MT2_CONFIGURE_FE_REQ] =
-      [mode, full_stream_mmio](const std::string& in, std::string& out, Daphne& d) {
+      [mode, full_stream_mmio, afe_readback_policy](const std::string& in, std::string& out, Daphne& d) {
     ConfigureRequest req;
     ConfigureResponse resp;
     if (!req.ParseFromString(in)) {
@@ -2633,7 +2642,7 @@ std::unordered_map<daphne::MessageTypeV2, V2Handler> make_v2_handlers(
     }
 
     std::string msg;
-    const bool ok = configureDaphne(req, d, mode, full_stream_mmio.get(), msg);
+    const bool ok = configureDaphne(req, d, mode, full_stream_mmio.get(), afe_readback_policy, msg);
 
     resp.set_success(ok);
     resp.set_message(msg);

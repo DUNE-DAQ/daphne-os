@@ -41,6 +41,7 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
   auto* fe = d.getFrontEnd(); auto* afe = d.getAfe();
   const uint32_t old_vtc = fe->getEnableDelayVtc();
   std::vector<Saved> saved;
+  AfeReadbackVerifier readback(options.afe_readback_policy, "DMA eye scan");
   std::vector<uint32_t> requested;
   for (auto a : req.afes()) requested.push_back(a);
   if (requested.empty()) for (uint32_t a = 0; a < 5; ++a) requested.push_back(a);
@@ -64,8 +65,10 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
         attempt([&] { if (fe->setDelay(s.pl, s.delay) != s.delay) throw std::runtime_error("delay restore mismatch"); });
         attempt([&] { if (fe->setBitslip(s.pl, s.slip) != s.slip) throw std::runtime_error("bitslip restore mismatch"); });
       }
-      attempt([&] { if (afe->setAFEFunction(s.pl, "TEST_PATTERN_MODES", s.pattern) != s.pattern) throw std::runtime_error("pattern restore mismatch"); });
-      attempt([&] { if (afe->setAFEFunction(s.pl, "SYNC_PATTERN", s.sync) != s.sync) throw std::runtime_error("sync restore mismatch"); });
+      attempt([&] { readback.check(s.afe, "TEST_PATTERN_MODES restore", s.pattern,
+          afe->setAFEFunction(s.pl, "TEST_PATTERN_MODES", s.pattern), "pattern restore mismatch"); });
+      attempt([&] { readback.check(s.afe, "SYNC_PATTERN restore", s.sync,
+          afe->setAFEFunction(s.pl, "SYNC_PATTERN", s.sync), "sync restore mismatch"); });
     }
     const auto vtc = keep && !retained.empty() ? 0U : old_vtc;
     attempt([&] { if (fe->setEnableDelayVtc(vtc) != vtc) throw std::runtime_error("VTC restore mismatch"); });
@@ -87,9 +90,10 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
     if (fe->setEnableDelayVtc(0) != 0) throw std::runtime_error("VTC disable mismatch");
     for (const auto& s : saved) {
       check();
-      if (afe->setAFEFunction(s.pl, "SYNC_PATTERN", 1) != 1 ||
-          afe->setAFEFunction(s.pl, "TEST_PATTERN_MODES", 7) != 7)
-        throw std::runtime_error("Physical AFE ramp readback mismatch");
+      readback.check(s.afe, "SYNC_PATTERN", 1, afe->setAFEFunction(s.pl, "SYNC_PATTERN", 1),
+                     "Physical AFE ramp readback mismatch");
+      readback.check(s.afe, "TEST_PATTERN_MODES", 7, afe->setAFEFunction(s.pl, "TEST_PATTERN_MODES", 7),
+                     "Physical AFE ramp readback mismatch");
     }
     bool all_pass = true;
     for (const auto& s : saved) {
@@ -177,12 +181,13 @@ daphne::AfeDelaySweepResponse run_dma_eye_scan(
     if (!verification_diagnostics.empty()) out.set_message(out.message() + "; long verification:" + verification_diagnostics);
     if (req.skip_ramp_verification() && req.apply_best())
       out.set_message("Timing candidates applied without final ramp verification; use force acquisition for unverified AFEs");
+    out.set_message(readback.summary() + out.message());
     return out;
   } catch (const std::exception& e) {
     std::string message = e.what();
     if (touched && message.find("QUARANTINED") == std::string::npos)
       try { restore(false); } catch (const std::exception& cleanup) { message += "; "; message += cleanup.what(); }
-    throw std::runtime_error(message);
+    throw std::runtime_error(readback.summary() + message);
   }
 }
 } // namespace daphne_sc
