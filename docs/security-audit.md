@@ -33,6 +33,26 @@ rule IDs, and line locations. Changed content or any other finding blocks CI;
 there is no blanket third-party exclusion. The original server history was
 therefore preserved without redaction or hash rewriting.
 
+## Reviewed synthetic test input
+
+Commit `ba2c8bb9b7faeffdff4ebf58c089373103d0d506` adds a literal dummy password
+in `tests/petalinux/test_daphne_service_status.py:55`. The test passes deliberately
+invalid and sensitive-looking environment values to the status formatter and
+asserts that its synthetic marker is absent from the notification. This value
+is test input, not an authentication credential.
+
+The verifier accepts only rule `daphne-literal-password` at line 55 of that
+exact path when the complete file has SHA-256
+`10aaedbc29768464224d982cd2c4b4af514857e1473c6c13d076b26ff6f31306`.
+The hash is checked against the historical Git blob for history findings and
+against file bytes for current-tree findings. A changed file, different line,
+rule, or path remains blocked. The detection rules are unchanged; deleting or
+editing the current test alone would not resolve its occurrence in history.
+
+Scan coverage is limited to locally available references. A previous local run
+covered 313 reachable commits; GitHub's later run covered 535 and included this
+additional test. A local PASS does not certify commits reachable only in CI.
+
 ## Ongoing safeguards
 
 CI scans full reachable Git history, commit messages, and the current tree
