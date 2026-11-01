@@ -10,6 +10,14 @@ spec.loader.exec_module(mode)
 
 
 class TransitionSafety(unittest.TestCase):
+    def test_dma_unit_selects_warn_and_keeps_the_idle_guard(self):
+        dropin,unit=Mock(),Mock()
+        with patch.object(mode,'Path',side_effect=(dropin,unit)),patch.object(mode,'run'):
+            mode.install_runtime_files()
+        self.assertIn(str(mode.RUNTIME / 'daphneServer'),unit.write_text.call_args.args[0])
+        self.assertIn('--dma-afe-readback-policy warn',unit.write_text.call_args.args[0])
+        self.assertIn(str(mode.HELPER)+' guard',dropin.write_text.call_args.args[0])
+
     def test_failed_idle_proof_never_stops_firmware_or_unloads(self):
         gw = Mock()
         current = Mock(gateware_mode='raw-dma')

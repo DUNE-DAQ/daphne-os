@@ -20,7 +20,7 @@ STOP = ('daphne-runtime.target', 'daphne.service', 'hermes.service', MANUAL,
         'endpoint.service', 'clockchip.service', 'daphne-gateware-verify.service',
         'firmware.service', 'daphne-gateware-prepare.service')
 HASHES = {
-    RUNTIME / 'daphneServer': '61bdf401c915f91c399c978ac60ace3865641e57a7f49cd3069b7a787d7b56c5',
+    RUNTIME / 'daphneServer': 'adb4afd8fc3a7d934ce3f34881d96af017276aa2e35facbbfad88b823cc66c7b',
     RUNTIME / 'daphne-afe-dma-quiesce': '2acd53b90f2f9b9f9f27bbc17c0a6aff27837f3b873e6f21c170898ce92a428a',
     RUNTIME / 'daphne-afe-dma.ko': 'd25ab970bb5288e1d419974f63ab92e9427163a34ec68a9d2a3c0f0f5f9a4255',
     RUNTIME / 'daphne_dma_bounded.ko': '7d26fcfa954c7ad9b5542087a67c9d29d9e52755896f9a57a65faf6cf0cd89fe',
@@ -93,7 +93,8 @@ def install_runtime_files():
         'Requires=firmware.service endpoint.service\nAfter=firmware.service endpoint.service\n'
         'PartOf=firmware.service\n\n[Service]\nType=simple\n'
         'ExecStart='+str(RUNTIME / 'daphneServer')+
-        ' --dma --gateware-mode raw-dma --expected-gateware-build-id 0x0630a9da --bind tcp://*:40001\n'
+        ' --dma --gateware-mode raw-dma --expected-gateware-build-id 0x0630a9da'
+        ' --bind tcp://*:40001 --dma-afe-readback-policy warn\n'
         'TimeoutStopSec=30s\nRestart=no\n')
     run('systemctl', 'daemon-reload')
 

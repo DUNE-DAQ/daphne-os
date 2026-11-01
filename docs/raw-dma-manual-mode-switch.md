@@ -17,6 +17,38 @@ El helper instalado verifica el hash del nuevo binario; el mecanismo de
 transición y las guardas de reposo se conservan. Resultados y configuración
 de esta actualización: [pruebas de opciones manuales](raw-dma-manual-overrides-results-2026-10-12.md).
 
+## Actualizacion instalada el 2026-10-28
+
+`daphne-mode dma` ya usa el servidor validado con SHA256
+`adb4afd8fc3a7d934ce3f34881d96af017276aa2e35facbbfad88b823cc66c7b`
+en la ruta habitual `/opt/daphne-dma-persistent-manual-20261012/daphneServer`.
+El selector comprueba ese hash y genera el servicio con
+`--dma-afe-readback-policy warn`. La seleccion es explicita del selector DMA;
+el binario sigue usando `strict` cuando se omite la opcion. Alcance de la
+politica: [readback AFE](raw-dma-afe-readback-policy.md).
+
+Se actualizaron tambien los clientes DMA, su cargador y los bindings del
+mismo build ARM. El arranque por defecto y `/usr/bin/daphneServer` se
+conservaron. La integracion reinicio solo el servicio DMA, manteniendo la
+imagen 630a9da, los drivers y el pool de 448 MiB cargados. Despues midio de
+nuevo los cinco AFE y verifico 32768 muestras de rampa en sus ocho lanes.
+
+Los cinco AFE quedaron `ALIGNED`, con mascara 0xff y VGAIN 1700. El comando
+normal `daphne-mode dma` paso y conservo el mismo proceso y configuracion.
+Una captura normal sin force, canales 0/8/16/24/32 y 2048 muestras, paso las
+comprobaciones del cliente y guardo el aviso de politica en sus metadatos.
+DMA se dejo cargado y listo para comandos.
+
+Se retiraron `/opt/daphne-dma-readback-test-20261028` y
+`/home/petalinux/daphne-readback-policy-20261028`, asi como el staging de la
+integracion. El runtime instalado no depende de esos directorios. La
+evidencia se conserva en el PC y las mediciones normales en
+`/var/lib/daphne-manual-mode/frontend-20261028-125059`. El respaldo previo,
+incluido el selector y los bindings, queda en
+`/opt/daphne-dma-persistent-manual-20261012/rollback-readback-policy-20261028`.
+
+## Operacion
+
 Solicita sudo. Al entrar en DMA selecciona la imagen `630a9da`, servidor
 experimental en `193.206.157.36:40001`, proveedor acotado y consumidor de sesión
 persistente. Configura VGAIN 1700, offset 2275, trim/bias 0, LPF 10 MHz,

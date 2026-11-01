@@ -8,6 +8,8 @@
 - [SOM identity and production policy](kria-board-identity-and-production-deployment.md)
 - [JTAG and eMMC recovery](uboot-jtag-emmc-flash.md)
 - [Station power control](kontron-wiener-power-control.md)
+- [Coldbox RS PRO IPS-3303S control](coldbox-rs-pro-ips3303s.md)
+- [Coldbox DAPHNE serial console](coldbox-daphne-serial.md)
 
 ## Developers and maintainers
 
