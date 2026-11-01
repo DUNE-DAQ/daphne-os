@@ -113,6 +113,142 @@ class StreamServer(FakeServer):
         raise AssertionError(mtype)
 
 
+class PedestalDmaTests(unittest.TestCase):
+    def make_client(self, server, echo_force=True):
+        original = server.rpc
+
+        def rpc(message_type, request, *rest):
+            response = original(message_type, request, *rest)
+            if message_type == pb.MT2_ACQUISITION_CAPABILITIES_REQ:
+                response.force_acquisition_supported = True
+            if echo_force and message_type in (pb.MT2_DMA_ACQUIRE_REQ, pb.MT2_DMA_STATUS_REQ, pb.MT2_DMA_CONTROL_REQ):
+                response.force_acquisition = server.request.force_acquisition
+            return response
+
+        return DmaClient(pb, rpc)
+
+    def test_pedestal_500_events_preserve_estimator_channel_order_and_force(self):
+        import protobuf_configure_pedestal_level as pedestal
+        server = StreamServer()
+        client = self.make_client(server)
+        channels = [33, 1, 17]
+
+        def analog_data(reply):
+            event = reply.waveform_metadata.event_id.sequence
+            # The first waveform changes the mode of the final mean vector.
+            # Reducing modes per batch would incorrectly give .000 instead of .002.
+            values = [101, 101, 201, 100] if event == 1 else [100, 100, 200, 100]
+            adc = np.stack([np.array(values, dtype=np.uint16) + 8000 + ch * 10
+                            for ch in reply.channels], axis=1)
+            reply.raw16_le = ((adc ^ 0x2000) << 2).astype('<u2').tobytes()
+
+        server.corrupt = analog_data
+        # Force transport batches of three, including a final batch of two.
+        with patch.object(pedestal, 'MAX_ACQUISITION_BYTES', 3 * 2 * len(channels) * 4):
+            for iteration in range(2):
+                result = pedestal._measure_pedestals_dma(client, channels, 4, force_acq=True)
+                self.assertEqual(result, {ch: 8100.002 + ch * 10 for ch in channels})
+                self.assertEqual(server.acked, 500)
+                self.assertEqual(server.starts, iteration + 1)
+                self.assertIsNone(client.job_id)
+                self.assertFalse(server.cancelled)
+        acquisitions = [request for t, request in server.calls if t == pb.MT2_DMA_ACQUIRE_REQ]
+        self.assertEqual(len(acquisitions), 2)
+        for request in acquisitions:
+            self.assertEqual(request.target_waveforms, 500)
+            self.assertEqual(request.trigger_source, pb.DMA_TRIGGER_SOFTWARE)
+            self.assertEqual(request.pretrigger_samples, 0)
+            self.assertTrue(request.force_acquisition)
+        event_acks = [request for t, request in server.calls
+                      if t == pb.MT2_DMA_CONTROL_REQ and request.event_ids]
+        self.assertTrue(all(len(request.event_ids) <= 3 for request in event_acks))
+        self.assertEqual(len(event_acks[-1].event_ids), 2)
+
+    def test_pedestal_default_does_not_force_acquisition(self):
+        import protobuf_configure_pedestal_level as pedestal
+        server = StreamServer()
+        client = DmaClient(pb, server.rpc)
+        result = pedestal._measure_pedestals_dma(client, [0], 4)
+        self.assertEqual(result, {0: 2495.0})
+        self.assertFalse(server.request.force_acquisition)
+        self.assertEqual(server.starts, 1)
+        self.assertIsNone(client.job_id)
+
+    def test_pedestal_corrupt_event_cancels_without_acknowledging_it(self):
+        import protobuf_configure_pedestal_level as pedestal
+        server = StreamServer()
+        client = self.make_client(server)
+
+        def corrupt(reply):
+            if reply.waveform_metadata.event_id.sequence == 9:
+                reply.raw16_le = b'\x01\x00' + reply.raw16_le[2:]
+
+        server.corrupt = corrupt
+        with self.assertRaisesRegex(RuntimeError, 'framing'):
+            pedestal._measure_pedestals_dma(client, [0], 4, force_acq=True)
+        self.assertEqual(server.acked, 8)
+        self.assertTrue(server.cancelled)
+        self.assertIsNone(client.job_id)
+
+    def test_pedestal_requires_force_confirmation_from_server(self):
+        import protobuf_configure_pedestal_level as pedestal
+        server = StreamServer()
+        client = self.make_client(server, echo_force=False)
+        with self.assertRaisesRegex(RuntimeError, 'acknowledgement missing'):
+            pedestal._measure_pedestals_dma(client, [0], 4, force_acq=True)
+        self.assertTrue(server.cancelled)
+        self.assertEqual(server.acked, 0)
+
+    def test_pedestal_interrupt_and_finalization_failure_cancel_session(self):
+        import protobuf_configure_pedestal_level as pedestal
+        for error in (KeyboardInterrupt(), RuntimeError('finalization failed')):
+            with self.subTest(error=type(error).__name__):
+                server = StreamServer()
+                client = self.make_client(server)
+                method = 'read_batch' if isinstance(error, KeyboardInterrupt) else 'finish_session'
+                with patch.object(client, method, side_effect=error), self.assertRaises(type(error)):
+                    pedestal._measure_pedestals_dma(client, [0], 4, force_acq=True)
+                self.assertTrue(server.cancelled)
+                self.assertIsNone(client.job_id)
+
+    def test_pedestal_reports_failed_cleanup(self):
+        import protobuf_configure_pedestal_level as pedestal
+        server = StreamServer()
+        client = self.make_client(server)
+        with patch.object(client, 'read_batch', side_effect=RuntimeError('read failed')), \
+                patch.object(client, 'cancel', side_effect=RuntimeError('stop failed')):
+            with self.assertRaisesRegex(RuntimeError, 'read failed; DMA cleanup unconfirmed: stop failed'):
+                pedestal._measure_pedestals_dma(client, [0], 4, force_acq=True)
+        client.cancel()
+
+    def test_pedestal_rejects_invalid_decoded_batches_before_ack(self):
+        import protobuf_configure_pedestal_level as pedestal
+        invalid = (
+            (np.zeros((0, 1, 4), dtype=np.uint16), 'batch shape'),
+            (np.zeros((1, 2, 4), dtype=np.uint16), 'batch shape'),
+            (np.zeros((1, 1, 3), dtype=np.uint16), 'batch shape'),
+            (np.full((1, 1, 4), 16384, dtype=np.uint16), '14-bit range'),
+        )
+        for data, message in invalid:
+            with self.subTest(shape=data.shape, message=message):
+                server = StreamServer()
+                client = self.make_client(server)
+                with patch.object(client, 'read_batch', return_value=(data, {})):
+                    with self.assertRaisesRegex((RuntimeError, ValueError), message):
+                        pedestal._measure_pedestals_dma(client, [0], 4, force_acq=True)
+                self.assertEqual(server.acked, 0)
+                self.assertTrue(server.cancelled)
+
+    def test_pedestal_memory_budget_rejection_does_not_start_session(self):
+        import protobuf_configure_pedestal_level as pedestal
+        server = StreamServer()
+        client = self.make_client(server)
+        with patch.object(pedestal, 'MAX_ACQUISITION_BYTES', 7):
+            with self.assertRaisesRegex(ValueError, 'memory budget'):
+                pedestal._measure_pedestals_dma(client, [0], 4, force_acq=True)
+        self.assertEqual(server.starts, 0)
+
+
 class PersistentTests(unittest.TestCase):
     def test_readback_warning_is_retained_in_persistent_metadata(self):
         server = StreamServer()

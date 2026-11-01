@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
+import contextlib
+import io
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 
 class _Again(Exception):
@@ -29,6 +32,7 @@ sys.modules["zmq"] = types.SimpleNamespace(
 CLIENT_DIR = Path(__file__).resolve().parents[1] / "client"
 sys.path.insert(0, str(CLIENT_DIR))
 
+import protobuf_configure_pedestal_level as pedestal  # noqa: E402
 from protobuf_configure_pedestal_level import (  # noqa: E402
     ADC_MAX,
     INITIAL_OFFSET,
@@ -185,6 +189,116 @@ class _StatefulOffsetClient:
 
 
 class PedestalCalibrationTests(unittest.TestCase):
+    def test_dma_flags_are_explicit_and_force_requires_dma(self):
+        base = ["-target_pedestal", "8192", "-L", "2048"]
+        args = build_parser().parse_args(base)
+        self.assertFalse(args.dma)
+        self.assertFalse(args.force_acq)
+        for flag in ("--force-acq", "--force_acq"):
+            args = build_parser().parse_args(base + ["--dma", flag])
+            self.assertTrue(args.dma)
+            self.assertTrue(args.force_acq)
+        with patch.object(pedestal, "load_protobuf_modules") as loader:
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                pedestal.main(base + ["--force-acq"])
+            loader.assert_not_called()
+
+    def test_dma_requires_numpy_without_affecting_spybuffer_reduction(self):
+        with patch.object(pedestal, "np", None):
+            self.assertEqual(pedestal_levels([[[100, 100, 200]]]), [100.0])
+            with patch.object(pedestal, "load_protobuf_modules") as loader:
+                with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                    result = pedestal.main(["--dma", "-target_pedestal", "8192", "-L", "64"])
+                self.assertEqual(result, 2)
+                self.assertIn("requires numpy", stderr.getvalue())
+                loader.assert_not_called()
+
+    def test_main_defaults_to_spybuffer_and_current_offset(self):
+        with patch.object(pedestal, "load_protobuf_modules", return_value=(object(), object())) as loader, \
+                patch.object(pedestal, "V2Client"), \
+                patch.object(pedestal, "configure_trigger_source") as trigger, \
+                patch.object(pedestal, "_read_current_offsets", return_value={0: 2200}), \
+                patch.object(pedestal, "_measure_pedestals", return_value={0: 8192.0}) as measure, \
+                patch.object(pedestal, "_measure_pedestals_dma") as dma_measure, \
+                patch.object(pedestal, "_write_offset") as write, \
+                patch.object(pedestal, "_verify_configured_offsets", return_value={0: 2200}), \
+                contextlib.redirect_stdout(io.StringIO()):
+            result = pedestal.main(["--use-current-offset", "-target_pedestal", "8192", "-L", "64"])
+        self.assertEqual(result, 0)
+        loader.assert_called_once_with(require_trigger_source=True, require_dma=False)
+        self.assertEqual(trigger.call_args.args[2], "software")
+        self.assertEqual(measure.call_args.args[2:], ([0], 64))
+        dma_measure.assert_not_called()
+        # An already-correct current OFFSET is retained, with final readback.
+        write.assert_not_called()
+
+    @unittest.skipIf(pedestal.np is None, "numpy is required for DMA")
+    def test_dma_main_preflights_and_forwards_force_on_every_measurement(self):
+        events = []
+        transport = types.SimpleNamespace(rpc=lambda *args: None)
+        dma = types.SimpleNamespace(
+            probe=lambda *args: events.append(("probe", args)) or types.SimpleNamespace(maximum_target_waveforms=500),
+            _check_force_acq=lambda force: events.append(("force", force)),
+            batch_limit=lambda *args: 8,
+        )
+
+        def measure(client, channels, samples, force_acq):
+            self.assertIs(client, dma)
+            self.assertEqual(samples, 64)
+            self.assertTrue(force_acq)
+            events.append(("measure", list(channels)))
+            return {ch: 8192.0 for ch in channels}
+
+        def calibrate(**kwargs):
+            for channels in ([0, 1], [1]):
+                kwargs["write_offset"](channels[0], 2275)
+                kwargs["measure_pedestals"](channels)
+            return [pedestal.CalibrationResult(ch, 2275, 8192, True, 1, "OK") for ch in [0, 1]]
+
+        dma_module = types.SimpleNamespace(DmaClient=lambda *args: dma)
+        with patch.dict(sys.modules, {"dma_client": dma_module}), \
+                patch.object(pedestal, "load_protobuf_modules", return_value=(object(), object())) as loader, \
+                patch.object(pedestal, "V2Client") as connection, \
+                patch.object(pedestal, "configure_trigger_source") as spy_trigger, \
+                patch.object(pedestal, "_measure_pedestals") as spy_measure, \
+                patch.object(pedestal, "_measure_pedestals_dma", side_effect=measure), \
+                patch.object(pedestal, "_write_offset", side_effect=lambda *args: events.append(("write", args[-2:]))), \
+                patch.object(pedestal, "_verify_configured_offsets", return_value={0: 2275, 1: 2275}), \
+                patch.object(pedestal, "calibrate_pedestals_auto", side_effect=calibrate), \
+                contextlib.redirect_stdout(io.StringIO()):
+            connection.return_value.__enter__.return_value = transport
+            result = pedestal.main(["--dma", "--force-acq", "--auto", "-channel", "0", "1",
+                                    "-target_pedestal", "8192", "-L", "64"])
+        self.assertEqual(result, 0)
+        loader.assert_called_once_with(require_trigger_source=False, require_dma=True)
+        spy_trigger.assert_not_called()
+        spy_measure.assert_not_called()
+        self.assertEqual([event[0] for event in events], ["probe", "force", "write", "measure", "write", "measure"])
+
+    @unittest.skipIf(pedestal.np is None, "numpy is required for DMA")
+    def test_dma_preflight_rejection_occurs_before_offset_writes(self):
+        for failure in ("probe", "force", "target"):
+            with self.subTest(failure=failure):
+                dma = types.SimpleNamespace(
+                    probe=lambda *args: types.SimpleNamespace(maximum_target_waveforms=499 if failure == "target" else 500),
+                    _check_force_acq=lambda force: None,
+                    batch_limit=lambda *args: 8,
+                )
+                if failure == "probe":
+                    dma.probe = unittest.mock.Mock(side_effect=RuntimeError("PERSISTENT_UNAVAILABLE"))
+                if failure == "force":
+                    dma._check_force_acq = unittest.mock.Mock(side_effect=RuntimeError("force unsupported"))
+                with patch.dict(sys.modules, {"dma_client": types.SimpleNamespace(DmaClient=lambda *args: dma)}), \
+                        patch.object(pedestal, "load_protobuf_modules", return_value=(object(), object())), \
+                        patch.object(pedestal, "V2Client"), \
+                        patch.object(pedestal, "_write_offset") as write, \
+                        patch.object(pedestal, "configure_trigger_source") as trigger, \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    result = pedestal.main(["--dma", "--force-acq", "-target_pedestal", "8192", "-L", "64"])
+                self.assertEqual(result, 2)
+                write.assert_not_called()
+                trigger.assert_not_called()
+
     def test_cli_accepts_requested_calibration_parameters(self):
         args = build_parser().parse_args(
             [

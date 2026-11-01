@@ -890,6 +890,52 @@ def _measure_pedestals(pb_high, client, channels: Sequence[int], samples: int):
     return result
 
 
+def _measure_pedestals_dma(
+    client, channels: Sequence[int], samples: int, force_acq: bool = False,
+):
+    """Reduce one bounded persistent session, then close before OFFSET writes."""
+    if np is None:
+        raise RuntimeError("DMA pedestal calibration requires numpy")
+    batch = min(
+        client.batch_limit(channels, samples, "persistent", 0),
+        MAX_ACQUISITION_BYTES // (2 * len(channels) * samples),
+    )
+    if batch < 1:
+        raise ValueError("DMA pedestal waveform exceeds the client memory budget")
+    mean_sums = np.zeros((len(channels), samples), dtype=np.int64)
+    completed = 0
+    try:
+        client.start_session(
+            channels, samples, PEDESTAL_WAVEFORMS,
+            trigger_source="software", pretrigger=0, force_acq=force_acq,
+        )
+        while completed < PEDESTAL_WAVEFORMS:
+            requested = min(batch, PEDESTAL_WAVEFORMS - completed)
+            data, _ = client.read_batch(requested)
+            if (data.ndim != 3 or data.shape[1:] != mean_sums.shape or
+                    not 1 <= data.shape[0] <= requested):
+                raise RuntimeError("DMA pedestal acquisition returned an invalid batch shape")
+            if np.any(data < ADC_MIN) or np.any(data > ADC_MAX):
+                raise ValueError("waveform data contains values outside the 14-bit range")
+            # DmaClient already decodes RAW16 to ADC14 offset binary. Sum all
+            # waveforms before taking the mode, regardless of transport batches.
+            mean_sums += np.sum(data, axis=0, dtype=np.int64)
+            client.ack_batch()
+            completed += data.shape[0]
+        client.finish_session()
+    except BaseException as error:
+        try:
+            client.cancel()
+        except Exception as cleanup:
+            raise RuntimeError(
+                f"{error}; DMA cleanup unconfirmed: {cleanup}; "
+                "keep the overlay loaded until idle is proven"
+            ) from error
+        raise
+    values = _modes_from_sums(mean_sums, completed)
+    return {channel: float(values[index]) for index, channel in enumerate(channels)}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description=(
@@ -900,6 +946,17 @@ def build_parser():
     )
     parser.add_argument("-ip", "--ip", default="127.0.0.1")
     parser.add_argument("-port", "--port", type=int, default=9876)
+    parser.add_argument(
+        "--dma", action="store_true",
+        help=("Measure with a persistent DMA session of 500 software-triggered "
+              "waveforms, P=0; requires numpy and DMA protocol revision 3. "
+              "Without this flag, use spybuffer."),
+    )
+    parser.add_argument(
+        "--force-acq", "--force_acq", dest="force_acq", action="store_true",
+        help=("Allow DMA measurements without approved AFE alignment; requires "
+              "--dma. Hardware readiness and data checks remain enabled."),
+    )
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument(
         "-channel",
@@ -1013,6 +1070,8 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.force_acq and not args.dma:
+        parser.error("--force-acq requires --dma")
     try:
         channels = parse_channels(args.channel, args.configure_all)
     except ValueError as exc:
@@ -1026,7 +1085,11 @@ def main(argv=None):
         )
 
     try:
-        pb_high, pb_low = load_protobuf_modules(require_trigger_source=True)
+        if args.dma and np is None:
+            raise RuntimeError("DMA pedestal calibration requires numpy")
+        pb_high, pb_low = load_protobuf_modules(
+            require_trigger_source=not args.dma, require_dma=args.dma,
+        )
         with V2Client(
             pb_high,
             args.ip,
@@ -1035,14 +1098,29 @@ def main(argv=None):
             timeout_ms=args.timeout_ms,
             identity=args.identity,
         ) as client:
-            def send_trigger_request(message_type, payload):
-                response = client.request(message_type, payload)
-                return response.type, response.payload
+            dma_client = None
+            if args.dma:
+                from dma_client import DmaClient
 
-            configure_trigger_source(
-                pb_high, send_trigger_request, "software"
-            )
-            print("Configured spybuffer trigger source: software")
+                dma_client = DmaClient(pb_high, client.rpc)
+                capabilities = dma_client.probe("software", "persistent", 0)
+                dma_client._check_force_acq(args.force_acq)
+                dma_client.batch_limit(channels, args.samples, "persistent", 0)
+                if capabilities.maximum_target_waveforms < PEDESTAL_WAVEFORMS:
+                    raise RuntimeError("DMA server cannot acquire 500 waveforms per measurement")
+                if 2 * len(channels) * args.samples > MAX_ACQUISITION_BYTES:
+                    raise ValueError("DMA pedestal waveform exceeds the client memory budget")
+                print("Pedestal acquisition: DMA persistent, software, P=0, "
+                      f"500 waveforms/measurement, force_acq={args.force_acq}")
+            else:
+                def send_trigger_request(message_type, payload):
+                    response = client.request(message_type, payload)
+                    return response.type, response.payload
+
+                configure_trigger_source(
+                    pb_high, send_trigger_request, "software"
+                )
+                print("Configured spybuffer trigger source: software")
 
             initial_offsets = None
             if args.use_current_offset:
@@ -1064,6 +1142,10 @@ def main(argv=None):
                 )
 
             def measure_pedestals(selected):
+                if dma_client is not None:
+                    return _measure_pedestals_dma(
+                        dma_client, selected, args.samples, force_acq=args.force_acq,
+                    )
                 return _measure_pedestals(
                     pb_high, client, selected, args.samples
                 )
