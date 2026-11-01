@@ -149,6 +149,14 @@ if(PYTHONINTERP_FOUND)
     PROPERTIES LABELS unit
   )
 
+  add_test(NAME dma_cli_signals_unit
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_dma_cli_signals.py)
+  set_tests_properties(dma_cli_signals_unit PROPERTIES LABELS unit)
+
+  add_test(NAME vgain_scan_unit
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vgain_scan.py)
+  set_tests_properties(vgain_scan_unit PROPERTIES LABELS unit)
+
   add_test(
     NAME read_configuration_unit
     COMMAND

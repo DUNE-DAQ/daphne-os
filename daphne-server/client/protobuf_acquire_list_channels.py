@@ -140,7 +140,7 @@ if args.dma:
     from dma_acquire_cli import run_dma_acquire
     try:
         sys.exit(run_dma_acquire(args, pb_high))
-    except (ValueError, RuntimeError, TimeoutError) as exc:
+    except (ValueError, RuntimeError, TimeoutError, InterruptedError) as exc:
         parser.exit(2, f"Acquisition failed: {exc}\n")
 
 # ----------------------------- Setup ----------------------------------

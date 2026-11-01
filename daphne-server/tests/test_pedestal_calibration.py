@@ -255,7 +255,7 @@ class PedestalCalibrationTests(unittest.TestCase):
                 kwargs["measure_pedestals"](channels)
             return [pedestal.CalibrationResult(ch, 2275, 8192, True, 1, "OK") for ch in [0, 1]]
 
-        dma_module = types.SimpleNamespace(DmaClient=lambda *args: dma)
+        dma_module = types.SimpleNamespace(DmaClient=lambda *args, **kwargs: dma)
         with patch.dict(sys.modules, {"dma_client": dma_module}), \
                 patch.object(pedestal, "load_protobuf_modules", return_value=(object(), object())) as loader, \
                 patch.object(pedestal, "V2Client") as connection, \
@@ -288,7 +288,7 @@ class PedestalCalibrationTests(unittest.TestCase):
                     dma.probe = unittest.mock.Mock(side_effect=RuntimeError("PERSISTENT_UNAVAILABLE"))
                 if failure == "force":
                     dma._check_force_acq = unittest.mock.Mock(side_effect=RuntimeError("force unsupported"))
-                with patch.dict(sys.modules, {"dma_client": types.SimpleNamespace(DmaClient=lambda *args: dma)}), \
+                with patch.dict(sys.modules, {"dma_client": types.SimpleNamespace(DmaClient=lambda *args, **kwargs: dma)}), \
                         patch.object(pedestal, "load_protobuf_modules", return_value=(object(), object())), \
                         patch.object(pedestal, "V2Client"), \
                         patch.object(pedestal, "_write_offset") as write, \

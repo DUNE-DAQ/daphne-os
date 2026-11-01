@@ -6,6 +6,7 @@ import subprocess
 import uuid
 import time
 from dma_client import DmaClient
+from dma_cli_signals import DmaCliSignals
 from dma_output import prepare_dma_output, record_dma_output
 from v2_client import V2Client
 from tqdm import tqdm
@@ -25,9 +26,9 @@ def run_dma_acquire(args, pb):
     metadata_path = folder / ("dma_metadata_" + uuid.uuid4().hex + ".jsonl")
     contract = capture_contract(args)
     mode, pretrigger = contract['capture_mode'], contract['pretrigger_samples']
-    with V2Client(pb, args.ip, args.port, route=args.route, timeout_ms=args.timeout_ms,
+    with DmaCliSignals() as signals, V2Client(pb, args.ip, args.port, route=args.route, timeout_ms=args.timeout_ms,
                   identity="dma-acquire-" + uuid.uuid4().hex) as transport:
-        client = DmaClient(pb, transport.rpc)
+        client = DmaClient(pb, transport.rpc, stop_checker=signals.stop_requested)
         client.probe(args.trigger_source, mode, pretrigger)
         client._check_force_acq(getattr(args, 'force_acq', False))
         print_acquisition_start(args, channels, 'dma')

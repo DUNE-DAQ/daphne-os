@@ -55,9 +55,11 @@ informa y aborta la calibración.
 
 ## Alcance y validación
 
-La integración de estas opciones en `bash_scripts/vgain_scan.sh` y su
-restauración final es un paso posterior. Esta modificación no cambia scripts de
-scan, servidor, protobuf, driver ni firmware.
+`bash_scripts/vgain_scan.sh --dma --force-acq` integra estas opciones tanto en
+cada punto como en la restauración final; véase [VGAIN scan con DMA](vgain-scan-dma.md).
+Los clientes DMA manejan SIGINT/SIGTERM/SIGHUP de manera cooperativa para terminar
+el RPC en vuelo y cancelar antes de que el script intente restaurar. Se conservan
+servidor, protobuf, driver y firmware.
 
 Pruebas offline: estimador con lotes desiguales y último lote parcial, 500
 eventos, orden de canales entre rutas, decodificación ADC, propagación y

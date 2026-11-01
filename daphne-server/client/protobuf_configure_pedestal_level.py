@@ -15,6 +15,7 @@ except ImportError:  # The client remains usable on minimal target images.
     np = None
 
 from protobuf_loader import load_protobuf_modules
+from dma_cli_signals import DmaCliSignals
 from trigger_source import configure_trigger_source
 from v2_client import V2Client
 
@@ -1090,7 +1091,7 @@ def main(argv=None):
         pb_high, pb_low = load_protobuf_modules(
             require_trigger_source=not args.dma, require_dma=args.dma,
         )
-        with V2Client(
+        with DmaCliSignals(enabled=args.dma) as signals, V2Client(
             pb_high,
             args.ip,
             args.port,
@@ -1102,7 +1103,7 @@ def main(argv=None):
             if args.dma:
                 from dma_client import DmaClient
 
-                dma_client = DmaClient(pb_high, client.rpc)
+                dma_client = DmaClient(pb_high, client.rpc, stop_checker=signals.stop_requested)
                 capabilities = dma_client.probe("software", "persistent", 0)
                 dma_client._check_force_acq(args.force_acq)
                 dma_client.batch_limit(channels, args.samples, "persistent", 0)
@@ -1137,11 +1138,13 @@ def main(argv=None):
                 )
 
             def write_offset(channel, offset):
+                signals.check()
                 return _write_offset(
                     pb_high, pb_low, client, channel, offset
                 )
 
             def measure_pedestals(selected):
+                signals.check()
                 if dma_client is not None:
                     return _measure_pedestals_dma(
                         dma_client, selected, args.samples, force_acq=args.force_acq,
@@ -1173,6 +1176,7 @@ def main(argv=None):
                     initial_offsets=initial_offsets,
                 )
 
+            signals.check()
             expected_offsets = {
                 result.channel: result.offset for result in results
             }
@@ -1184,7 +1188,7 @@ def main(argv=None):
                 for channel in channels
             )
             print(f"Verified final OFFSET readback: {summary}")
-    except (RuntimeError, TimeoutError, ValueError, zmq.ZMQError) as exc:
+    except (RuntimeError, TimeoutError, InterruptedError, ValueError, zmq.ZMQError) as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
 

@@ -36,7 +36,20 @@ Configuration options:
                            OFFSET as its starting point.
 
 Acquisition options:
+  --dma                   Use DMA for pedestal tuning, data and restoration
+                           (default: spybuffer). Pedestal always uses persistent
+                           software acquisition with P=0.
+  --force-acq              Allow DMA without approved alignment, for both
+                           pedestal and data (requires --dma)
+  --capture-mode MODE      DMA data: finite|triggered|persistent
+                           (default with --dma: persistent)
+  --pretrigger P           DMA data samples before trigger (default: 0)
+  --trigger-timeout-ms MS  DMA data event timeout (default: 10000)
+  --job-timeout-ms MS      DMA data total deadline (default: 0)
+  --pressure-timeout-ms MS Persistent data credit timeout (default: 0)
   -trigger_source software|external|timing|all  (default: external)
+                           DMA supports software, external and timing;
+                           finite requires software and P=0.
   -route ROUTE             EnvelopeV2 route (default: mezz/0)
   --timeout-ms MS          Client timeout (default: 30000)
   -multi_channel           Accepted for backward compatibility; channel count
@@ -49,7 +62,8 @@ before the scan process exits.
 
 Data integrity:
   Every completed point contains a SHA256SUMS manifest for config.txt and the
-  channel_*.dat files. After the complete scan and default restoration, a
+  channel_*.dat files, plus DMA format/event metadata when selected.
+  After the complete scan and default restoration, a
   second SHA256SUMS manifest is written at the scan root and verified.
 
 Resume options:
@@ -70,6 +84,11 @@ Examples:
   # Nested bias/VGAIN scan
   source vgain_scan.sh -output_folder data -bias_range "[30,0.5,31]" \
       -vgain_list "[1800,2000]" -channel 16 17 -L 2048 -N 1000 -ip 127.0.0.1 -port 50001
+
+  # DMA scan, with software triggers for both pedestal and data
+  bash vgain_scan.sh -folder dma_scan -vgain_list "[1700,1800]" -bias 0 \
+      -channel 0 1 -L 2048 -N 1000 -ip 127.0.0.1 -port 50001 \
+      --dma --force-acq -trigger_source software --yes
 EOF
 }
 
@@ -235,19 +254,40 @@ verify_point_checksum_manifest() {
     )
 }
 
+point_checksum_files() {
+    local folder="$1" data_channel
+    local -n files_ref="$2"
+    files_ref=(config.txt)
+    for data_channel in "${channel_list[@]}"; do
+        files_ref+=("channel_${data_channel}.dat")
+    done
+    if [[ "$backend" == dma ]]; then
+        local -a metadata_files=("$folder"/dma_metadata_*.jsonl)
+        if [[ ! -s "$folder/dma_format.json" || ${#metadata_files[@]} -ne 1 || ! -s "${metadata_files[0]}" ]]; then
+            fail "DMA point requires dma_format.json and exactly one nonempty dma_metadata_*.jsonl: $folder"
+            return 1
+        fi
+        files_ref+=(dma_format.json "${metadata_files[0]##*/}")
+    fi
+}
+
 validate_point_checksum_manifest_inventory() {
-    local folder="$1" manifest="$folder/SHA256SUMS"
+    local folder="$1"
+    local manifest="$folder/SHA256SUMS"
     local line filename data_channel entry_count=0
+    local checksum_pattern='^[0-9a-f]{64} [ *](.+)$'
     local -A expected_files=() seen_files=()
+    local -a point_files=()
 
     [[ -f "$manifest" ]] || return 1
-    expected_files[config.txt]=1
-    for data_channel in "${channel_list[@]}"; do
-        expected_files["channel_${data_channel}.dat"]=1
+    point_checksum_files "$folder" point_files || return 1
+    for filename in "${point_files[@]}"; do
+        expected_files["$filename"]=1
     done
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ ! "$line" =~ ^[0-9a-f]{64}\ \ (.+)$ ]]; then
+        line="${line%$'\r'}"
+        if [[ ! "$line" =~ $checksum_pattern ]]; then
             echo "ERROR: malformed SHA-256 entry in $manifest: $line" >&2
             return 1
         fi
@@ -280,13 +320,12 @@ validate_point_checksum_manifest_inventory() {
 write_point_checksum_manifest() {
     local folder="$1" data_channel
     local manifest_tmp="${folder}/.SHA256SUMS.tmp.$$"
+    local -a point_files=()
+    point_checksum_files "$folder" point_files || return 1
 
     (
         cd -- "$folder" || exit 1
-        sha256sum -- config.txt
-        for data_channel in "${channel_list[@]}"; do
-            sha256sum -- "channel_${data_channel}.dat"
-        done
+        sha256sum -- "${point_files[@]}"
     ) > "$manifest_tmp" || {
         rm -f -- "$manifest_tmp"
         return 1
@@ -330,7 +369,7 @@ write_scan_checksum_manifest() {
 
                 # Reuse the already-computed hashes of the large waveform files
                 # and make their paths relative to the scan root.
-                sed "s#  #  ${point_dir}/#" "$point_dir/SHA256SUMS" || exit 1
+                sed -E "s#^([0-9a-f]{64} [ *])#\1${point_dir}/#" "$point_dir/SHA256SUMS" || exit 1
                 sha256sum -- "$point_dir/SHA256SUMS" "$point_dir/.scan_point_complete" || exit 1
             done
         done
@@ -353,7 +392,7 @@ write_scan_metadata() {
     bias_csv=$(join_by_comma "${bias_array[@]}")
     vgain_csv=$(join_by_comma "${vgain_array[@]}")
     {
-        echo "format_version=1"
+        echo "format_version=2"
         echo "status=$scan_status_text"
         echo "created_utc=$scan_created_utc"
         echo "updated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -374,6 +413,13 @@ write_scan_metadata() {
         echo "trigger_source=$trigger_source"
         echo "route=$route"
         echo "timeout_ms=$timeout_ms"
+        echo "backend=$backend"
+        echo "capture_mode=$capture_mode"
+        echo "force_acq=$force_acq"
+        echo "pretrigger=$pretrigger"
+        echo "trigger_timeout_ms=$trigger_timeout_ms"
+        echo "job_timeout_ms=$job_timeout_ms"
+        echo "pressure_timeout_ms=$pressure_timeout_ms"
         echo "completed_points=$completed_points"
         echo "total_points=$total_points"
         echo "default_bias=0"
@@ -391,11 +437,13 @@ write_scan_metadata() {
 load_scan_metadata() {
     local key value format_version="" channel_csv="" bias_csv="" vgain_csv=""
     local saved_afe="" saved_checksum_algorithm=""
+    local -A capture_settings=()
     [[ -f "$metadata_file" ]] || {
         fail "resume metadata not found: $metadata_file"
         return 1
     }
     while IFS='=' read -r key value; do
+        value="${value%$'\r'}"
         case "$key" in
             format_version) format_version="$value" ;;
             status) scan_status_text="$value" ;;
@@ -418,11 +466,31 @@ load_scan_metadata() {
             route) route="$value" ;;
             timeout_ms) timeout_ms="$value" ;;
             checksum_algorithm) saved_checksum_algorithm="$value" ;;
+            backend|capture_mode|force_acq|pretrigger|trigger_timeout_ms|job_timeout_ms|pressure_timeout_ms)
+                capture_settings["$key"]="$value" ;;
         esac
     done < "$metadata_file"
 
-    if [[ "$format_version" != "1" || -z "$channel_csv" || -z "$bias_csv" || -z "$vgain_csv" || -z "$scan_created_utc" ]]; then
+    if [[ ( "$format_version" != "1" && "$format_version" != "2" ) || -z "$channel_csv" || -z "$bias_csv" || -z "$vgain_csv" || -z "$scan_created_utc" ]]; then
         fail "invalid or incomplete resume metadata: $metadata_file"
+        return 1
+    fi
+    if [[ "$format_version" == 2 ]]; then
+        for key in backend capture_mode force_acq pretrigger trigger_timeout_ms job_timeout_ms pressure_timeout_ms; do
+            if [[ -z "${capture_settings[$key]+present}" ]]; then
+                fail "missing $key in resume metadata: $metadata_file"
+                return 1
+            fi
+        done
+        backend="${capture_settings[backend]}"
+        capture_mode="${capture_settings[capture_mode]}"
+        force_acq="${capture_settings[force_acq]}"
+        pretrigger="${capture_settings[pretrigger]}"
+        trigger_timeout_ms="${capture_settings[trigger_timeout_ms]}"
+        job_timeout_ms="${capture_settings[job_timeout_ms]}"
+        pressure_timeout_ms="${capture_settings[pressure_timeout_ms]}"
+    elif (( ${#capture_settings[@]} )); then
+        fail "version 1 metadata cannot contain DMA settings: $metadata_file"
         return 1
     fi
     if [[ "$set_as_dac" != true && "$set_as_dac" != false ]]; then
@@ -449,6 +517,8 @@ point_data_files_have_expected_size() {
         actual_size=$(stat -c '%s' "$folder/channel_${data_channel}.dat" 2>/dev/null) || return 1
         [[ "$actual_size" == "$expected_size" ]] || return 1
     done
+    local -a point_files=()
+    point_checksum_files "$folder" point_files || return 1
     return 0
 }
 
@@ -534,6 +604,12 @@ confirm_scan_parameters() {
     echo "Waveforms / length:   $N / $L"
     echo "Connection:           $ip_addr:$port, route=$route, timeout=${timeout_ms}ms"
     echo "Trigger source:       $trigger_source"
+    echo "Backend:              $backend"
+    if [[ "$backend" == dma ]]; then
+        echo "DMA data:             $capture_mode, P=$pretrigger, force_acq=$force_acq"
+        echo "DMA deadlines (ms):   trigger=$trigger_timeout_ms, total=$job_timeout_ms, pressure=$pressure_timeout_ms"
+        echo "Pedestal acquisition: persistent, software, P=0, force_acq=$force_acq"
+    fi
     echo "Integrity check:      SHA-256 per point and for the complete scan"
     echo "Points:               $total_points total, $completed_points retained, $((total_points - completed_points)) to acquire"
     if [[ "$restore_only_mode" == true ]]; then
@@ -586,7 +662,7 @@ restore_default_configuration() {
         restore_failed=true
     fi
 
-    restore_pedestal_args=("${common_connection_args[@]}" -channel "${channel_list[@]}" --use-current-offset -target_pedestal 8192 -method regula_falsi --auto -L "$L")
+    restore_pedestal_args=("${common_connection_args[@]}" "${pedestal_backend_args[@]}" -channel "${channel_list[@]}" --use-current-offset -target_pedestal 8192 -method regula_falsi --auto -L "$L")
     if ! run_logged "$restore_log" "restore pedestal to 8192" \
         "$python_bin" "$client_dir/protobuf_configure_pedestal_level.py" "${restore_pedestal_args[@]}"; then
         restore_failed=true
@@ -645,6 +721,8 @@ scan_main() {
     local bias_list="" bias_range="" fixed_bias=""
     local trim="0" bias_control="0" ip_addr="" port="" N="" L=""
     local trigger_source_arg="" route="mezz/0" timeout_ms="30000"
+    local backend=spybuffer capture_mode=persistent force_acq=false pretrigger=0
+    local trigger_timeout_ms=10000 job_timeout_ms=0 pressure_timeout_ms=0 dma_option_seen=false
     local pedestal="8192" set_as_dac=false legacy_software_trigger=false
     local resume_mode=false assume_yes=false config_option_seen=false
     local metadata_file="" metadata_afe="" scan_created_utc=""
@@ -658,6 +736,7 @@ scan_main() {
     script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
     client_dir="${script_dir}/../client"
     local -a channel_list=() vgain_array=() bias_array=()
+    local -a pedestal_backend_args=() acquisition_backend_args=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -711,6 +790,20 @@ scan_main() {
                 require_value "$@" || return 1; route="$2"; config_option_seen=true; shift 2 ;;
             --timeout-ms|--timeout_ms)
                 require_value "$@" || return 1; timeout_ms="$2"; config_option_seen=true; shift 2 ;;
+            --dma)
+                backend=dma; config_option_seen=true; shift ;;
+            --force-acq|--force_acq)
+                force_acq=true; dma_option_seen=true; config_option_seen=true; shift ;;
+            --capture-mode)
+                require_value "$@" || return 1; capture_mode="$2"; dma_option_seen=true; config_option_seen=true; shift 2 ;;
+            --pretrigger)
+                require_value "$@" || return 1; pretrigger="$2"; dma_option_seen=true; config_option_seen=true; shift 2 ;;
+            --trigger-timeout-ms)
+                require_value "$@" || return 1; trigger_timeout_ms="$2"; dma_option_seen=true; config_option_seen=true; shift 2 ;;
+            --job-timeout-ms)
+                require_value "$@" || return 1; job_timeout_ms="$2"; dma_option_seen=true; config_option_seen=true; shift 2 ;;
+            --pressure-timeout-ms)
+                require_value "$@" || return 1; pressure_timeout_ms="$2"; dma_option_seen=true; config_option_seen=true; shift 2 ;;
             -multi_channel|--multi-channel)
                 echo "WARNING: -multi_channel is no longer needed; selected channels are handled automatically." >&2
                 config_option_seen=true; shift ;;
@@ -798,6 +891,61 @@ scan_main() {
         software|external|timing|all) ;;
         *) fail "invalid trigger source '$trigger_source' (expected software, external, timing, or all)"; return 1 ;;
     esac
+
+    case "$backend" in
+        dma|spybuffer) ;;
+        *) fail "invalid backend in scan metadata: $backend"; return 1 ;;
+    esac
+    if [[ "$force_acq" != true && "$force_acq" != false ]]; then
+        fail "invalid force_acq in scan metadata: $force_acq"; return 1
+    fi
+    case "$capture_mode" in
+        finite|triggered|persistent) ;;
+        *) fail "invalid DMA capture mode: $capture_mode"; return 1 ;;
+    esac
+    local numeric_value
+    for numeric_value in "$pretrigger" "$trigger_timeout_ms" "$job_timeout_ms" "$pressure_timeout_ms"; do
+        if [[ ! "$numeric_value" =~ ^[0-9]+$ || ${#numeric_value} -gt 12 ]]; then
+            fail "DMA pretrigger/deadlines must be nonnegative integers of at most 12 digits"; return 1
+        fi
+    done
+    # Normalize decimal values so Bash never interprets leading zeros as octal.
+    pretrigger=$((10#$pretrigger))
+    trigger_timeout_ms=$((10#$trigger_timeout_ms))
+    job_timeout_ms=$((10#$job_timeout_ms))
+    pressure_timeout_ms=$((10#$pressure_timeout_ms))
+    if [[ "$backend" == spybuffer ]]; then
+        if [[ "$dma_option_seen" == true || "$force_acq" == true || "$capture_mode" != persistent ]] ||
+                (( pretrigger || trigger_timeout_ms != 10000 || job_timeout_ms || pressure_timeout_ms )); then
+            fail "DMA capture options require --dma"; return 1
+        fi
+    else
+        if [[ "$trigger_source" == all ]]; then
+            fail "DMA supports software, external and timing; trigger source all is unavailable"; return 1
+        fi
+        if (( pretrigger >= L || trigger_timeout_ms < 10 || trigger_timeout_ms > 600000 ||
+                (job_timeout_ms > 0 && job_timeout_ms < 10) )); then
+            fail "DMA requires 0 <= P < L, trigger timeout 10..600000 ms and total deadline 0 or >=10 ms"; return 1
+        fi
+        if [[ "$capture_mode" == finite && ( "$trigger_source" != software || "$pretrigger" != 0 ) ]]; then
+            fail "Finite DMA requires software trigger and P=0"; return 1
+        fi
+        if (( pressure_timeout_ms )) && { [[ "$capture_mode" != persistent ]] ||
+                (( pressure_timeout_ms < 10 || pressure_timeout_ms > 600000 )); }; then
+            fail "Pressure timeout requires persistent DMA and 10..600000 ms"; return 1
+        fi
+        if [[ "$capture_mode" == persistent ]] && (( job_timeout_ms > 604800000 )); then
+            fail "Persistent DMA total deadline cannot exceed 7 days"; return 1
+        fi
+        pedestal_backend_args=(--dma)
+        acquisition_backend_args=(--dma --capture-mode "$capture_mode" --pretrigger "$pretrigger"
+            --trigger-timeout-ms "$trigger_timeout_ms" --job-timeout-ms "$job_timeout_ms"
+            --pressure-timeout-ms "$pressure_timeout_ms")
+        if [[ "$force_acq" == true ]]; then
+            pedestal_backend_args+=(--force-acq)
+            acquisition_backend_args+=(--force-acq)
+        fi
+    fi
 
     if [[ "$resume_mode" != true ]]; then
         local vgain_selectors=0 bias_selectors=0
@@ -1008,6 +1156,18 @@ scan_main() {
                 echo "pedestal_mode=auto"
                 echo "pedestal_initial_offset=current"
                 echo "trigger_source=$trigger_source"
+                echo "backend=$backend"
+                if [[ "$backend" == dma ]]; then
+                    echo "capture_mode=$capture_mode"
+                    echo "pretrigger=$pretrigger"
+                    echo "force_acq=$force_acq"
+                    echo "trigger_timeout_ms=$trigger_timeout_ms"
+                    echo "job_timeout_ms=$job_timeout_ms"
+                    echo "pressure_timeout_ms=$pressure_timeout_ms"
+                    echo "pedestal_capture_mode=persistent"
+                    echo "pedestal_trigger_source=software"
+                    echo "pedestal_pretrigger=0"
+                fi
                 echo "route=$route"
                 echo "bias_mode=$bias_mode"
                 echo "vgain_mode=$vgain_mode"
@@ -1021,7 +1181,7 @@ scan_main() {
             run_logged "$config_file" "configure VGAIN" \
                 "$python_bin" "$client_dir/protobuf_configure_vgain.py" "${vgain_args[@]}" || return 1
 
-            pedestal_args=("${common_connection_args[@]}" -channel "${channel_list[@]}" --use-current-offset -target_pedestal "$pedestal" -method regula_falsi --auto -L "$L")
+            pedestal_args=("${common_connection_args[@]}" "${pedestal_backend_args[@]}" -channel "${channel_list[@]}" --use-current-offset -target_pedestal "$pedestal" -method regula_falsi --auto -L "$L")
             run_logged "$config_file" "configure pedestal OFFSETs" \
                 "$python_bin" "$client_dir/protobuf_configure_pedestal_level.py" "${pedestal_args[@]}" || return 1
 
@@ -1042,6 +1202,7 @@ scan_main() {
             } >> "$config_file"
 
             if ! run_external_command "$python_bin" "$client_dir/protobuf_acquire_list_channels.py" \
+                "${acquisition_backend_args[@]}" \
                 -ip "$ip_addr" \
                 -port "$port" \
                 -route "$route" \

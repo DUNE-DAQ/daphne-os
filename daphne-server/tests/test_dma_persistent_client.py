@@ -114,6 +114,56 @@ class StreamServer(FakeServer):
 
 
 class PedestalDmaTests(unittest.TestCase):
+    def test_pedestal_deferred_sigterm_cancels_after_rpc_returns(self):
+        import signal
+        from dma_cli_signals import DmaCliSignals
+        import protobuf_configure_pedestal_level as pedestal
+        server = StreamServer()
+        original = server.rpc
+        returned = []
+
+        def rpc(message_type, request, *rest):
+            response = original(message_type, request, *rest)
+            if message_type == pb.MT2_DMA_READ_REQ:
+                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+                returned.append(True)
+            if message_type == pb.MT2_DMA_CONTROL_REQ and request.action == pb.DMA_CANCEL:
+                self.assertTrue(returned)
+            return response
+
+        with DmaCliSignals() as signals:
+            client = DmaClient(pb, rpc, stop_checker=signals.stop_requested)
+            with self.assertRaisesRegex(InterruptedError, 'DMA acquisition stopped'):
+                pedestal._measure_pedestals_dma(client, [0], 4)
+        self.assertTrue(server.cancelled)
+        self.assertIsNone(client.job_id)
+
+    def test_file_cli_deferred_sigterm_cancels_session(self):
+        import signal
+        server = StreamServer()
+        original = server.rpc
+
+        def rpc(message_type, request, *rest):
+            response = original(message_type, request, *rest)
+            if message_type == pb.MT2_DMA_READ_REQ:
+                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+            return response
+
+        class Transport:
+            def __init__(self, *args, **kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+        Transport.rpc = staticmethod(rpc)
+        with tempfile.TemporaryDirectory(dir=ROOT.parent / 'build') as folder, patch('dma_acquire_cli.V2Client', Transport):
+            args = SimpleNamespace(v2=True, legacy=False, legacy_only=False, channel_list=['0'], N=500,
+                L=4, chunk=10, foldername=folder, ip='fake', port=1, route='mezz/0', timeout_ms=1000,
+                trigger_source='software', append_data=False, compress=False, capture_mode='persistent',
+                pretrigger=0, trigger_timeout_ms=30000, job_timeout_ms=0, pressure_timeout_ms=0)
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaisesRegex(InterruptedError, 'DMA acquisition stopped'):
+                run_dma_acquire(args, pb)
+        self.assertTrue(server.cancelled)
+        self.assertEqual(server.acked, 0)
+
     def make_client(self, server, echo_force=True):
         original = server.rpc
 
