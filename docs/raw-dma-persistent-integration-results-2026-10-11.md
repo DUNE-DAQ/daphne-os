@@ -4,7 +4,7 @@ Estado: implementación y builds verificados; **despliegue y campaña persistent
 
 ## Fuentes y contrato
 
-Implementación local en `C:/Users/e_cri/Documents/DAPHNE/daphne-os`:
+Implementación local en la raíz del checkout `daphne-os/`:
 
 - `f644d40`: protobuf revisión 3, IDs y progreso persistentes.
 - `6ebb9f9`: engine UAPI, staging acotado, servidor y pruebas C++/ZeroMQ.

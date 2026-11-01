@@ -93,9 +93,11 @@ una ruta y 3,94 s para tres. Esas mediciones no incluyen protobuf ni red.
 CH0/1 ocupan una sola ruta. Las tres rutas se terminan secuencialmente.
 
 Esto coincide con el diagnóstico del proveedor en el
-[informe físico del firmware](../../daphne-firmware/docs/afe-dma-trigger-1d17a11-board-test-2026-10-11.md)
+informe físico del firmware (`docs/afe-dma-trigger-1d17a11-board-test-2026-10-11.md`
+del repositorio hermano `daphne-firmware`)
 y la etapa T6 del
-[plan de integración](../../daphne-firmware/docs/daphne-os-trigger-pretrigger-integration-instructions.md).
+plan de integración (`docs/daphne-os-trigger-pretrigger-integration-instructions.md`
+de ese repositorio). Son referencias externas a este checkout OS.
 La atribución dominante a stop/reset se apoya en código, logs y tiempos;
 no se ha realizado un perfil por función en este ensayo.
 

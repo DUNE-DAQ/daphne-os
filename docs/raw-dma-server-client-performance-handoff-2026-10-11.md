@@ -63,8 +63,8 @@ positivo; no se pidió un modo indefinido con N=0.
 ## Estado del repositorio
 
 PC Windows, PowerShell. Raíz:
-`C:/Users/e_cri/Documents/DAPHNE/daphne-os`.
-Firmware hermano: `C:/Users/e_cri/Documents/DAPHNE/daphne-firmware`.
+`daphne-os/` (raíz del checkout).
+Firmware hermano: `../daphne-firmware/`, respecto de esa raíz.
 Rama al redactar: `codex/afe0-synthetic-config`; base documental anterior a este
 traspaso: `371b642`. El nombre de rama es histórico, no limita el scope a AFE0.
 
@@ -237,7 +237,7 @@ El usuario dio este comando. Ejemplo desde la raíz del repositorio; **no ejecut
 al leer este traspaso ni reconfigurar una sesión alineada sin necesidad**:
 
 ```powershell
-$taskPython = 'C:/Users/e_cri/miniconda3/python.exe'
+$taskPython = 'python' # Intérprete del entorno activo, con las dependencias indicadas abajo.
 $env:DAPHNE_PROTO_PYTHON_DIR = "$PWD/build/dma-server/srcs/protobuf"
 & $taskPython .\daphne-server\client\configure_fe_min_v2.py `
   -ip 193.206.157.36 -port 40001 --route mezz/0 `
@@ -289,7 +289,7 @@ cmake --build build/dma-server --parallel 2
 ctest --test-dir build/dma-server --output-on-failure
 ```
 
-En PC se usó C:/Users/e_cri/miniconda3/python.exe con numpy, PyQt6/pyqtgraph,
+En PC se usó Python de Miniconda con numpy, PyQt6/pyqtgraph,
 protobuf y ZeroMQ. Qt puede probarse offscreen; verificar con datos simulados
 y después con capturas reales. Hardware, builds e instalaciones son pasos
 distintos; un binario compilado no prueba integración física.

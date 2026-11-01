@@ -13,9 +13,10 @@ Las secciones siguientes conservan el contrato técnico y la evidencia históric
 de P3/P4 del 2026-10-11. Sus referencias a integración, instalación o pruebas
 pendientes corresponden a esa fecha; el informe del 2026-10-12 las actualiza.
 
-El [informe P3 de firmware/driver](../../daphne-firmware/docs/raw-dma-persistent-mmio-driver-2026-10-11.md)
+El informe P3 de firmware/driver (`docs/raw-dma-persistent-mmio-driver-2026-10-11.md`
+del repositorio hermano `daphne-firmware`)
 contiene MMIO, semántica, evidencia y gates físicos. El
-[diseño P1](../../daphne-firmware/docs/raw-dma-persistent-session-design-2026-10-11.md)
+diseño P1 (`docs/raw-dma-persistent-session-design-2026-10-11.md` de ese repositorio)
 define la protección de bloques DDR. Este documento concreta cómo consumir
 la extensión, después de cualificarla en placa.
 
@@ -151,7 +152,8 @@ kernel/placa y mide sin red; P6 adapta servidor/protobuf/clientes y ACK/lease.
 
 ## Actualización P4: integración de placa
 
-El [informe de integración firmware/driver](../../daphne-firmware/docs/raw-dma-persistent-board-integration-2026-10-11.md)
+El informe de integración firmware/driver
+(`docs/raw-dma-persistent-board-integration-2026-10-11.md` del repositorio hermano `daphne-firmware`)
 registra el candidato preparado para síntesis. Se habilita explícitamente con
 raw-dma + DAPHNE_DMA_SESSION=1; todavía no está desplegado. FEATURES bits 3/4
 acreditan límites físicos verificados y prueba viva de reposo, además de los

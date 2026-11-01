@@ -2,13 +2,13 @@
 
 ## Resultado
 
-**Punto 3 cerrado: diagnÛstico Linux con proveedor corregido.**
-El usuario aceptÛ la calificaciÛn de placa existente y solicitÛ el cierre
-con comprobaciones mÌnimas, sin repetir la campaÒa exhaustiva.
-El cierre corresponde al cÛdigo y al proveedor corregido ensayado. La imagen
+**Punto 3 cerrado: diagn√≥stico Linux con proveedor corregido.**
+El usuario acept√≥ la calificaci√≥n de placa existente y solicit√≥ el cierre
+con comprobaciones m√≠nimas, sin repetir la campa√±a exhaustiva.
+El cierre corresponde al c√≥digo y al proveedor corregido ensayado. La imagen
 que use DMA debe incorporar el parche; el kernel habitual instalado conserva
-el defecto de ABORT y no queda calificado para DMA. No se reconstruyÛ ni
-reemplazÛ ese kernel para este cierre.
+el defecto de ABORT y no queda calificado para DMA. No se reconstruy√≥ ni
+reemplaz√≥ ese kernel para este cierre.
 
 Se verificaron 372 capturas de ruta y 12 323 858 816 bytes de payload, incluidos
 STOP con drenado. Hay transferencias individuales y simult√°neas, seeds con wrap,
@@ -203,17 +203,17 @@ validar el handoff antes de instalar. La opci√≥n de esa imagen permite
 no equivale a despliegue ni calificaci√≥n de una imagen reconstruida completa.
 
 Al instalar una imagen experimental, comprobar identidad y realizar un smoke
-breve de captura, ABORT/reapertura y restauraciÛn con el proveedor corregido.
-No se requiere repetir esta campaÒa exhaustiva para cerrar el punto 3.
+breve de captura, ABORT/reapertura y restauraci√≥n con el proveedor corregido.
+No se requiere repetir esta campa√±a exhaustiva para cerrar el punto 3.
 Los puntos 5 y 7 conservan sus dependencias: captura del punto 4 y
 ownership/continuidad de los puntos 5/6. Captura AFE, anillo y transporte de
-adquisiciÛn siguen pendientes.
+adquisici√≥n siguen pendientes.
 
-Comprobaciones mÌnimas de cierre: 2/2 tests DMA PASS, incluida selecciÛn omitida;
-cliente recompilado con SHA idÈntico al ensayado; parche aplicable a la fuente
-exacta; bundle verificado y cÛdigo funcional sin cambios respecto al calificado.
+Comprobaciones m√≠nimas de cierre: 2/2 tests DMA PASS, incluida selecci√≥n omitida;
+cliente recompilado con SHA id√©ntico al ensayado; parche aplicable a la fuente
+exacta; bundle verificado y c√≥digo funcional sin cambios respecto al calificado.
 DAPHNE mantiene el boot ID, servicios habituales activos, CMA libre 515080 kB
-y ausencia de mÛdulos/nodos experimentales. No se cargÛ otra imagen para este cierre.
+y ausencia de m√≥dulos/nodos experimentales. No se carg√≥ otra imagen para este cierre.
 
 ## Evidencia reproducible
 

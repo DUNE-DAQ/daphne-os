@@ -69,9 +69,11 @@ Referencias de implementación y ensayos:
 - [Contrato actual de clientes](raw-dma-trigger-client-integration.md).
 - [Driver actual](raw-dma-trigger-driver.md) y
   [UAPI actual](../daphne-server/kernel/daphne-afe-dma/daphne_afe_dma_uapi.h).
-- [Instrucciones de integración del firmware](../../daphne-firmware/docs/daphne-os-trigger-pretrigger-integration-instructions.md).
-- [Informe físico del firmware](../../daphne-firmware/docs/afe-dma-trigger-1d17a11-board-test-2026-10-11.md).
-- [Diseño previo de descarga con slots/créditos](../../daphne-firmware/docs/afe-full-dma-capture-brainstorm.md).
+- Instrucciones de integración del firmware: `docs/daphne-os-trigger-pretrigger-integration-instructions.md` del repositorio hermano `daphne-firmware`.
+- Informe físico del firmware: `docs/afe-dma-trigger-1d17a11-board-test-2026-10-11.md` de `daphne-firmware`.
+- Diseño previo de descarga con slots/créditos: `docs/afe-full-dma-capture-brainstorm.md` de `daphne-firmware`.
+
+Esas tres referencias documentales externas no se incluyen en este checkout OS.
 
 El diseño previo de chunks continuos aporta la propiedad de slots y el análisis
 de caudales. Su regla de no delimitar ventanas por triggers no se traslada aquí:
