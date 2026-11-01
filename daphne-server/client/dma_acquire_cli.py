@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tarfile
 import subprocess
+import sys
 import uuid
 import time
 from dma_client import DmaClient
@@ -93,8 +94,16 @@ def run_dma_acquire(args, pb):
                         'read_rpc_s': client._stream_read_rpc_ns/1e9, 'validation_decode_s': client._stream_decode_ns/1e9,
                         'disk_write_flush_s': disk_write_s}) + '\n')
         finally:
+            original_error = sys.exc_info()[1]
             try:
-                client.cancel()
+                try:
+                    client.cancel()
+                except Exception as cleanup:
+                    if original_error is not None:
+                        raise RuntimeError(
+                            f"{original_error}; DMA cleanup unconfirmed: {cleanup}"
+                        ) from original_error
+                    raise
             finally:
                 for f in files.values():
                     f.close()

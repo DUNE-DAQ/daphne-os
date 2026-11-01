@@ -99,6 +99,32 @@ evento, offsets de append y resultado final, con tiempos de cliente total,
 READ RPC (incluye transporte/serialización), validación/decoder y escritura/flush.
 Flush no es un benchmark de persistencia física mediante fsync.
 
+### Timeout de transporte y respuestas tardías
+
+`--timeout_ms` limita cada RPC de transporte; `--trigger-timeout-ms` limita la
+espera de evento en el driver. Son plazos distintos: un timeout de transporte
+no demuestra que haya vencido el timeout de trigger ni que una operación del
+servidor no se haya ejecutado.
+
+Si vence un RPC enviado, su respuesta puede llegar mientras el cliente espera
+la respuesta de CANCEL. El transporte conserva hasta 64 IDs de peticiones
+vencidas y descarta sólo sus respuestas tardías, sin reiniciar el plazo del RPC
+actual. Un ID desconocido sigue produciendo error de correlación. No se repiten
+READ ni ACK y la adquisición aborta tras el timeout; esta lógica permite que la
+limpieza reciba su propia respuesta sin aceptar datos de una petición anterior.
+
+El error de timeout identifica tipo de petición, msg_id y timeout de transporte,
+y distingue envío de espera de respuesta. Si también falla la limpieza, la CLI
+conserva el error original junto con `DMA cleanup unconfirmed` y su causa.
+La advertencia `AFE readback policy=warn` no explica por sí sola un fallo RPC.
+
+La barra de progreso avanza después del ACK. Si falla ese ACK, puede existir
+un lote escrito en disco que todavía no aparece en la barra. Un fichero de
+tamaño esperado no acredita por sí solo una sesión finalizada; revisar también
+el resultado final del JSONL. Para repetir una adquisición fallida, preservar
+su carpeta y usar otra de salida. Aumentar `--timeout_ms` puede servir para
+diagnosticar demoras, pero no prueba su causa ni corrige una respuesta ausente.
+
 `osc.py --dma` usa siempre una sesión persistente; las opciones antiguas
 `--capture-mode finite` y `triggered` se convierten al modo persistente en el
 osciloscopio. `--max_waveforms 0` es el default y recibe hasta que el usuario

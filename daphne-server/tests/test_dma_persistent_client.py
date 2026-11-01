@@ -114,6 +114,35 @@ class StreamServer(FakeServer):
 
 
 class PedestalDmaTests(unittest.TestCase):
+    def test_file_cli_preserves_ack_timeout_when_cleanup_also_fails(self):
+        server = StreamServer()
+        client = DmaClient(pb, server.rpc)
+
+        class Transport:
+            def __init__(self, *args, **kwargs): pass
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            rpc = staticmethod(server.rpc)
+
+        with tempfile.TemporaryDirectory(dir=ROOT.parent / 'build') as folder, \
+                patch('dma_acquire_cli.V2Client', Transport), \
+                patch('dma_acquire_cli.DmaClient', return_value=client):
+            args = SimpleNamespace(v2=True, legacy=False, legacy_only=False, channel_list=['0'], N=1,
+                L=4, chunk=1, foldername=folder, ip='fake', port=1, route='mezz/0', timeout_ms=10000,
+                trigger_source='software', append_data=False, compress=False, capture_mode='persistent',
+                pretrigger=0, trigger_timeout_ms=30000, job_timeout_ms=0, pressure_timeout_ms=0)
+            with patch.object(client, 'ack_batch', side_effect=TimeoutError('ACK timed out')), \
+                    patch.object(client, 'cancel', side_effect=RuntimeError('cleanup correlation error')), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaisesRegex(RuntimeError, 'ACK timed out; DMA cleanup unconfirmed: cleanup correlation error') as caught:
+                    run_dma_acquire(args, pb)
+            self.assertIsInstance(caught.exception.__cause__, TimeoutError)
+            # A timeout during ACK can leave a written final batch even though
+            # progress did not advance. Do not present the file as complete.
+            self.assertEqual((Path(folder) / 'channel_0.dat').stat().st_size, 8)
+            self.assertEqual(server.acked, 0)
+            client.cancel()
+
     def test_pedestal_deferred_sigterm_cancels_after_rpc_returns(self):
         import signal
         from dma_cli_signals import DmaCliSignals
