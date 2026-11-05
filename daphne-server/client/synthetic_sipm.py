@@ -2,6 +2,7 @@
 """Configure or read the optional AFE0 CH0 synthetic SiPM generator."""
 
 import argparse
+from identity_cli import add_identity_argument
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 import json
 import sys
@@ -91,6 +92,7 @@ def build_parser():
     parser.add_argument("-port", "--port", type=int, default=9876)
     parser.add_argument("--route", default="mezz/0")
     parser.add_argument("--timeout-ms", type=int, default=5000)
+    add_identity_argument(parser, default='synthetic-sipm-client')
     commands = parser.add_subparsers(dest="command", required=True)
     configure = commands.add_parser("configure", help="Write all three fields and verify readback.")
     configure.add_argument(
@@ -115,7 +117,7 @@ def main(argv=None):
         pb, _ = load_protobuf_modules(require_synthetic_sipm=True)
         with V2Client(
             pb, args.ip, args.port, route=args.route,
-            timeout_ms=args.timeout_ms, identity="synthetic-sipm-client"
+            timeout_ms=args.timeout_ms, identity=args.identity
         ) as client:
             if args.command == "read":
                 snapshot = read_configuration(pb, client)

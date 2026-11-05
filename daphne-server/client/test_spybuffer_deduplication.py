@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 from array import array
 from collections import deque
 import hashlib
@@ -119,10 +120,11 @@ def make_socket(
     endpoint: str,
     timeout_ms: int,
     generation: int,
+    identity=None,
 ) -> zmq.Socket:
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.LINGER, 0)
-    identity = f"spy-dedup-{uuid.uuid4()}-{generation}".encode("ascii")
+    identity = (f"{identity}-{generation}" if identity else f"spy-dedup-{uuid.uuid4()}-{generation}").encode("utf-8")
     socket.setsockopt(zmq.IDENTITY, identity)
     socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
     socket.setsockopt(zmq.SNDTIMEO, timeout_ms)
@@ -283,6 +285,7 @@ def main() -> int:
         default=0,
         help="Stop after this many waveforms; 0 keeps the test running indefinitely.",
     )
+    add_identity_argument(parser, default=None)
     args = parser.parse_args()
 
     if args.expected_rate_hz <= 0:
@@ -326,7 +329,7 @@ def main() -> int:
 
     context = zmq.Context()
     socket_generation = 0
-    socket = make_socket(context, endpoint, timeout_ms, socket_generation)
+    socket = make_socket(context, endpoint, timeout_ms, socket_generation, args.identity)
 
     host_times: deque[float] = deque(maxlen=args.window + 1)
     timestamp_deltas: deque[int] = deque(maxlen=args.window)
@@ -360,7 +363,7 @@ def main() -> int:
                 socket.close(0)
                 socket_generation += 1
                 socket = make_socket(
-                    context, endpoint, timeout_ms, socket_generation
+                    context, endpoint, timeout_ms, socket_generation, args.identity
                 )
                 continue
             except Exception as error:

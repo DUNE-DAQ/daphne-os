@@ -15,17 +15,19 @@ sys.path.insert(0, str(ROOT/'daphne-server/client'))
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 from PyQt6 import QtWidgets
 import osc
+from identity_cli import add_identity_argument
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--early-close', action='store_true')
+add_identity_argument(parser, default='osc-persistent-live-20261012')
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 settings = SimpleNamespace(ip='193.206.157.36', port=40001, channels=[39, 0, 17], channel=0, L=32000,
     trigger_source='software', software_trigger=True, timeout_ms=10000, sampling_rate_hz=62.5e6,
     route='mezz/0', fft_every=1, autoscale=True, enable_fft=False, fft_channel=None,
     enable_charge_hist=False, disable_rms=False, rms_window=100, save_dir=str(args.output/'saved'), dma=True,
-    capture_mode='persistent', pretrigger=4096, identity='osc-persistent-live-20261012', period_ms=100,
+    capture_mode='persistent', pretrigger=4096, identity=args.identity, period_ms=100,
     max_waveforms=37, ui_period_ms=33, fft_full_scale_counts=16384, fft_keep_dc=False,
     fft_window_function='hann', trigger_timeout_ms=30000, job_timeout_ms=60000, pressure_timeout_ms=0,
     append_data=False, save_queue_frames=16, flush_every_frames=1, run_label='persistent-physical-37', run_notes='')

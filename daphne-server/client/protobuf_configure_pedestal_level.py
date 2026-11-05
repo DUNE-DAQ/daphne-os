@@ -2,6 +2,7 @@
 """Tune channel OFFSET DACs to a requested 14-bit pedestal level."""
 
 import argparse
+from identity_cli import add_identity_argument
 from dataclasses import dataclass, field
 import math
 import sys
@@ -1064,7 +1065,7 @@ def build_parser():
     parser.add_argument(
         "--timeout-ms", "--timeout_ms", type=positive_int, default=30000
     )
-    parser.add_argument("--identity", default="configure-pedestal-v2")
+    add_identity_argument(parser, default='configure-pedestal-v2')
     return parser
 
 

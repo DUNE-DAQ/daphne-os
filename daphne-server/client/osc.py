@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import json
 import os
 import queue
@@ -1619,7 +1620,7 @@ def main():
     parser.add_argument("--fft_every", type=int, default=2, help="Publish FFT update every N acquired waveforms")
     parser.add_argument("--autoscale", action="store_true", help="Continuously autoscale waveform Y range")
     parser.add_argument("-timeout_ms", type=int, default=1000, help="ZMQ recv/snd timeout (ms)")
-    parser.add_argument("-identity", type=str, default="osc-client", help="DEALER identity")
+    add_identity_argument(parser, default='osc-client')
     parser.add_argument("--route", type=str, default="mezz/0", help="Optional logical route target")
     parser.add_argument("--sampling_rate_hz", type=float, default=62.5e6, help="Sample rate used for FFT axis")
     parser.add_argument("--rms_window", type=int, default=100, help="Waveforms used for rolling live RMS")

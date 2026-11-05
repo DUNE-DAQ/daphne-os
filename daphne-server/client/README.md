@@ -4,6 +4,36 @@ Use Python 3.10 or newer. The requirements include the transport, protobuf
 compiler/runtime, analysis tools, and the Qt oscilloscope dependencies.
 Run the following commands from `daphne-server/`.
 
+## Client identities
+
+ZeroMQ clients accept `--identity NAME` and the alias `-identity NAME`, including
+both acquisition backends. Existing defaults are preserved when the option is
+omitted. Choose different identities for simultaneous clients of the same server.
+An identity contains 1 to 255 UTF-8 bytes and cannot start with NUL.
+
+```bash
+python client/osc.py -ip 127.0.0.1 -port 40001 -L 1024 \
+  --channels 0,1 --trigger-source timing --identity scope-alice
+python client/protobuf_acquire_list_channels.py -ip 127.0.0.1 -port 40001 \
+  -foldername output/run1 -channel_list 0,1 -L 1024 -N 100 \
+  --trigger-source timing --identity acquire-bob
+```
+
+Bash scan runners accept the same flags. The PowerShell VGAIN runner accepts
+`-Identity NAME`. Runners propagate the base through `DAPHNE_IDENTITY`; each
+Python child appends its process ID. Python LED scans derive a unique identity
+for each child invocation. This includes configuration, readback, acquisition
+and restoration. An explicit client flag overrides the inherited value.
+On resume, supply the desired identity again; it is a connection option and is
+independent of the saved acquisition plan.
+
+Tools with several connections derive role suffixes from the supplied name.
+For example, `osc.py` uses `NAME-trigger-config` for setup and `NAME` for
+acquisition. Leave room within the 255-byte limit for these suffixes.
+
+Identities select the destination of replies. The hardware and trigger source
+remain shared between clients; identities do not reserve an acquisition.
+
 ## Windows / PowerShell
 
 ```powershell

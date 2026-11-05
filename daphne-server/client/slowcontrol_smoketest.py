@@ -16,6 +16,7 @@ configure/align/spybuffer are opt-in via CLI flags.
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import json
 import os
 import random
@@ -269,10 +270,11 @@ def main():
     parser.add_argument("--spybuffer-samples", type=int, default=32, help="Samples per waveform (default 32)")
     parser.add_argument("--counter-channels", nargs="*", type=int, default=[], help="Trigger counter channels (empty=all)")
 
+    add_identity_argument(parser, default=None)
     args = parser.parse_args()
 
     endpoint = f"tcp://{args.ip}:{args.port}"
-    sock = make_dealer(endpoint)
+    sock = make_dealer(endpoint, args.identity.encode("utf-8") if args.identity else None)
 
     # Always run the non-invasive checks
     do_test_reg(sock, args.route, args.timeout_ms)

@@ -8,6 +8,7 @@ explicitly with CLI flags.
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import json
 import os
 import random
@@ -158,7 +159,7 @@ def main() -> int:
     ap.add_argument("-ip", default="127.0.0.1", help="Server IP")
     ap.add_argument("-port", type=int, default=9876, help="Server port")
     ap.add_argument("--route", default="mezz/0", help="EnvelopeV2 route")
-    ap.add_argument("--identity", default="proto-full-test", help="ZMQ identity")
+    add_identity_argument(ap, default='proto-full-test')
     ap.add_argument("--timeout_ms", type=int, default=5000, help="Per-request timeout (ms)")
 
     ap.add_argument("--channels", nargs="+", default=["0"], help="Channel list for single-CH ops (e.g. 0 1 2 or 0,1,2)")

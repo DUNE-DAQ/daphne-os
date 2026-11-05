@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import os
 import sys
 import time
@@ -80,7 +81,7 @@ def main() -> int:
     ap.add_argument("--threshold", type=lambda s: int(s, 0), required=True, help="Threshold to send, e.g. 0x1200")
     ap.add_argument("--channels", default="0", help="Channel list/range, e.g. 0,3,5-7")
     ap.add_argument("--timeout", type=int, default=15000)
-    ap.add_argument("--identity", default="client:thr14")
+    add_identity_argument(ap, default='client:thr14')
     args = ap.parse_args()
 
     channels = parse_channels(args.channels)

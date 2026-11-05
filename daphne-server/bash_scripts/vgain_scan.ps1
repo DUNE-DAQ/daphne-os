@@ -32,8 +32,17 @@ param(
     [int] $Trim = 0,
 
     [Parameter(Mandatory=$false)]
-    [double] $BiasControl = 0.0
+    [double] $BiasControl = 0.0,
+
+    [ValidateNotNullOrEmpty()]
+    [string] $Identity
 )
+
+$previousDaphneIdentity = $env:DAPHNE_IDENTITY
+try {
+if ($PSBoundParameters.ContainsKey("Identity")) {
+    $env:DAPHNE_IDENTITY = $Identity
+}
 
 function Show-Help {
     Write-Host "Usage: .\vgain_scan.ps1 -OutputFolder <output_folder> -VGainList <vgain_list> -Channel <channel> [-Bias <bias>] [-Trim <trim>] [-BiasControl <bias_control>] [-Help]"
@@ -102,3 +111,11 @@ Write-Host "Vgain scan completed. All output files are stored in: $OutputFolder"
 # & python "..\client\protobuf_configure_vgain_trim.py" `
 #     -ip 193.206.157.36 -port 9000 `
 #     -channel $Channel -bias 0 -trim 0 -bias_control 0
+
+} finally {
+    if ($null -eq $previousDaphneIdentity) {
+        Remove-Item Env:DAPHNE_IDENTITY -ErrorAction SilentlyContinue
+    } else {
+        $env:DAPHNE_IDENTITY = $previousDaphneIdentity
+    }
+}

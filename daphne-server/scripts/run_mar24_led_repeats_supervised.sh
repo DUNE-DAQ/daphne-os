@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../utils/identity_cli.sh" || exit 1
+parse_daphne_identity "$@" || exit $?
+set -- "${DAPHNE_CLIENT_ARGS[@]}"
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

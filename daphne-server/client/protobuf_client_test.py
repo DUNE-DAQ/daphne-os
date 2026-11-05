@@ -3,6 +3,7 @@ import json
 import sys
 import os
 import argparse
+from identity_cli import add_identity_argument
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -26,11 +27,12 @@ parser = argparse.ArgumentParser(description="DAPHNE Configuration.")
 parser.add_argument("-ip", type=str, default="127.0.0.1", help="IP address of DAPHNE (default 127.0.0.1).")
 parser.add_argument("-port", type=int, required=False, default=9876, help="Port number of DAPHNE. Default 9876.")
 # Parse arguments
+add_identity_argument(parser, default='client-compat')
 args = parser.parse_args()
 
 context = zmq.Context()
 socket = context.socket(zmq.DEALER)
-socket.setsockopt(zmq.IDENTITY, b"client-compat")
+socket.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
 ip_addr = "tcp://{}:{}".format(args.ip, args.port)
 socket.connect(ip_addr)
 

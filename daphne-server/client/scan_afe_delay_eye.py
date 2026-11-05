@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import csv
 from contextlib import nullcontext
 from dataclasses import asdict
@@ -169,12 +170,14 @@ def make_socket(
     endpoint: str,
     timeout_ms: int,
     identity_prefix: str,
+    identity=None,
 ):
+    prefix = f"{identity}-{identity_prefix}" if identity else identity_prefix
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.LINGER, 0)
     socket.setsockopt(
         zmq.IDENTITY,
-        f"{identity_prefix}-{uuid.uuid4()}".encode("ascii"),
+        f"{prefix}-{uuid.uuid4()}".encode("utf-8"),
     )
     socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
     socket.setsockopt(zmq.SNDTIMEO, timeout_ms)
@@ -223,12 +226,14 @@ def run_sweep(
         endpoint,
         args.timeout_ms,
         "afe-delay-trigger-control",
+        identity=getattr(args, "identity", None),
     )
     sweep_socket = make_socket(
         context,
         endpoint,
         args.timeout_ms,
         "afe-delay-sweep",
+        identity=getattr(args, "identity", None),
     )
 
     request = pb.AfeDelaySweepRequest()
@@ -500,6 +505,7 @@ def apply_timing_settings(pb, args, settings: list[dict]) -> dict:
         endpoint,
         args.timeout_ms,
         "afe-delay-apply-best",
+        identity=getattr(args, "identity", None),
     )
     try:
         request = pb.WriteAfeTimingRequest()
@@ -1047,6 +1053,7 @@ def main() -> int:
             "and eye plots. By default no artifacts are generated."
         ),
     )
+    add_identity_argument(parser, default=None)
     args = parser.parse_args()
 
     try:

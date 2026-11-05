@@ -2,6 +2,7 @@
 """Configure one or all AFE VGAIN values through the V2 server API."""
 
 import argparse
+from identity_cli import add_identity_argument
 import sys
 
 import zmq
@@ -35,7 +36,7 @@ def build_parser():
     parser.add_argument(
         "--timeout-ms", "--timeout_ms", type=int, default=5000
     )
-    parser.add_argument("--identity", default="configure-vgain-v2")
+    add_identity_argument(parser, default='configure-vgain-v2')
     return parser
 
 

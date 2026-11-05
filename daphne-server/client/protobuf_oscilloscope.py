@@ -3,6 +3,7 @@ import sys
 import os
 import time
 import argparse
+from identity_cli import add_identity_argument
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,6 +40,7 @@ parser.add_argument("-fft_avg_waves", type=int, required=False, default=100, hel
 parser.add_argument("-fft_window_function", type=str, required=False, default="BLACKMAN-HARRIS", choices=["NONE","HANNING", "HAMMING", "BLACKMAN", "BLACKMAN-HARRIS", "TUKEY"], help="Sets the window function for FFT display. Default BLACKMAN-HARRIS.")
 
 # Parse arguments
+add_identity_argument(parser, default='client-compat')
 args = parser.parse_args()
 # Setup ZMQ context once
 context = zmq.Context()
@@ -88,7 +90,7 @@ if args.enable_fft:
     plt.show()
 
 socket = context.socket(zmq.DEALER)
-socket.setsockopt(zmq.IDENTITY, b"client-compat")
+socket.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
 ip_addr = "tcp://{}:{}".format(args.ip, args.port)
 socket.connect(ip_addr)
 channel = args.channel

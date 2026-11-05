@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,7 @@ def run_fe_state_readback(
     json_path: Path,
     dry_run: bool,
     python_exe: str = sys.executable,
+    identity: str | None = None,
 ) -> dict[str, Any]:
     cmd = [
         python_exe,
@@ -100,6 +102,8 @@ def run_fe_state_readback(
         "--timeout",
         str(timeout_ms),
     ]
+    if identity is not None:
+        cmd.extend(["--identity", f"{identity}-{uuid.uuid4().hex}"])
     if dry_run:
         log_path.write_text(" ".join(cmd) + "\n", encoding="utf-8")
         return {"command": cmd, "dry_run": True, "json_path": str(json_path)}
@@ -255,6 +259,7 @@ def run_bias_monitor(
     dry_run: bool,
     python_exe: str = sys.executable,
     board: str = "",
+    identity: str | None = None,
 ) -> dict[str, Any]:
     if board:
         cmd = [
@@ -280,6 +285,8 @@ def run_bias_monitor(
             str(timeout_ms),
         ]
 
+    if identity is not None:
+        cmd.extend(["--identity", f"{identity}-{uuid.uuid4().hex}"])
     rc, output = run_cmd(cmd, log_path=log_path, dry_run=dry_run)
     payload: dict[str, Any] = {
         "afe": int(afe),
@@ -306,6 +313,7 @@ def run_acquire(
     dry_run: bool,
     log_path: Path,
     python_exe: str = sys.executable,
+    identity: str | None = None,
 ) -> tuple[int, list[str]]:
     cmd = [
         python_exe,
@@ -330,6 +338,8 @@ def run_acquire(
     ]
     if software_trigger:
         cmd.append("-software_trigger")
+    if identity is not None:
+        cmd.extend(["--identity", f"{identity}-{uuid.uuid4().hex}"])
     if dry_run:
         log_path.write_text(" ".join(cmd) + "\n", encoding="utf-8")
         return 0, cmd

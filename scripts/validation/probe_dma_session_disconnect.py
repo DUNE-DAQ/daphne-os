@@ -12,13 +12,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT/'daphne-server/client'))
 from protobuf_loader import load_protobuf_modules
 from v2_client import V2Client
+from identity_cli import add_identity_argument
 from dma_client import DmaClient
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', type=Path, required=True)
+add_identity_argument(parser, default=None)
 args = parser.parse_args()
 pb, _ = load_protobuf_modules(require_dma=True)
-link = V2Client(pb, '193.206.157.36', 40001, timeout_ms=10000, identity=uuid.uuid4().hex)
+link = V2Client(pb, '193.206.157.36', 40001, timeout_ms=10000, identity=args.identity or uuid.uuid4().hex)
 client = DmaClient(pb, link.rpc)
 client.start_session([39, 0, 17], 2048, 1000000, pretrigger=1024, job_timeout_ms=120000)
 job = client.job_id
@@ -27,7 +29,7 @@ lease = client.capabilities.lease_ms/1000
 link.close()  # Deliberately abandon ownership: no CANCEL, STATUS or KEEPALIVE.
 began = time.monotonic()
 time.sleep(lease+1)
-with V2Client(pb, '193.206.157.36', 40001, timeout_ms=10000, identity=uuid.uuid4().hex) as observer:
+with V2Client(pb, '193.206.157.36', 40001, timeout_ms=10000, identity=(args.identity + "-observer") if args.identity else uuid.uuid4().hex) as observer:
     recovered = DmaClient(pb, observer.rpc)
     recovered.probe('software', 'finite')
     deadline = time.monotonic()+20

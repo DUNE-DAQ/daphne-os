@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, sys, time
+from identity_cli import add_identity_argument
 from pathlib import Path
 import zmq
 
@@ -85,7 +86,7 @@ def main():
     ap.add_argument("--channels", default="")
     ap.add_argument("--base", default=None)
     ap.add_argument("--timeout", type=int, default=6000)
-    ap.add_argument("--identity", default="client:cnt")   # fixed identity helps ROUTER routing
+    add_identity_argument(ap, default='client:cnt')   # fixed identity helps ROUTER routing
     args = ap.parse_args()
 
     endpoint = f"tcp://{args.ip}:{args.port}"

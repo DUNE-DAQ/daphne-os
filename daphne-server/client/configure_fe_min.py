@@ -1,4 +1,5 @@
-import zmq, sys, os
+import zmq, sys, os, argparse
+from identity_cli import add_identity_argument
 
 # Import generated protos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -63,10 +64,10 @@ def make_default_config(
     # optional: cfg.full_stream_channels.extend([])
     return cfg
 
-def main(host="127.0.0.1", port=9876):
+def main(host="127.0.0.1", port=9876, identity="client-compat"):
     ctx = zmq.Context.instance()
     s   = ctx.socket(zmq.DEALER)
-    s.setsockopt(zmq.IDENTITY, b"client-compat")  # ROUTER expects an identity frame
+    s.setsockopt(zmq.IDENTITY, identity.encode("utf-8"))  # ROUTER expects an identity frame
     s.connect(f"tcp://{host}:{port}")
 
     cfg = make_default_config(ip=host)
@@ -96,6 +97,9 @@ def main(host="127.0.0.1", port=9876):
     return 0
 
 if __name__ == "__main__":
-    host = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 9876
-    sys.exit(main(host, port))
+    parser = argparse.ArgumentParser(description="Configure DAPHNE through the legacy API.")
+    parser.add_argument("host", nargs="?", default="127.0.0.1")
+    parser.add_argument("port", nargs="?", type=int, default=9876)
+    add_identity_argument(parser, default='client-compat')
+    args = parser.parse_args()
+    sys.exit(main(args.host, args.port, args.identity))

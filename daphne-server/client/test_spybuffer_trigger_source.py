@@ -2,6 +2,7 @@
 """Hardware smoke test for the global spybuffer trigger-source selector."""
 
 import argparse
+from identity_cli import add_identity_argument
 import os
 import random
 import time
@@ -38,14 +39,14 @@ def parse_channels(spec):
 
 
 class V2Client:
-    def __init__(self, endpoint, route, timeout_ms):
+    def __init__(self, endpoint, route, timeout_ms, identity=None):
         self.route = route
         self.timeout_ms = timeout_ms
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.setsockopt(
             zmq.IDENTITY,
-            f"trigger-source-smoke-{os.getpid()}-{uuid.uuid4()}".encode(),
+            (identity or f"trigger-source-smoke-{os.getpid()}-{uuid.uuid4()}").encode("utf-8"),
         )
         self.socket.setsockopt(zmq.LINGER, 0)
         self.socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
@@ -244,6 +245,7 @@ def build_parser():
             "laboratory trigger must be present."
         ),
     )
+    add_identity_argument(parser)
     return parser
 
 
@@ -266,7 +268,7 @@ def main():
     print(f"  channels          : {args.channels}")
     print(f"  samples/waveforms : {args.samples}/{args.waveforms}")
 
-    client = V2Client(endpoint, args.route, args.timeout_ms)
+    client = V2Client(endpoint, args.route, args.timeout_ms, identity=args.identity)
     original_source = None
     failure = None
     try:

@@ -59,7 +59,7 @@ def run_dma_scan(args, afes):
     if getattr(args, 'skip_ramp_verification', False):
         request.skip_ramp_verification = True
     with V2Client(pb, args.ip, args.port, route=args.route, timeout_ms=min(args.timeout_ms, 5000),
-                  identity="dma-scan-" + uuid.uuid4().hex) as transport:
+                  identity=getattr(args, "identity", None) or "dma-scan-" + uuid.uuid4().hex) as transport:
         client = DmaClient(pb, transport.rpc)
         try:
             result = client.scan(request)

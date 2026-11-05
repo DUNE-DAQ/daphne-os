@@ -21,6 +21,9 @@ except Exception:
 
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from identity_cli import add_identity_argument
+
 from scan_runtime import (
     default_led_client_path,
     default_led_config_path,
@@ -286,6 +289,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--interpret", choices=["signed", "unsigned"], default="signed")
     ap.add_argument("--skip-fe-readback", action="store_true", help="Skip readback of the current DAPHNE FE state into run metadata.")
     ap.add_argument("--dry-run", action="store_true")
+    add_identity_argument(ap, default=None)
     return ap.parse_args()
 
 
@@ -343,6 +347,7 @@ def main() -> int:
             log_path=output_dir / "fe_state_readback.log",
             json_path=output_dir / "fe_state_readback.json",
             dry_run=args.dry_run,
+            identity=args.identity,
         )
     (output_dir / "scan_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -415,6 +420,7 @@ def main() -> int:
                     log_path=cal_dir / f"bias_monitor_afe{afe}.log",
                     dry_run=args.dry_run,
                     board=args.bias_monitor_board or infer_tunnel_board(args.port),
+                    identity=args.identity,
                 )
             )
         rc_acq, _ = run_acquire(
@@ -429,6 +435,7 @@ def main() -> int:
             software_trigger=args.software_trigger,
             log_path=cal_dir / "acquire.log",
             dry_run=args.dry_run,
+            identity=args.identity,
         )
         cal_meta["acquire_returncode"] = int(rc_acq)
         if rc_acq != 0:
@@ -562,6 +569,7 @@ def main() -> int:
                     log_path=point_dir / f"bias_monitor_afe{afe}.log",
                     dry_run=args.dry_run,
                     board=args.bias_monitor_board or infer_tunnel_board(args.port),
+                    identity=args.identity,
                 )
             )
         rc_acq, acquire_cmd = run_acquire(
@@ -576,6 +584,7 @@ def main() -> int:
             software_trigger=args.software_trigger,
             log_path=point_dir / "acquire.log",
             dry_run=args.dry_run,
+            identity=args.identity,
         )
         point_meta["acquire_returncode"] = int(rc_acq)
         point_meta["acquire_command"] = acquire_cmd

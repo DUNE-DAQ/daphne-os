@@ -52,6 +52,7 @@ Acquisition options:
                            finite requires software and P=0.
   -route ROUTE             EnvelopeV2 route (default: mezz/0)
   --timeout-ms MS          Client timeout (default: 30000)
+  --identity NAME          Identity base for all child clients, including restoration
   -multi_channel           Accepted for backward compatibility; channel count
                            is inferred automatically.
 
@@ -737,6 +738,10 @@ scan_main() {
     client_dir="${script_dir}/../client"
     local -a channel_list=() vgain_array=() bias_array=()
     local -a pedestal_backend_args=() acquisition_backend_args=()
+
+    source "$script_dir/../utils/identity_cli.sh" || return 1
+    parse_daphne_identity "$@" || return $?
+    set -- "${DAPHNE_CLIENT_ARGS[@]}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in

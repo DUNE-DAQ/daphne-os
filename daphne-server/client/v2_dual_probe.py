@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, sys, time, binascii, textwrap
+from identity_cli import add_identity_argument
 from pathlib import Path
 import zmq
 
@@ -87,7 +88,7 @@ def main():
     ap.add_argument("--ip", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=9876)
     ap.add_argument("--route", default="mezz/0")
-    ap.add_argument("--identity", default="client:v2probe")
+    add_identity_argument(ap, default='client:v2probe')
     ap.add_argument("--timeout", type=int, default=8000)
     ap.add_argument("--channels", default="")
     ap.add_argument("--base", default=None)

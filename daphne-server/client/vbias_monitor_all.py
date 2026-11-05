@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from identity_cli import add_identity_argument
 import shutil
 import os
 import sys
@@ -46,7 +47,7 @@ def main():
     ap.add_argument("--port", type=int, default=9876, help="Server port (default 9876)")
     ap.add_argument("--timeout", type=int, default=2000, help="ZMQ send/recv timeout (ms)")
     ap.add_argument("--route", default="mezz/0", help="Logical route")
-    ap.add_argument("--identity", default="vbias-monitor-all", help="Dealer identity")
+    add_identity_argument(ap, default='vbias-monitor-all')
     ap.add_argument("--afes", type=str, default="0-4", help="AFE list, CSV/range, e.g. '0-4' or '0,2,4'")
     ap.add_argument("--interval", type=float, default=1.0, help="Seconds between refreshes (default 1s)")
     ap.add_argument("--max-points", type=int, default=300, help="Points kept for plotting (default 300)")

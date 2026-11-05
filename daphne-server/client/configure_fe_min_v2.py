@@ -17,6 +17,7 @@ import time
 import zmq
 import sys
 import argparse
+from identity_cli import add_identity_argument
 import random
 import json
 from datetime import datetime, timezone
@@ -308,6 +309,7 @@ def main():
         metavar="CH:VALUE",
         help="Per-channel trim DAC override (repeatable or CSV), e.g. --ch-trim 12:1000 --ch-trim 13:1200",
     )
+    add_identity_argument(ap, default=None)
     args = ap.parse_args()
     if args.dma and (not args.skip_alignment or args.align_afes):
         ap.error("--dma requires --skip-alignment; use scan_afe_delay_eye.py --dma --apply_best afterwards")
@@ -320,13 +322,14 @@ def main():
     if args.dma:
         from v2_client import V2Client
         from dma_client import DmaClient
-        with V2Client(pb_high, args.host, args.port, timeout_ms=args.timeout) as transport:
+        with V2Client(pb_high, args.host, args.port, timeout_ms=args.timeout,
+                      identity=(args.identity + "-probe") if args.identity else "daphne-v2-client") as transport:
             DmaClient(pb_high, transport.rpc).probe()
 
     endpoint = f"tcp://{args.host}:{args.port}"
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.DEALER)
-    sock.setsockopt(zmq.IDENTITY, b"client-v2-meta")
+    sock.setsockopt(zmq.IDENTITY, (args.identity or "client-v2-meta").encode("utf-8"))
     sock.setsockopt(zmq.RCVTIMEO, args.timeout)
     sock.setsockopt(zmq.SNDTIMEO, args.timeout)
     sock.setsockopt(zmq.LINGER, 0)

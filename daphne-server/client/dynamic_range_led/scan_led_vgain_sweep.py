@@ -6,11 +6,15 @@ import csv
 import json
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from identity_cli import add_identity_argument
+
 from scan_runtime import (
     CLIENT_DIR,
     DAPHNE_ROOT,
@@ -208,6 +212,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--led-intensity-367nm", type=int, default=0)
     parser.add_argument("--skip-fe-readback", action="store_true", help="Skip per-point readback of the configured DAPHNE FE state.")
     parser.add_argument("--dry-run", action="store_true")
+    add_identity_argument(parser, default=None)
     return parser.parse_args()
 
 
@@ -353,7 +358,7 @@ def main() -> int:
                     port=args.port,
                     route=args.route,
                     timeout_ms=args.timeout_ms,
-                    identity=f"client-led-vgain-{vgain}",
+                    identity=f"{args.identity}-vgain-{vgain}-{uuid.uuid4().hex}" if args.identity else f"client-led-vgain-{vgain}",
                 )
                 point_meta["configure"]["summary"] = summary
                 configure_ok = bool(
@@ -395,6 +400,7 @@ def main() -> int:
                     json_path=point_dir / "fe_state_readback.json",
                     dry_run=args.dry_run,
                     python_exe=args.python_exe,
+                    identity=args.identity,
                 )
 
             for afe in afe_monitor_ids:
@@ -407,6 +413,7 @@ def main() -> int:
                         log_path=point_dir / f"bias_monitor_afe{afe}.log",
                         dry_run=args.dry_run,
                         python_exe=args.python_exe,
+                        identity=args.identity,
                     )
                 )
 
@@ -423,6 +430,7 @@ def main() -> int:
                 dry_run=args.dry_run,
                 log_path=point_dir / "acquire.log",
                 python_exe=args.python_exe,
+                identity=args.identity,
             )
             point_meta["acquire"]["command"] = acquire_cmd
             point_meta["acquire"]["returncode"] = acquire_rc

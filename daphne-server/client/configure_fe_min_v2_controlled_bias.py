@@ -18,6 +18,7 @@ import time
 import zmq
 import sys
 import argparse
+from identity_cli import add_identity_argument
 import random
 import json
 from datetime import datetime, timezone
@@ -374,12 +375,13 @@ def main():
         metavar="CH:VALUE",
         help="Per-channel trim DAC override (repeatable or CSV), e.g. --ch-trim 12:1000 --ch-trim 13:1200",
     )
+    add_identity_argument(ap, default='client-v2-meta')
     args = ap.parse_args()
 
     endpoint = f"tcp://{args.host}:{args.port}"
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.DEALER)
-    sock.setsockopt(zmq.IDENTITY, b"client-v2-meta")
+    sock.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
     sock.setsockopt(zmq.RCVTIMEO, args.timeout)
     sock.setsockopt(zmq.SNDTIMEO, args.timeout)
     sock.setsockopt(zmq.LINGER, 0)

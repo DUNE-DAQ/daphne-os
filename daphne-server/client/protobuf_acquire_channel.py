@@ -6,6 +6,7 @@ import uuid
 from tqdm import tqdm
 from typing import Optional
 import argparse
+from identity_cli import add_identity_argument
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -70,6 +71,7 @@ parser.add_argument("-compression_level", type=int, default=1, choices=range(1, 
 # Streaming options
 parser.add_argument("-legacy", action='store_true', help="Use legacy (non-streaming) API")
 parser.add_argument("-chunk", type=int, default=10, help="Waveforms per chunk (hint)")
+add_identity_argument(parser, default='client-compat')
 args = parser.parse_args()
 
 # ------------------------------------------------------------------
@@ -82,7 +84,7 @@ fig, ax = plt.subplots()
 y = np.zeros(args.L, dtype=np.uint32)
 
 endpoint = f"tcp://{args.ip}:{args.port}"
-socket = make_dealer(context, endpoint, identity=b"client-compat")
+socket = make_dealer(context, endpoint, identity=args.identity.encode("utf-8"))
 
 channel = args.channel
 foldername = args.foldername

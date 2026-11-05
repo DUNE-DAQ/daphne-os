@@ -4,6 +4,7 @@ import time
 import sys
 import os
 import argparse
+from identity_cli import add_identity_argument
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -39,11 +40,12 @@ parser.add_argument("-lna_input_clamp", type=str, choices=["auto", "1.5 Vpp", "1
 
 
 # Parse arguments
+add_identity_argument(parser, default='client-compat')
 args = parser.parse_args()
 # Setup ZMQ context once
 context = zmq.Context()
 socket = context.socket(zmq.DEALER)
-socket.setsockopt(zmq.IDENTITY, b"client-compat")
+socket.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
 ip_addr = "tcp://{}:{}".format(args.ip, args.port)
 socket.connect(ip_addr)
 

@@ -157,6 +157,10 @@ if(PYTHONINTERP_FOUND)
     COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vgain_scan.py)
   set_tests_properties(vgain_scan_unit PROPERTIES LABELS unit)
 
+  add_test(NAME client_identity_unit
+    COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_client_identity.py)
+  set_tests_properties(client_identity_unit PROPERTIES LABELS unit)
+
   add_test(
     NAME read_configuration_unit
     COMMAND

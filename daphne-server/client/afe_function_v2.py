@@ -4,6 +4,7 @@ Set a single AFE function via ControlEnvelopeV2.
 Useful when the server is V2-only (ignores legacy ControlEnvelope).
 """
 import argparse
+from identity_cli import add_identity_argument
 import os
 import sys
 import time
@@ -67,6 +68,7 @@ def main() -> int:
     ap.add_argument("-afeNumber", type=int, choices=range(0, 5), help="AFE index 0..4")
     ap.add_argument("--all", action="store_true", help="Apply to all AFEs 0..4")
     ap.add_argument("-value", type=int, required=True, help="Function value to set")
+    add_identity_argument(ap, default='afe-func-v2')
     args = ap.parse_args()
 
     validate_value(args.afeFunction, args.value)
@@ -75,7 +77,7 @@ def main() -> int:
 
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.DEALER)
-    sock.setsockopt(zmq.IDENTITY, b"afe-func-v2")
+    sock.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
     sock.setsockopt(zmq.RCVTIMEO, args.timeout)
     sock.setsockopt(zmq.SNDTIMEO, args.timeout)
     sock.setsockopt(zmq.LINGER, 0)

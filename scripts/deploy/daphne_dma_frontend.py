@@ -4,15 +4,21 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 import time
 
 RUNTIME = Path('/opt/daphne-dma-persistent-manual-20261012')
 os.environ['DAPHNE_PROTO_PYTHON_DIR'] = str(RUNTIME / 'protobuf')
+SOURCE_CLIENT = Path(__file__).resolve().parents[2] / 'daphne-server/client'
+if SOURCE_CLIENT.is_dir():
+    sys.path.insert(0, str(SOURCE_CLIENT))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=('dependencies', 'prepare', 'status'))
+    from identity_cli import add_identity_argument
+    add_identity_argument(parser)
     args = parser.parse_args()
     from google.protobuf.json_format import MessageToDict
     from protobuf_loader import load_protobuf_modules
@@ -26,7 +32,7 @@ def main():
         print('DMA frontend dependencies and revision-3 bindings OK')
         return
     with V2Client(pb, '127.0.0.1', 40001, timeout_ms=10000,
-                  identity='manual-mode-'+str(os.getpid())) as link:
+                  identity=args.identity or 'manual-mode-'+str(os.getpid())) as link:
         client = DmaClient(pb, link.rpc)
         caps = client.probe('software', 'persistent')
         if caps.gateware_build_id != 0x0630a9da:

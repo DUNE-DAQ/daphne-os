@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,12 +70,14 @@ def make_socket(
     endpoint: str,
     timeout_ms: int,
     identity_prefix: str,
+    identity=None,
 ) -> zmq.Socket:
+    prefix = f"{identity}-{identity_prefix}" if identity else identity_prefix
     socket = context.socket(zmq.DEALER)
     socket.setsockopt(zmq.LINGER, 0)
     socket.setsockopt(
         zmq.IDENTITY,
-        f"{identity_prefix}-{uuid.uuid4()}".encode("ascii"),
+        f"{prefix}-{uuid.uuid4()}".encode("utf-8"),
     )
     socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
     socket.setsockopt(zmq.SNDTIMEO, timeout_ms)
@@ -611,6 +614,7 @@ def main() -> int:
         action="store_true",
         help="Do not restore TEST_PATTERN_MODES and SYNC_PATTERN after the test.",
     )
+    add_identity_argument(parser, default=None)
     args = parser.parse_args()
     if args.legacy_hardware_trigger:
         if args.trigger_source is not None and args.trigger_source != "external":
@@ -677,12 +681,14 @@ def main() -> int:
         endpoint,
         args.timeout_ms,
         "spy-ramp-control",
+        identity=getattr(args, "identity", None),
     )
     acquisition_socket = make_socket(
         context,
         endpoint,
         args.timeout_ms,
         "spy-ramp-acquisition",
+        identity=getattr(args, "identity", None),
     )
 
     artifacts = FailureArtifactWriter(

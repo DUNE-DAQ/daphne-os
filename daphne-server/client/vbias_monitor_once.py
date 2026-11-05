@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from identity_cli import add_identity_argument
 import os
 import sys
 import zmq
@@ -16,7 +17,7 @@ def main():
     ap.add_argument("--afe", type=int, default=0, choices=range(0, 5), help="AFE block to read [0..4]")
     ap.add_argument("--timeout", type=int, default=2000, help="ZMQ send/recv timeout (ms)")
     ap.add_argument("--route", default="mezz/0", help="Logical route")
-    ap.add_argument("--identity", default="vbias-monitor", help="Dealer identity")
+    add_identity_argument(ap, default='vbias-monitor')
     args = ap.parse_args()
 
     endpoint = f"tcp://{args.ip}:{args.port}"

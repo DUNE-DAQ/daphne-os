@@ -17,6 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 EXTRA = [
     'daphne-server/dma/afe_session_capture.cpp', 'daphne-server/dma/session_probe.cpp',
     'daphne-server/client/dma_persistent_client.py',
+    'daphne-server/client/identity_cli.py',
+    'daphne-server/utils/identity_cli.sh',
+    'daphne-server/tests/test_client_identity.py',
     'daphne-server/srcs/server_controller/dma_persistent_service.cpp',
     'daphne-server/tests/dma_persistent_tests.cpp',
     'daphne-server/tests/dma_persistent_rpc_fixture.cpp',

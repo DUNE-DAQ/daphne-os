@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import csv
 from dataclasses import asdict
 import importlib
@@ -130,7 +131,7 @@ def next_ids() -> tuple[int, int]:
 
 
 class V2Client:
-    def __init__(self, pb_high, pb_low, endpoint: str, route: str, timeout_ms: int):
+    def __init__(self, pb_high, pb_low, endpoint: str, route: str, timeout_ms: int, identity=None):
         self.pb_high = pb_high
         self.pb_low = pb_low
         self.route = route
@@ -139,7 +140,7 @@ class V2Client:
         self.socket.setsockopt(zmq.LINGER, 0)
         self.socket.setsockopt(
             zmq.IDENTITY,
-            f"afe-pattern-matrix-{uuid.uuid4()}".encode("ascii"),
+            (identity or f"afe-pattern-matrix-{uuid.uuid4()}").encode("utf-8"),
         )
         self.socket.setsockopt(zmq.RCVTIMEO, timeout_ms)
         self.socket.setsockopt(zmq.SNDTIMEO, timeout_ms)
@@ -633,6 +634,7 @@ def main() -> int:
     )
     parser.add_argument("--max-examples-per-channel", type=int, default=4)
     parser.add_argument("--max-console-failures", type=int, default=8)
+    add_identity_argument(parser, default=None)
     args = parser.parse_args()
 
     try:
@@ -682,7 +684,7 @@ def main() -> int:
     interrupted = False
     try:
         pb_high, pb_low = load_protobuf_modules()
-        client = V2Client(pb_high, pb_low, endpoint, args.route, args.timeout_ms)
+        client = V2Client(pb_high, pb_low, endpoint, args.route, args.timeout_ms, identity=args.identity)
         register_state = save_register_state(client, afes)
         print("[INFO] saved AFE registers 2, 5 and 10 for exact restoration")
 

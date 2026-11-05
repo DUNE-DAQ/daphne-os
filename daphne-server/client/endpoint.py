@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 import zmq
 import sys
-import daphneV3_high_level_confs_pb2 as high_pb2
+import argparse
+from identity_cli import add_identity_argument
+from protobuf_loader import load_protobuf_modules
 
-def main(ip="10.73.137.161", port=40001):
+high_pb2, _ = load_protobuf_modules()
+
+def main(ip="10.73.137.161", port=40001, identity=None):
     context = zmq.Context()
     socket = context.socket(zmq.DEALER)
+    if identity is not None:
+        socket.setsockopt(zmq.IDENTITY, identity.encode("utf-8"))
     socket.connect(f"tcp://{ip}:{port}")
     print(f"[CLIENT] Connected to tcp://{ip}:{port}")
 
@@ -33,6 +39,9 @@ def main(ip="10.73.137.161", port=40001):
         print("  Clock frequency:", reply.endpoint_status.clk_freq_hz)
 
 if __name__ == "__main__":
-    ip = sys.argv[1] if len(sys.argv) > 1 else "10.73.137.161"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 40001
-    main(ip, port)
+    parser = argparse.ArgumentParser(description="Read endpoint status.")
+    parser.add_argument("ip", nargs="?", default="10.73.137.161")
+    parser.add_argument("port", nargs="?", type=int, default=40001)
+    add_identity_argument(parser, default=None)
+    args = parser.parse_args()
+    main(args.ip, args.port, args.identity)

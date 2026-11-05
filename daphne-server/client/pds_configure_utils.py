@@ -21,8 +21,8 @@ from configure_fe_min_v2 import (  # type: ignore
     ns_to_iso,
     print_envelope,
     summarize_configure_response,
+    pb_high,
 )
-from srcs.protobuf import daphneV3_high_level_confs_pb2 as pb_high
 
 
 # --------------------------------------------------------------------------- #
@@ -246,7 +246,7 @@ def send_configure_request(
     """
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.DEALER)
-    sock.setsockopt(zmq.IDENTITY, identity.encode("ascii"))
+    sock.setsockopt(zmq.IDENTITY, identity.encode("utf-8"))
     sock.setsockopt(zmq.RCVTIMEO, timeout_ms)
     sock.setsockopt(zmq.SNDTIMEO, timeout_ms)
 

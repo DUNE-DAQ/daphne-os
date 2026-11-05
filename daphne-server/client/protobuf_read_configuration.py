@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import json
 import sys
 from typing import Optional, Sequence
@@ -269,9 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout-ms", "--timeout_ms", type=int, default=5000
     )
-    parser.add_argument(
-        "--identity", default="protobuf-read-configuration"
-    )
+    add_identity_argument(parser, default='protobuf-read-configuration')
     parser.add_argument(
         "--compact", action="store_true", help="Print compact JSON."
     )

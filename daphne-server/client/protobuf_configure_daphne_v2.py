@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os, sys, argparse, time, zmq, random
+from identity_cli import add_identity_argument
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from srcs.protobuf import daphneV3_high_level_confs_pb2 as pb_high
@@ -58,11 +59,12 @@ def main():
     p.add_argument("-pga_gain_control", type=str, choices=["24 dB","30 dB"], default="24 dB")
     p.add_argument("-lna_gain_control", type=str, choices=["18 dB","24 dB","12 dB"], default="12 dB")
     p.add_argument("-lna_input_clamp",  type=str, choices=["auto","1.5 Vpp","1.15 Vpp","0.6 Vpp"], default="auto")
+    add_identity_argument(p, default='client-v2-config')
     args = p.parse_args()
 
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.DEALER)
-    sock.setsockopt(zmq.IDENTITY, b"client-v2-config")
+    sock.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
     sock.connect(f"tcp://{args.ip}:{args.port}")
 
     # dictionary lookups (same as legacy)

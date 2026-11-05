@@ -16,6 +16,7 @@ Optional:
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import json
 import os
 import sys
@@ -87,6 +88,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--skip-bias-monitor", action="store_true", help="Skip bias voltage monitor reads")
     ap.add_argument("--json", action="store_true", help="Emit the FE state snapshot as JSON only")
     ap.add_argument("--afe-reg", nargs=2, action="append", metavar=("AFE", "REG"), help="Read specific AFE register (board index, reg addr). Can be repeated.")
+    add_identity_argument(ap, default='client-v2-read')
     return ap.parse_args()
 
 
@@ -242,7 +244,7 @@ if __name__ == "__main__":
     endpoint = f"tcp://{args.host}:{args.port}"
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.DEALER)
-    sock.setsockopt(zmq.IDENTITY, b"client-v2-read")
+    sock.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
     sock.setsockopt(zmq.RCVTIMEO, args.timeout)
     sock.setsockopt(zmq.SNDTIMEO, args.timeout)
     sock.connect(endpoint)

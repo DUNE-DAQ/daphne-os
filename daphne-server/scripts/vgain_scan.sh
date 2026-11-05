@@ -1,5 +1,9 @@
 #!/bin/bash
 
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/../utils/identity_cli.sh" || exit 1
+parse_daphne_identity "$@" || exit $?
+set -- "${DAPHNE_CLIENT_ARGS[@]}"
+
 # This script is used to perform a vgain scan with DAPHNE V3
 # usage: source vgain_scan.sh -output_folder <output_folder> -vgain_list <vgain_list>
 #        or: source vgain_scan.sh -output_folder <output_folder> -range "[init, step, end]"
@@ -233,6 +237,7 @@ for vgain in "${vgain_array[@]}"; do
     echo "Running scan with vgain: $vgain"
 
     if [[ "$multi_channel" == false ]]; then
+        :
         # Single-channel acquisition
 	# Configure vgain (AFE from first channel)
         # python ./../client/protobuf_configure_vgain.py \
@@ -262,7 +267,7 @@ for vgain in "${vgain_array[@]}"; do
 	    #-afe "$AFE" \
         #-configure_all \
         #-vgain_value "$vgain" &> "$log_file"
-        python3 ./../configure_fe_min_v2.py \
+        python3 ./../client/configure_fe_min_v2.py \
             -ip "${ip_addr}" \
             -port "$port" \
             -vgain "$vgain" \
@@ -291,7 +296,7 @@ echo "Vgain scan completed. All output files are stored in: $output_folder"
 
 # restore vgain to default (example: 1800) for the reference AFE
 AFE=$(( channel / 8 ))
-python3 ./../configure_fe_min_v2.py \
+python3 ./../client/configure_fe_min_v2.py \
     -ip "${ip_addr}" \
     -port "$port" \
     -vgain 1800 \

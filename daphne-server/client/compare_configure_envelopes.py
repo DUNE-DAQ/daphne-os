@@ -18,6 +18,7 @@ Usage example (matches the user's CLI request):
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import difflib
 import json
 from pathlib import Path
@@ -42,7 +43,9 @@ from pds_configure_utils import (
     build_request_from_seed,
     load_seed_from_output,
 )
-from srcs.protobuf import daphneV3_high_level_confs_pb2 as pb_high
+from protobuf_loader import load_protobuf_modules
+
+pb_high, _ = load_protobuf_modules()
 
 
 def msg_to_sorted_json(msg) -> str:
@@ -57,11 +60,11 @@ def save_bytes(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
-def send_envelope(env: pb_high.ControlEnvelopeV2, *, host: str, port: int, timeout_ms: int, label: str) -> None:
+def send_envelope(env: pb_high.ControlEnvelopeV2, *, host: str, port: int, timeout_ms: int, label: str, identity=None) -> None:
     """Send a prepared envelope and print the response summary."""
     ctx = zmq.Context.instance()
     sock = ctx.socket(zmq.DEALER)
-    sock.setsockopt(zmq.IDENTITY, f"compare-{label}".encode("ascii"))
+    sock.setsockopt(zmq.IDENTITY, (f"{identity}-{label}" if identity else f"compare-{label}").encode("utf-8"))
     sock.setsockopt(zmq.RCVTIMEO, timeout_ms)
     sock.setsockopt(zmq.SNDTIMEO, timeout_ms)
     sock.connect(f"tcp://{host}:{port}")
@@ -181,6 +184,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--compensator", type=int, default=0)
     ap.add_argument("--inverters", type=int, default=0)
     ap.add_argument("--full", action="store_true", help="Kept for parity; server auto-aligns by default.")
+    add_identity_argument(ap, default=None)
     return ap.parse_args()
 
 
@@ -214,9 +218,9 @@ def main() -> int:
 
     # Send both
     print("\n=== SENDING CLI REQUEST ===")
-    send_envelope(env_cli, host=args.host, port=args.port, timeout_ms=args.timeout, label="cli")
+    send_envelope(env_cli, host=args.host, port=args.port, timeout_ms=args.timeout, label="cli", identity=args.identity)
     print("\n=== SENDING SEED REQUEST ===")
-    send_envelope(env_seed, host=args.host, port=args.port, timeout_ms=args.timeout, label="seed")
+    send_envelope(env_seed, host=args.host, port=args.port, timeout_ms=args.timeout, label="seed", identity=args.identity)
 
     print(f"\nSaved envelopes/requests under: {out_dir}")
     return 0

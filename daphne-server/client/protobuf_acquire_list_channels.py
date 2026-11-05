@@ -7,6 +7,7 @@ import random
 from typing import Optional, Dict
 from tqdm import tqdm
 import argparse
+from identity_cli import add_identity_argument
 import numpy as np
 
 from protobuf_loader import load_protobuf_modules
@@ -133,6 +134,7 @@ parser.add_argument("-compress", action='store_true', help="Enable compression."
 parser.add_argument("-compression_format", type=str, choices=['7z', 'tar'], default='tar', help="Compression type (7z or gz tarball).")
 parser.add_argument("-compression_level", type=int, default=1, choices=range(1, 10), help="7z compression level (1-9). Default 1.")
 parser.set_defaults(v2=True)
+add_identity_argument(parser, default=None)
 args = parser.parse_args()
 resolve_trigger_source(parser, args)
 validate_dma_capture_arguments(parser, args)
@@ -147,7 +149,7 @@ if args.dma:
 
 context = zmq.Context()
 endpoint = f"tcp://{args.ip}:{args.port}"
-socket = make_dealer(context, endpoint, identity=b"client-compat")
+socket = make_dealer(context, endpoint, identity=(args.identity or "client-compat").encode("utf-8"))
 socket.setsockopt(zmq.RCVTIMEO, args.timeout_ms)
 socket.setsockopt(zmq.SNDTIMEO, args.timeout_ms)
 

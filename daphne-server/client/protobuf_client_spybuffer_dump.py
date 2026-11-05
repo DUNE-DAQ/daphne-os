@@ -4,6 +4,8 @@ import time
 import sys
 import os
 import argparse
+from identity_cli import add_identity_argument
+import uuid
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -23,15 +25,23 @@ def send_envelope_and_get_reply(socket, envelope) -> bytes:
 
     return frames[-1]  # Payload is always in the last frame
 
+
+def make_req_socket(context, identity):
+    socket = context.socket(zmq.REQ)
+    if identity is not None:
+        socket.setsockopt(zmq.IDENTITY, f"{identity}-{uuid.uuid4().hex}".encode("utf-8"))
+    return socket
+
 parser = argparse.ArgumentParser(description="DAPHNE Configuration.")
 parser.add_argument("-ip", type=str, default="127.0.0.1", help="IP address of DAPHNE (default 127.0.0.1).")
 parser.add_argument("-port", type=int, required=False, default=9876, help="Port number of DAPHNE. Default 9876.")
 # Parse arguments
+add_identity_argument(parser, default=None)
 args = parser.parse_args()
 
 context = zmq.Context()
 socket = context.socket(zmq.DEALER)
-socket.setsockopt(zmq.IDENTITY, b"client-compat")
+socket.setsockopt(zmq.IDENTITY, (args.identity or "client-compat").encode("utf-8"))
 ip_addr = "tcp://{}:{}".format(args.ip, args.port)
 socket.connect(ip_addr)
 
@@ -46,7 +56,7 @@ for offsetCH in range(40):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -72,7 +82,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -95,7 +105,7 @@ envelope.payload = request.SerializeToString()
 
 # Send via ZMQ
 context = zmq.Context()
-socket = context.socket(zmq.REQ)
+socket = make_req_socket(context, args.identity)
 socket.connect(ip_addr)
 socket.send(envelope.SerializeToString())
 
@@ -120,7 +130,7 @@ envelope.payload = request.SerializeToString()
 
 # Send via ZMQ
 context = zmq.Context()
-socket = context.socket(zmq.REQ)
+socket = make_req_socket(context, args.identity)
 socket.connect(ip_addr)
 socket.send(envelope.SerializeToString())
 
@@ -147,7 +157,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -175,7 +185,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -203,7 +213,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -230,7 +240,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -257,7 +267,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -284,7 +294,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -311,7 +321,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -338,7 +348,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -365,7 +375,7 @@ for afe in range(5):
 
     # Send via ZMQ
     context = zmq.Context()
-    socket = context.socket(zmq.REQ)
+    socket = make_req_socket(context, args.identity)
     socket.connect(ip_addr)
     socket.send(envelope.SerializeToString())
 
@@ -389,7 +399,7 @@ envelope.payload = request.SerializeToString()
 
 # Send via ZMQ
 context = zmq.Context()
-socket = context.socket(zmq.REQ)
+socket = make_req_socket(context, args.identity)
 socket.connect(ip_addr)
 socket.send(envelope.SerializeToString())
 
@@ -414,7 +424,7 @@ envelope.payload = request.SerializeToString()
 
 # Send via ZMQ
 context = zmq.Context()
-socket = context.socket(zmq.REQ)
+socket = make_req_socket(context, args.identity)
 socket.connect(ip_addr)
 socket.send(envelope.SerializeToString())
 
@@ -437,7 +447,7 @@ envelope.payload = request.SerializeToString()
 
 # Send via ZMQ
 context = zmq.Context()
-socket = context.socket(zmq.REQ)
+socket = make_req_socket(context, args.identity)
 socket.connect(ip_addr)
 socket.send(envelope.SerializeToString())
 
@@ -462,7 +472,7 @@ envelope.payload = request.SerializeToString()
 
 # Send via ZMQ
 context = zmq.Context()
-socket = context.socket(zmq.REQ)
+socket = make_req_socket(context, args.identity)
 socket.connect(ip_addr)
 socket.send(envelope.SerializeToString())
 

@@ -7,6 +7,7 @@ pb_high.MT2_READ_GENERAL_INFO_* exists:
   protoc --python_out=srcs/protobuf daphnemodules/schema/daphnemodules/daphne_control_high.proto
 """
 import argparse
+from identity_cli import add_identity_argument
 import os
 import sys
 import zmq
@@ -20,7 +21,7 @@ def main():
     ap.add_argument("--ip", default="127.0.0.1", help="Server IP (default 127.0.0.1)")
     ap.add_argument("--port", type=int, default=9876, help="Server port (default 9876)")
     ap.add_argument("--route", default="mezz/0", help="Logical route (default mezz/0)")
-    ap.add_argument("--identity", default="general-info", help="Dealer identity")
+    add_identity_argument(ap, default='general-info')
     ap.add_argument("--timeout", type=int, default=2000, help="ZMQ send/recv timeout (ms)")
     ap.add_argument("--level", type=int, default=0, help="InfoRequest.level (optional)")
     args = ap.parse_args()

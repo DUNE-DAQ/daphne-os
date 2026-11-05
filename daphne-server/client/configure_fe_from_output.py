@@ -7,6 +7,7 @@ without going through the DB, using EnvelopeV2.
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 import json
 from pathlib import Path
 
@@ -42,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("-pga_gain_control", type=str, choices=pga_gain_control_dict.keys(), default="24 dB")
     ap.add_argument("-lna_gain_control", type=str, choices=lna_gain_control_dict.keys(), default="12 dB")
     ap.add_argument("-lna_input_clamp", type=str, choices=lna_input_clamp_dict.keys(), default="auto")
+    add_identity_argument(ap, default='client-v2-output')
     return ap.parse_args()
 
 
@@ -86,7 +88,7 @@ def main() -> int:
             port=args.port,
             route=args.route,
             timeout_ms=args.timeout,
-            identity="client-v2-output",
+            identity=args.identity,
         )
         summaries[str(board_id)] = summary
 

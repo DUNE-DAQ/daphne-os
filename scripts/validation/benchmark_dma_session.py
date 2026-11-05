@@ -14,17 +14,19 @@ sys.path.insert(0, str(ROOT/'daphne-server/client'))
 from protobuf_loader import load_protobuf_modules
 from dma_client import DmaClient
 from v2_client import V2Client
+from identity_cli import add_identity_argument
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--events', type=int, default=256)
 parser.add_argument('--channels', default='0,1')
 parser.add_argument('--samples', type=int, default=32000)
+add_identity_argument(parser, default=None)
 args = parser.parse_args()
 assert 1 <= args.events <= 10000
 channels = list(map(int, args.channels.split(',')))
 pb, _ = load_protobuf_modules(require_dma=True)
-with V2Client(pb, '193.206.157.36', 40001, timeout_ms=10000, identity=uuid.uuid4().hex) as link:
+with V2Client(pb, '193.206.157.36', 40001, timeout_ms=10000, identity=args.identity or uuid.uuid4().hex) as link:
     client = DmaClient(pb, link.rpc)
     start = time.monotonic(); count = 0
     client.start_session(channels, args.samples, args.events, pretrigger=4096, job_timeout_ms=180000)

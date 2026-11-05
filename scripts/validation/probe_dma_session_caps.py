@@ -11,14 +11,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'daphne-server/client'))
 from protobuf_loader import load_protobuf_modules
 from v2_client import V2Client
+from identity_cli import add_identity_argument
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--ip', default='193.206.157.36')
 parser.add_argument('--port', type=int, default=40001)
 parser.add_argument('--require-persistent', action='store_true')
+add_identity_argument(parser, default='persistent-caps-probe')
 args = parser.parse_args()
 pb, _ = load_protobuf_modules(require_dma=True)
-with V2Client(pb, args.ip, args.port, timeout_ms=10000, identity='persistent-caps-probe') as link:
+with V2Client(pb, args.ip, args.port, timeout_ms=10000, identity=args.identity) as link:
     c = link.rpc(pb.MT2_ACQUISITION_CAPABILITIES_REQ,
                  pb.AcquisitionCapabilitiesRequest(maximum_protocol_revision=3),
                  pb.MT2_ACQUISITION_CAPABILITIES_RESP, pb.AcquisitionCapabilitiesResponse)

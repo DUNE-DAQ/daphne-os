@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os, sys, argparse, zmq
+from identity_cli import add_identity_argument
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from srcs.protobuf import daphneV3_high_level_confs_pb2 as pb_high
@@ -10,12 +11,13 @@ def main():
     ap.add_argument("port", nargs="?", type=int, default=9876)
     ap.add_argument("--timeout", type=int, default=3000)
     ap.add_argument("--route", default="mezz/0")
+    add_identity_argument(ap, default='testreg-v2')
     args = ap.parse_args()
 
     endpoint = f"tcp://{args.ip}:{args.port}"
     ctx = zmq.Context.instance()
     s = ctx.socket(zmq.DEALER)
-    s.setsockopt(zmq.IDENTITY, b"testreg-v2")
+    s.setsockopt(zmq.IDENTITY, args.identity.encode("utf-8"))
     s.setsockopt(zmq.RCVTIMEO, args.timeout)
     s.setsockopt(zmq.SNDTIMEO, args.timeout)
     s.setsockopt(zmq.LINGER, 0)

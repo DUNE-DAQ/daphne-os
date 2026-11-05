@@ -26,6 +26,9 @@ client=${1##*/}
 shift
 printf '%s' "$client" >> "$SCAN_TEST_CALLS"
 printf '\t%s' "$@" >> "$SCAN_TEST_CALLS"
+if [[ -n "${DAPHNE_IDENTITY:-}" ]]; then
+    printf '\t--identity-base\t%s' "$DAPHNE_IDENTITY" >> "$SCAN_TEST_CALLS"
+fi
 printf '\n' >> "$SCAN_TEST_CALLS"
 if [[ "$client" != protobuf_acquire_list_channels.py ]]; then
     echo 'fake configuration readback OK'
@@ -73,6 +76,9 @@ class VgainScanTests(unittest.TestCase):
         self.scan = self.root / "bash_scripts" / "vgain_scan.sh"
         self.scan.parent.mkdir()
         self.scan.write_text((ROOT / "bash_scripts" / "vgain_scan.sh").read_text(), newline="\n")
+        helper = self.root / "utils" / "identity_cli.sh"
+        helper.parent.mkdir()
+        helper.write_text((ROOT / "utils" / "identity_cli.sh").read_text(), newline="\n")
         self.fake = self.root / "fake_python"
         self.fake.write_text(FAKE_CLIENT, newline="\n")
         self.fake.chmod(0o755)
@@ -122,6 +128,18 @@ class VgainScanTests(unittest.TestCase):
         calls = self.calls_file.read_text()
         self.assert_ok(self.run_scan(resume=True))
         self.assertEqual(self.calls_file.read_text(), calls)
+
+    def test_identity_reaches_points_and_restoration_and_can_change_on_resume(self):
+        env = dict(self.env, SCAN_TEST_FAIL="1")
+        result = self.run_scan("--identity", "scan-first", env=env)
+        self.assertNotEqual(result.returncode, 0)
+        for row in self.calls():
+            self.assertEqual(row[row.index("--identity-base") + 1], "scan-first")
+        self.assertEqual(len(self.calls("protobuf_configure_pedestal_level.py")), 3)
+        self.calls_file.write_text("")
+        self.assert_ok(self.run_scan("--identity=scan-resumed", resume=True))
+        for row in self.calls():
+            self.assertEqual(row[row.index("--identity-base") + 1], "scan-resumed")
 
     def test_dma_force_reaches_points_and_final_restoration(self):
         self.assert_ok(self.run_scan("--dma", "--force-acq", "-trigger_source", "software"))

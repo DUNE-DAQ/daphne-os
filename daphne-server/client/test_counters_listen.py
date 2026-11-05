@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse, sys, time, binascii, textwrap
+from identity_cli import add_identity_argument
 from pathlib import Path
 import zmq
 
@@ -72,7 +73,7 @@ def main():
     ap.add_argument("--timeout", type=int, default=6000, help="per-recv timeout ms")
     ap.add_argument("--listen_ms", type=int, default=3000,
                     help="after first recv, keep listening this many ms for extra frames")
-    ap.add_argument("--identity", default="client:cntsniff", help="ZMQ identity tag")
+    add_identity_argument(ap, default='client:cntsniff')
     args = ap.parse_args()
 
     # Build channel list

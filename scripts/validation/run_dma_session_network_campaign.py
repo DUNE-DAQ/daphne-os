@@ -14,12 +14,14 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT/'daphne-server/client'))
 from protobuf_loader import load_protobuf_modules
 from v2_client import V2Client
+from identity_cli import add_identity_argument
 from dma_client import DmaClient
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--ip', default='193.206.157.36')
 parser.add_argument('--port', type=int, default=40001)
+add_identity_argument(parser, default=None)
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 pb, _ = load_protobuf_modules(require_dma=True)
@@ -33,7 +35,7 @@ def rejected(link, name, request, cls):
 
 
 def capture(name, channels, length, pretrigger, n, chunk, slow=False):
-    with V2Client(pb, args.ip, args.port, timeout_ms=10000, identity=uuid.uuid4().hex) as link:
+    with V2Client(pb, args.ip, args.port, timeout_ms=10000, identity=args.identity or uuid.uuid4().hex) as link:
         client = DmaClient(pb, link.rpc)
         started = time.monotonic()
         client.start_session(channels, length, n, pretrigger=pretrigger, job_timeout_ms=60000)
@@ -119,7 +121,7 @@ capture('two-one-route', [0, 1], 2048, 0, 2, 2)
 capture('wrap-last-partial', [39, 0, 17], 2048, 1024, 37, 5)
 capture('all40-long', list(reversed(range(40))), 32769, 1000, 19, 7)
 capture('slow-and-invalid-ids', [39, 0, 17], 32000, 4096, 37, 5, slow=True)
-with V2Client(pb, args.ip, args.port, timeout_ms=10000, identity=uuid.uuid4().hex) as link:
+with V2Client(pb, args.ip, args.port, timeout_ms=10000, identity=args.identity or uuid.uuid4().hex) as link:
     client = DmaClient(pb, link.rpc)
     client.start_session([0, 17], 2048, (1<<32)+1, pretrigger=1024, job_timeout_ms=60000)
     try:

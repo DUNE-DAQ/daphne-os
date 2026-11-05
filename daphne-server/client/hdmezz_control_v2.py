@@ -14,6 +14,7 @@ Supported operations:
 from __future__ import annotations
 
 import argparse
+from identity_cli import add_identity_argument
 from collections import deque
 import os
 import random
@@ -89,7 +90,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--ip", default="127.0.0.1", help="Server IP")
     ap.add_argument("--port", type=int, default=9876, help="Server port")
     ap.add_argument("--route", default="mezz/0", help="EnvelopeV2 route")
-    ap.add_argument("--identity", default="hdmezz-client", help="ZMQ identity")
+    add_identity_argument(ap, default='hdmezz-client')
     ap.add_argument("--timeout", type=int, default=5000, help="Per-request timeout (ms)")
 
 

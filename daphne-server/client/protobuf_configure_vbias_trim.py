@@ -2,6 +2,7 @@
 """Configure VBIAS control, one AFE bias, and one channel trim over V2."""
 
 import argparse
+from identity_cli import add_identity_argument
 import sys
 
 import zmq
@@ -55,7 +56,7 @@ def build_parser():
     parser.add_argument(
         "--timeout-ms", "--timeout_ms", type=int, default=5000
     )
-    parser.add_argument("--identity", default="configure-vbias-trim-v2")
+    add_identity_argument(parser, default='configure-vbias-trim-v2')
     return parser
 
 

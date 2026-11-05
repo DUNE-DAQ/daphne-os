@@ -28,7 +28,7 @@ def run_dma_acquire(args, pb):
     contract = capture_contract(args)
     mode, pretrigger = contract['capture_mode'], contract['pretrigger_samples']
     with DmaCliSignals() as signals, V2Client(pb, args.ip, args.port, route=args.route, timeout_ms=args.timeout_ms,
-                  identity="dma-acquire-" + uuid.uuid4().hex) as transport:
+                  identity=getattr(args, "identity", None) or "dma-acquire-" + uuid.uuid4().hex) as transport:
         client = DmaClient(pb, transport.rpc, stop_checker=signals.stop_requested)
         client.probe(args.trigger_source, mode, pretrigger)
         client._check_force_acq(getattr(args, 'force_acq', False))
