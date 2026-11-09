@@ -129,6 +129,42 @@ class VgainScanTests(unittest.TestCase):
         self.assert_ok(self.run_scan(resume=True))
         self.assertEqual(self.calls_file.read_text(), calls)
 
+    def test_positional_trim_vector_survives_resume(self):
+        args = self.arguments("--trim", "[100, 200, 300, 500]",
+                              "--bias-safe-window-mv", "10000", "30000", "--allow-unmonitored-bias")
+        args[args.index("-bias") + 1] = "22"
+        start = args.index("-channel")
+        args[start:start + 3] = ["--channels", "0,", "1,", "3,", "5"]
+        result = subprocess.run([BASH, shell_path(self.scan), *args],
+                                env=dict(self.env, SCAN_TEST_FAIL="1"),
+                                capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.metadata()["trim"], "100,200,300,500")
+        self.assertEqual(self.metadata()["channels"], "0,1,3,5")
+        self.assertEqual(self.metadata()["allow_unmonitored_bias"], "true")
+        self.assert_ok(self.run_scan(resume=True))
+        calls = self.calls("protobuf_vgain_bias.py")
+        self.assertTrue(all("--allow-unmonitored-bias" in row for row in calls))
+        applies = [row for row in calls if row[1] == "apply"]
+        self.assertEqual(len(applies), 2)
+        for call in applies:
+            trim_index = call.index("--trim-map")
+            self.assertEqual(call[trim_index + 1:trim_index + 5], ["0:100", "1:200", "3:300", "5:500"])
+            window_index = call.index("--bias-safe-window-mv")
+            self.assertEqual(call[window_index + 1:window_index + 3], ["10000", "30000"])
+        self.assertEqual(calls[-1][1], "shutdown")
+
+    def test_rejects_invalid_trim_before_starting_any_client(self):
+        for trim, error in (("[100]", "one value per selected channel"),
+                            ("[100,,200]", "invalid integer list"),
+                            ("[100,4096]", "0..4095"),
+                            ("[100,200]", "requires --bias-safe-window-mv")):
+            with self.subTest(trim=trim):
+                result = self.run_scan("--trim", trim)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(error, result.stderr)
+                self.assertFalse(self.calls_file.exists())
+
     def test_identity_reaches_points_and_restoration_and_can_change_on_resume(self):
         env = dict(self.env, SCAN_TEST_FAIL="1")
         result = self.run_scan("--identity", "scan-first", env=env)

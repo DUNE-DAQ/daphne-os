@@ -26,7 +26,15 @@ Sweep syntax:
   -bias VALUE                          Fixed bias for a VGAIN-only scan
 
 Configuration options:
-  -trim VALUE              Channel TRIM DAC code (default: 0)
+  --channels "0, 1, 3, 5"   Channel list, in the same order as the TRIM vector
+  -trim VALUE|LIST         TRIM DAC code or positional list (default: 0)
+  --bias-safe-window-mv MIN MAX
+                           Validated effective SiPM voltage window in mV.
+                           Required for nonzero TRIM, including the temporary
+                           drop in bias before resetting TRIM.
+  --allow-unmonitored-bias
+                           Use nominal voltage and DAC setpoint readback instead
+                           of the bias monitor. The safe window still applies.
   -bias_control VALUE      Global bias-control value (default: 0.0)
   -set_as_DAC              Interpret bias and bias-control as DAC codes;
                            without it they are interpreted as volts. TRIM and
@@ -56,10 +64,10 @@ Acquisition options:
   -multi_channel           Accepted for backward compatibility; channel count
                            is inferred automatically.
 
-After every successful or failed scan, the selected hardware is restored to
-bias=0, TRIM=0, VGAIN=1700, and pedestal=8192. Bias-control is preserved.
-SIGINT (Ctrl+C), SIGTERM, and SIGHUP trigger the same default restoration
-before the scan process exits.
+On success, failure, SIGINT, SIGTERM or SIGHUP, restoration first reduces
+bias by the maximum active TRIM. It then clears TRIM for the entire AFE
+before writing bias=0, VGAIN=1700, and pedestal=8192. Bias-control is preserved.
+Bias zero is blocked if the transition or TRIM clear cannot be confirmed.
 
 Data integrity:
   Every completed point contains a SHA256SUMS manifest for config.txt and the
@@ -71,16 +79,19 @@ Resume options:
   --resume                 Load the scan plan from DIR/scan_metadata.txt,
                            remove the last incomplete/potentially corrupt
                            point, and continue. If complete, no data is removed.
+                           An older plan without a saved bias window can be
+                           resumed with --bias-safe-window-mv MIN MAX.
   -y, --yes                Accept the configuration summary without prompting.
 
 Examples:
-  # VGAIN-only scan at a fixed bias
+  # VGAIN-only scan at a fixed bias. Set MIN_MV and MAX_MV for your hardware.
   source vgain_scan.sh -output_folder data -vgain_range "[1800,100,2200]" \
-      -bias 31.5 -trim 2000 -bias_control 55.0 -channel 16 17 -L 2048 -N 1000 -ip 127.0.0.1 -port 50001
+      -bias 31.5 --channels "16, 17" --trim "[100, 200]" --bias-safe-window-mv "$MIN_MV" "$MAX_MV" \
+      -bias_control 55.0 -L 2048 -N 1000 -ip 127.0.0.1 -port 50001
 
   # Bias-only scan at a fixed VGAIN, with bias values expressed as DAC codes
   source vgain_scan.sh -output_folder data -bias_list "[700,750,800]" \
-      -vgain 2000 -set_as_DAC -trim 2000 -bias_control 740 -channel 16 17 -L 2048 -N 1000 -ip 127.0.0.1 -port 50001
+      -vgain 2000 -set_as_DAC -bias_control 740 -channel 16 17 -L 2048 -N 1000 -ip 127.0.0.1 -port 50001
 
   # Nested bias/VGAIN scan
   source vgain_scan.sh -output_folder data -bias_range "[30,0.5,31]" \
@@ -115,6 +126,19 @@ parse_list() {
         fail "empty list: $specification"
         return 1
     fi
+}
+
+parse_dac_list() {
+    local specification="$1"
+    local list_pattern='^[[:blank:]]*[0-9]+(([[:blank:]]*,[[:blank:]]*|[[:blank:]]+)[0-9]+)*[[:blank:]]*$'
+    if [[ "$specification" =~ ^[[:blank:]]*\[(.*)\][[:blank:]]*$ ]]; then
+        specification="${BASH_REMATCH[1]}"
+    fi
+    if [[ ! "$specification" =~ $list_pattern ]]; then
+        fail "invalid integer list '$1'"
+        return 1
+    fi
+    parse_list "$specification" "$2"
 }
 
 parse_triplet() {
@@ -200,7 +224,7 @@ build_decimal_range() {
 
 validate_dac() {
     local value="$1" label="$2"
-    if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 0 || value > 4095 )); then
+    if [[ ! "$value" =~ ^0*[0-9]{1,4}$ ]] || (( 10#$value > 4095 )); then
         fail "$label must be an integer DAC code in 0..4095 (got '$value')"
         return 1
     fi
@@ -406,6 +430,11 @@ write_scan_metadata() {
         echo "set_as_dac=$set_as_dac"
         echo "bias_control=$bias_control"
         echo "trim=$trim"
+        echo "allow_unmonitored_bias=$allow_unmonitored_bias"
+        if [[ -n "$bias_safe_min_mv" ]]; then
+            echo "bias_safe_min_mv=$bias_safe_min_mv"
+            echo "bias_safe_max_mv=$bias_safe_max_mv"
+        fi
         echo "pedestal=$pedestal"
         echo "ip_addr=$ip_addr"
         echo "port=$port"
@@ -437,7 +466,7 @@ write_scan_metadata() {
 
 load_scan_metadata() {
     local key value format_version="" channel_csv="" bias_csv="" vgain_csv=""
-    local saved_afe="" saved_checksum_algorithm=""
+    local saved_afe="" saved_checksum_algorithm="" saved_bias_min_mv="" saved_bias_max_mv=""
     local -A capture_settings=()
     [[ -f "$metadata_file" ]] || {
         fail "resume metadata not found: $metadata_file"
@@ -458,6 +487,15 @@ load_scan_metadata() {
             set_as_dac) set_as_dac="$value" ;;
             bias_control) bias_control="$value" ;;
             trim) trim="$value" ;;
+            allow_unmonitored_bias)
+                case "$value" in
+                    true) allow_unmonitored_bias=true ;;
+                    false) ;;
+                    *) fail "invalid allow_unmonitored_bias in $metadata_file"; return 1 ;;
+                esac
+                ;;
+            bias_safe_min_mv) saved_bias_min_mv="$value" ;;
+            bias_safe_max_mv) saved_bias_max_mv="$value" ;;
             pedestal) pedestal="$value" ;;
             ip_addr) ip_addr="$value" ;;
             port) port="$value" ;;
@@ -503,6 +541,14 @@ load_scan_metadata() {
         sha256) checksums_required=true ;;
         *) fail "unsupported checksum algorithm '$saved_checksum_algorithm' in $metadata_file"; return 1 ;;
     esac
+    if [[ -n "$saved_bias_min_mv" || -n "$saved_bias_max_mv" ]]; then
+        if [[ -n "$bias_safe_min_mv" || -n "$bias_safe_max_mv" ]]; then
+            fail "--resume loads the bias window from metadata"
+            return 1
+        fi
+        bias_safe_min_mv="$saved_bias_min_mv"
+        bias_safe_max_mv="$saved_bias_max_mv"
+    fi
     IFS=',' read -r -a channel_list <<< "$channel_csv"
     IFS=',' read -r -a bias_array <<< "$bias_csv"
     IFS=',' read -r -a vgain_array <<< "$vgain_csv"
@@ -599,7 +645,13 @@ confirm_scan_parameters() {
     echo "AFE:                  $afe"
     echo "Bias values ($units): ${bias_array[*]}"
     echo "Bias control:         $bias_control $units"
-    echo "TRIM:                 $trim DAC"
+    if [[ "$allow_unmonitored_bias" == true ]]; then
+        echo "Bias verification:    nominal voltage and DAC readback (monitor bypassed)"
+    fi
+    echo "TRIM (channel:DAC):   ${trim_map[*]}"
+    if [[ -n "$bias_safe_min_mv" ]]; then
+        echo "Safe bias window:     $bias_safe_min_mv..$bias_safe_max_mv mV effective"
+    fi
     echo "VGAIN values (DAC):   ${vgain_array[*]}"
     echo "Pedestal:             $pedestal ADC (regula_falsi, auto)"
     echo "Waveforms / length:   $N / $L"
@@ -642,20 +694,16 @@ confirm_scan_parameters() {
 restore_default_configuration() {
     local reason="$1"
     local restore_log="${output_folder}/default_restore.log"
-    local restore_channel restore_readback
+    local restore_readback
     local restore_failed=false
-    local -a restore_args restore_vgain_args restore_pedestal_args restore_read_args
+    local -a restore_vgain_args restore_pedestal_args restore_read_args
 
     echo "Restoring defaults after $reason: bias=0, TRIM=0, VGAIN=1700, pedestal=8192; preserving bias_control=$bias_control."
     : > "$restore_log"
-    for restore_channel in "${channel_list[@]}"; do
-        restore_args=("${common_connection_args[@]}" -channel "$restore_channel" -bias 0 -trim 0 -bias_control "$bias_control")
-        [[ "$set_as_dac" == true ]] && restore_args+=(--set-as-dac)
-        if ! run_logged "$restore_log" "restore bias/TRIM for channel $restore_channel" \
-            "$python_bin" "$client_dir/protobuf_configure_vbias_trim.py" "${restore_args[@]}"; then
-            restore_failed=true
-        fi
-    done
+    if ! run_logged "$restore_log" "clear AFE TRIM before restoring bias to zero" \
+        "$python_bin" "$client_dir/protobuf_vgain_bias.py" shutdown "${bias_sequence_args[@]}"; then
+        return 1
+    fi
 
     restore_vgain_args=("${common_connection_args[@]}" -afe "$afe" -vgain_value 1700)
     if ! run_logged "$restore_log" "restore VGAIN to 1700" \
@@ -721,6 +769,8 @@ scan_main() {
     local output_folder="" vgain_list="" vgain_range="" fixed_vgain=""
     local bias_list="" bias_range="" fixed_bias=""
     local trim="0" bias_control="0" ip_addr="" port="" N="" L=""
+    local bias_safe_min_mv="" bias_safe_max_mv=""
+    local allow_unmonitored_bias=false
     local trigger_source_arg="" route="mezz/0" timeout_ms="30000"
     local backend=spybuffer capture_mode=persistent force_acq=false pretrigger=0
     local trigger_timeout_ms=10000 job_timeout_ms=0 pressure_timeout_ms=0 dma_option_seen=false
@@ -736,7 +786,7 @@ scan_main() {
     local script_dir client_dir
     script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
     client_dir="${script_dir}/../client"
-    local -a channel_list=() vgain_array=() bias_array=()
+    local -a channel_list=() vgain_array=() bias_array=() trim_map=() trim_values=()
     local -a pedestal_backend_args=() acquisition_backend_args=()
 
     source "$script_dir/../utils/identity_cli.sh" || return 1
@@ -759,20 +809,26 @@ scan_main() {
                 require_value "$@" || return 1; bias_range="$2"; config_option_seen=true; shift 2 ;;
             -bias|--bias|-vbias|--vbias)
                 require_value "$@" || return 1; fixed_bias="$2"; config_option_seen=true; shift 2 ;;
-            -channel|--channel)
+            -channel|--channel|--channels)
                 config_option_seen=true
                 shift
+                local -a channel_tokens=() parsed_channels=()
                 while [[ $# -gt 0 && "$1" != -* ]]; do
-                    channel_list+=("$1")
+                    channel_tokens+=("$1")
                     shift
                 done
-                if (( ${#channel_list[@]} == 0 )); then
-                    fail "-channel needs at least one channel number"
-                    return 1
-                fi
+                parse_dac_list "${channel_tokens[*]}" parsed_channels || return 1
+                channel_list+=("${parsed_channels[@]}")
                 ;;
             -trim|--trim)
                 require_value "$@" || return 1; trim="$2"; config_option_seen=true; shift 2 ;;
+            --allow-unmonitored-bias)
+                allow_unmonitored_bias=true; shift ;;
+            --bias-safe-window-mv)
+                if (( $# < 3 )); then
+                    fail "$1 requires MIN and MAX in millivolts"; return 1
+                fi
+                bias_safe_min_mv="$2"; bias_safe_max_mv="$3"; shift 3 ;;
             -bias_control|--bias-control)
                 require_value "$@" || return 1; bias_control="$2"; config_option_seen=true; shift 2 ;;
             -set_as_DAC|--set-as-dac)
@@ -832,7 +888,7 @@ scan_main() {
     metadata_file="${output_folder}/scan_metadata.txt"
     if [[ "$resume_mode" == true ]]; then
         if [[ "$config_option_seen" == true ]]; then
-            fail "--resume loads every scan parameter from metadata; use only -folder DIR --resume [--yes]"
+            fail "--resume loads scan parameters from metadata; use -folder DIR --resume [--yes]"
             return 1
         fi
         load_scan_metadata || return 1
@@ -851,20 +907,22 @@ scan_main() {
     validate_positive_integer "$N" "N" || return 1
     validate_positive_integer "$L" "L" || return 1
     validate_positive_integer "$timeout_ms" "timeout" || return 1
-    validate_dac "$trim" "trim" || return 1
     if [[ ! "$pedestal" =~ ^[0-9]+$ ]] || (( pedestal < 0 || pedestal > 16383 )); then
         fail "pedestal must be an integer ADC code in 0..16383 (got '$pedestal')"
         return 1
     fi
 
-    local channel channel_afe
+    local channel channel_afe index trim_value
     local -A seen_channels=()
     afe=-1
-    for channel in "${channel_list[@]}"; do
-        if [[ ! "$channel" =~ ^[0-9]+$ ]] || (( channel < 0 || channel > 39 )); then
+    for index in "${!channel_list[@]}"; do
+        channel="${channel_list[index]}"
+        if [[ ! "$channel" =~ ^0*[0-9]{1,2}$ ]] || (( 10#$channel > 39 )); then
             fail "channel must be an integer in 0..39 (got '$channel')"
             return 1
         fi
+        channel=$((10#$channel))
+        channel_list[index]="$channel"
         if [[ -n "${seen_channels[$channel]:-}" ]]; then
             fail "channel $channel was specified more than once"
             return 1
@@ -878,6 +936,39 @@ scan_main() {
             return 1
         fi
     done
+    if [[ "$trim" =~ ^[0-9]+$ ]]; then
+        validate_dac "$trim" "trim" || return 1
+        for channel in "${channel_list[@]}"; do
+            trim_values+=("$trim")
+        done
+    else
+        parse_dac_list "$trim" trim_values || return 1
+        if (( ${#trim_values[@]} != ${#channel_list[@]} )); then
+            fail "TRIM list must have exactly one value per selected channel"
+            return 1
+        fi
+    fi
+    local has_nonzero_trim=false
+    for index in "${!trim_values[@]}"; do
+        trim_value="${trim_values[index]}"
+        validate_dac "$trim_value" "trim" || return 1
+        trim_value=$((10#$trim_value))
+        trim_values[index]="$trim_value"
+        trim_map+=("${channel_list[index]}:$trim_value")
+        if (( trim_value > 0 )); then
+            has_nonzero_trim=true
+        fi
+    done
+    if [[ ! "$trim" =~ ^[0-9]+$ ]]; then
+        trim=$(join_by_comma "${trim_values[@]}")
+    fi
+    if [[ -n "$bias_safe_min_mv" || -n "$bias_safe_max_mv" ]]; then
+        if [[ ! "$bias_safe_min_mv" =~ ^[0-9]{1,9}$ || ! "$bias_safe_max_mv" =~ ^[0-9]{1,9}$ ]] ||
+            (( 10#$bias_safe_min_mv >= 10#$bias_safe_max_mv )); then
+            fail "--bias-safe-window-mv requires integers with 0 <= MIN < MAX"
+            return 1
+        fi
+    fi
     if [[ "$resume_mode" == true && "$metadata_afe" != "$afe" ]]; then
         fail "metadata AFE $metadata_afe does not match channels ${channel_list[*]} (AFE $afe)"
         return 1
@@ -1061,8 +1152,24 @@ scan_main() {
         resume_start_index=0
     fi
 
+    if [[ "$has_nonzero_trim" == true && -z "$bias_safe_min_mv" ]]; then
+        fail "nonzero TRIM requires --bias-safe-window-mv MIN MAX"
+        return 1
+    fi
     confirm_scan_parameters || return 1
 
+    local -a common_connection_args bias_sequence_args bias_apply_args
+    common_connection_args=(-ip "$ip_addr" -port "$port" -route "$route" --timeout-ms "$timeout_ms")
+    bias_sequence_args=("${common_connection_args[@]}" --afe "$afe" --state-file "${output_folder}/.bias_trim_state.json")
+    if [[ -n "$bias_safe_min_mv" ]]; then
+        bias_sequence_args+=(--bias-safe-window-mv "$bias_safe_min_mv" "$bias_safe_max_mv")
+    fi
+    [[ "$allow_unmonitored_bias" == true ]] && bias_sequence_args+=(--allow-unmonitored-bias)
+    bias_apply_args=("${bias_sequence_args[@]}" --bias-control "$bias_control" --trim-map "${trim_map[@]}")
+    [[ "$set_as_dac" == true ]] && bias_apply_args+=(--set-as-dac)
+    if [[ "$restore_only_mode" != true ]]; then
+        "$python_bin" "$client_dir/protobuf_vgain_bias.py" validate "${bias_apply_args[@]}" --bias "${bias_array[@]}" || return 1
+    fi
     mkdir -p "$output_folder" || { fail "could not create output folder '$output_folder'"; return 1; }
     if [[ "$resume_mode" == true && -n "$resume_delete_folder" ]]; then
         case "$resume_delete_folder" in
@@ -1090,8 +1197,7 @@ scan_main() {
     }
 
     local bias_folder bias_log bias_readback
-    local -a common_connection_args bias_args read_bias_args vgain_args pedestal_args read_all_args
-    common_connection_args=(-ip "$ip_addr" -port "$port" -route "$route" --timeout-ms "$timeout_ms")
+    local -a read_bias_args vgain_args pedestal_args read_all_args
     trap 'handle_scan_signal INT 130' INT
     trap 'handle_scan_signal TERM 143' TERM
     trap 'handle_scan_signal HUP 129' HUP
@@ -1108,14 +1214,9 @@ scan_main() {
         mkdir -p "$bias_folder" || { fail "could not create '$bias_folder'"; return 1; }
         bias_log="${bias_folder}/vbias_config.txt"
         : > "$bias_log"
-        echo "Configuring AFE $afe bias=$bias $units and TRIM=$trim DAC for channels ${channel_list[*]}"
-
-        for channel in "${channel_list[@]}"; do
-            bias_args=("${common_connection_args[@]}" -channel "$channel" -bias "$bias" -trim "$trim" -bias_control "$bias_control")
-            [[ "$set_as_dac" == true ]] && bias_args+=(--set-as-dac)
-            run_logged "$bias_log" "configure bias/trim for channel $channel" \
-                "$python_bin" "$client_dir/protobuf_configure_vbias_trim.py" "${bias_args[@]}" || return 1
-        done
+        echo "Configuring AFE $afe bias=$bias $units and TRIM (channel:DAC) ${trim_map[*]}"
+        run_logged "$bias_log" "configure AFE bias and channel TRIM" \
+            "$python_bin" "$client_dir/protobuf_vgain_bias.py" apply "${bias_apply_args[@]}" --bias "$bias" || return 1
 
         read_bias_args=("${common_connection_args[@]}" -channel "${channel_list[@]}" -afe "$afe" --trim --bias --bias-control --compact)
         if ! bias_readback=$("$python_bin" "$client_dir/protobuf_read_configuration.py" "${read_bias_args[@]}" 2>&1); then
@@ -1153,6 +1254,8 @@ scan_main() {
                 echo "bias_units=$units"
                 echo "bias_control_requested=$bias_control"
                 echo "trim_requested=$trim"
+                echo "trim_by_channel=${trim_map[*]}"
+                echo "allow_unmonitored_bias=$allow_unmonitored_bias"
                 echo "trim_units=DAC"
                 echo "vgain_requested=$vgain"
                 echo "vgain_units=DAC"

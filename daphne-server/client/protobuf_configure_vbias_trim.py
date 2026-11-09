@@ -11,8 +11,11 @@ from protobuf_loader import load_protobuf_modules
 from v2_client import V2Client
 
 
+BIAS_DAC_CODES_PER_VOLT = (26.1 / (26.1 + 1000.0)) * 1000.0
+
+
 def bias_volts_to_dac(volts):
-    return int((26.1 / (26.1 + 1000.0)) * 1000.0 * volts)
+    return int(BIAS_DAC_CODES_PER_VOLT * volts)
 
 
 def bias_control_volts_to_dac(volts):

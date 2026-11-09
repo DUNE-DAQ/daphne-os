@@ -48,6 +48,28 @@ Por ejemplo, `--dma --force-acq --pretrigger 1024 -trigger_source external`
 adquiere los datos alrededor de eventos externos, mientras la calibración usa
 disparos software. No hay fallback automático entre DMA y spybuffer.
 
+## TRIM por canal
+
+`--channels "0, 1, 3, 5" --trim "[100, 200, 300, 500]"` asigna los valores
+posicionalmente. Los canales deben pertenecer al mismo AFE. Los canales no
+seleccionados de ese AFE reciben TRIM cero. `-channel 0 1 3 5` y el TRIM escalar
+siguen disponibles.
+
+Para usar TRIM no nulo, añadir `--bias-safe-window-mv MIN MAX` con los límites
+validados de tensión efectiva en los SiPM. La ventana cubre el punto de bias
+antes de aplicar el TRIM y el mínimo transitorio antes de borrarlo. Incluir
+margen para la calibración del DAC y del monitor de la placa. El barrido requiere
+control exclusivo de la configuración analógica. Por defecto, el cliente exige
+tres lecturas del monitor de bias dentro de la banda de aceptación antes de
+aplicar o borrar TRIM, con el período de monitoreo predeterminado de 200 ms.
+
+Con `--allow-unmonitored-bias`, el script espera 750 ms y comprueba el setpoint
+DAC por readback en lugar de consultar el monitor. La ventana se aplica a la
+tensión nominal calculada y el orden de restauración se conserva. El readback
+confirma el código programado. La tensión real en los SiPM queda sin verificar.
+El modo se guarda en los metadatos y se reutiliza al reanudar. También se puede
+activar explícitamente con `--resume --allow-unmonitored-bias`.
+
 ## Archivos, integridad y reanudación
 
 Se conserva la estructura `vbias_<bias>/vgain_<vgain>/`, con `config.txt`,
@@ -63,8 +85,9 @@ plazos, además de los parámetros anteriores. Para reanudar:
 bash daphne-server/bash_scripts/vgain_scan.sh -folder scan_dma --resume
 ```
 
-La reanudación carga todo desde los metadatos y rechaza opciones que intenten
-cambiar el plan. Los metadatos antiguos de versión 1 se interpretan como
+La reanudación carga el vector y la ventana de los metadatos. Un plan antiguo sin
+ventana guardada admite `--bias-safe-window-mv MIN MAX` al reanudar. Los metadatos
+antiguos de versión 1 se interpretan como
 spybuffer. Los puntos deben formar una secuencia contigua; se conserva la
 política de repetir el último punto potencialmente incompleto y de verificar
 los checksums de los puntos retenidos. Un scan completo válido no adquiere ni
@@ -73,8 +96,14 @@ restauración, se ejecuta solamente esa restauración y la verificación final.
 
 ## Interrupción y restauración
 
-Se mantiene la restauración existente: bias=0, TRIM=0, VGAIN=1700 y pedestal=8192,
-preservando bias-control. También se intenta tras fallo o SIGINT/SIGTERM/SIGHUP.
+Antes de cambiar el bias entre puntos o finalizar, el script reduce el bias en
+el equivalente del TRIM máximo del AFE. Confirma la transición según el modo de
+verificación seleccionado y luego borra el TRIM de los ocho canales. Al finalizar
+escribe bias=0 solo después de confirmar el borrado, restaura VGAIN=1700 y
+pedestal=8192, y conserva bias-control. Se usa el mismo orden tras fallo o
+SIGINT/SIGTERM/SIGHUP. El
+objetivo de transición se guarda hasta confirmar el borrado para que un
+reintento no vuelva a reducir el bias.
 
 Los clientes DMA de archivos y pedestal manejan esas señales cooperativamente:
 marcan cancelación, dejan terminar el RPC en vuelo y ejecutan la limpieza DMA.
