@@ -265,6 +265,37 @@ class PedestalCalibrationTests(unittest.TestCase):
         self.assertAlmostEqual(result.pedestal, result.plateau_target, delta=result.tolerance)
         self.assertEqual(hw.transfer_functions[0](hw.offsets[0]), result.pedestal)
 
+    def test_plateau_margin_probes_response_after_search_stays_near_dac_limit(self):
+        # ColdBox channel 0, with an interpolated rising branch beyond the log.
+        measured = {0: 2444.360, 12: 2433.708, 32: 2435.786, 64: 2433.844,
+                    135: 2431.298, 136: 2435.298}
+
+        def transfer(offset):
+            if offset in measured:
+                return measured[offset]
+            return min(ADC_MAX, 2438 + 4 * max(0, offset - 480))
+
+        hw = _SimulatedHardware({0: transfer})
+        hw.offsets[0] = 136
+        result, = calibrate_pedestals_auto(
+            [0], 2000, "regula_falsi", 1, hw.write_offset, hw.measure,
+            report=None, initial_offsets={0: 136}, plateau_margin=300,
+        )
+        self.assertIn({0: pedestal.OFFSET_MAX}, hw.measurements)
+        self.assertTrue(result.converged)
+        self.assertAlmostEqual(result.plateau_target, 2731.298)
+        self.assertAlmostEqual(result.pedestal, result.plateau_target, delta=result.tolerance)
+
+    def test_plateau_margin_keeps_original_target_when_new_probe_brackets_it(self):
+        hw = _SimulatedHardware({0: lambda offset: 2 * offset})
+        result, = calibrate_pedestals(
+            [0], 6000, "regula_falsi", 1, 512, 1, hw.write_offset, hw.measure,
+            report=None, plateau_margin=-300,
+        )
+        self.assertTrue(result.converged)
+        self.assertIsNone(result.plateau_target)
+        self.assertEqual(result.pedestal, 6000)
+
     def test_plateau_margin_keeps_target_discovered_by_extra_probes(self):
         hw = _SimulatedHardware({0: lambda offset: 2 * offset})
         result, = calibrate_pedestals(

@@ -29,6 +29,8 @@ OFFSET_MIN = 0
 OFFSET_MAX = (1 << 12) - 1
 INITIAL_OFFSET = 2275
 PLATEAU_PROBE_SPACING = 32  # DAC codes between measurements near an OFFSET limit
+PLATEAU_EDGE_DRIFT = 16.0  # ADC counts; allow drift at the first probe
+PLATEAU_INTERIOR_DRIFT = 8.0  # ADC counts between the two interior probes
 PEDESTAL_WAVEFORMS = 500
 MAX_ACQUISITION_BYTES = 48 * 1024 * 1024
 
@@ -409,11 +411,12 @@ def _plateau_level(
          if direction * (item.offset - offsets[2]) >= span),
         default=0.0,
     )
-    # Require a clear change in slope and bound the excursion at the limit.
-    inner_limit = max(noise_limit, min(8.0, response * PLATEAU_PROBE_SPACING / 4))
-    if response > 0 and abs(outer - inner) <= inner_limit and (
-        abs(edge - outer) <= response * span / 2
-    ):
+    # Allow edge drift when the interior flattens relative to the response
+    # measured farther from the limit. Keep this independent of target tolerance.
+    interior_change = abs(outer - inner)
+    if (response * PLATEAU_PROBE_SPACING >= 4 * max(noise_limit, interior_change)
+            and interior_change <= PLATEAU_INTERIOR_DRIFT
+            and abs(edge - outer) <= max(PLATEAU_EDGE_DRIFT, response * span / 2)):
         return level
     return None
 
@@ -471,6 +474,18 @@ def _resolve_plateaus(
     objectives = {}
     opposite_limits = {}
     noise_limit = min(1.0, minimum_tolerance)
+    # An automatic search can spend its budget in the flat region. Measure
+    # the other end of the DAC to establish the response in that case.
+    response_probes = {}
+    for channel, offsets in probes.items():
+        state = states[channel]
+        opposite = OFFSET_MAX if offsets[0] == OFFSET_MIN else OFFSET_MIN
+        if (opposite not in state.observations
+                and abs(state.best(target).pedestal - target) > tolerances[channel]
+                and _bracket(state, target) is None
+                and _plateau_level(state, offsets, target, noise_limit) is None):
+            response_probes[channel] = opposite
+    measure_offsets(response_probes)
     for channel, offsets in probes.items():
         state = states[channel]
         if _accept_best(state, target, tolerances[channel], "within tolerance at DAC limit"):
@@ -481,6 +496,7 @@ def _resolve_plateaus(
 
         plateau = _plateau_level(state, offsets, target, noise_limit)
         if plateau is None:
+            state.reason = f"{state.reason}, pedestal plateau not confirmed"
             continue
 
         fallback = plateau + margin
