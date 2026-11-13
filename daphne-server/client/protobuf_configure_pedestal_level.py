@@ -30,7 +30,7 @@ OFFSET_MAX = (1 << 12) - 1
 INITIAL_OFFSET = 2275
 PLATEAU_PROBE_SPACING = 32  # DAC codes between measurements near an OFFSET limit
 PLATEAU_EDGE_DRIFT = 16.0  # ADC counts; allow drift at the first probe
-PLATEAU_INTERIOR_DRIFT = 8.0  # ADC counts between the two interior probes
+PLATEAU_INTERIOR_DRIFT = 10.0  # ADC counts between the two interior probes
 PEDESTAL_WAVEFORMS = 500
 MAX_ACQUISITION_BYTES = 48 * 1024 * 1024
 

@@ -286,6 +286,28 @@ class PedestalCalibrationTests(unittest.TestCase):
         self.assertAlmostEqual(result.plateau_target, 2731.298)
         self.assertAlmostEqual(result.pedestal, result.plateau_target, delta=result.tolerance)
 
+    def test_plateau_margin_accepts_coldbox_channel_11_interior_drift(self):
+        measured = {
+            0: 2424.086, 32: 2483.510, 64: 2475.398, 82: 2421.756,
+            265: 2410.222, 1354: 4843.792, 1355: 4851.248, 1356: 4849.014,
+            pedestal.OFFSET_MAX: 14224.368,
+        }
+
+        def transfer(offset):
+            if offset in measured:
+                return measured[offset]
+            return min(ADC_MAX, 2424 + 4 * max(0, offset - 750))
+
+        hw = _SimulatedHardware({11: transfer})
+        hw.offsets[11] = 1356
+        result, = calibrate_pedestals_auto(
+            [11], 2000, "regula_falsi", 1, hw.write_offset, hw.measure,
+            report=None, initial_offsets={11: 1356}, plateau_margin=500,
+        )
+        self.assertTrue(result.converged)
+        self.assertAlmostEqual(result.plateau_target, 2910.222)
+        self.assertAlmostEqual(result.pedestal, result.plateau_target, delta=result.tolerance)
+
     def test_plateau_margin_keeps_original_target_when_new_probe_brackets_it(self):
         hw = _SimulatedHardware({0: lambda offset: 2 * offset})
         result, = calibrate_pedestals(
