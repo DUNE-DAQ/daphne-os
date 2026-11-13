@@ -38,6 +38,8 @@ DAPHNE options:
   --pedestal ADC                            Recalibrate per bias and VGAIN (default: 8192)
   --plateau-margin ADC                      Signed ADC margin added to a confirmed pedestal
                                             plateau when the scan target is unreachable
+  --plateau-diff ADC                        Maximum difference between interior plateau probes
+                                            (default: 10 ADC, used with --plateau-margin)
   -N COUNT -L SAMPLES                       Defaults: 1000 waveforms of 1024 samples
   --trigger-source SOURCE                   external (default), timing, software, all
 
@@ -203,6 +205,7 @@ confirm_scan() {
     printf '  Pedestal            %s ADC per bias and VGAIN\n' "$pedestal"
     if [[ -n "$plateau_margin" ]]; then
         printf '  Plateau margin      %s ADC\n' "$plateau_margin"
+        printf '  Plateau difference  %s ADC max\n' "${plateau_diff:-10}"
     fi
     printf '  Acquisition         %s waveforms/channel, %s samples, trigger %s\n' \
         "$waveform_count" "$waveform_length" "$trigger_source"
@@ -355,7 +358,7 @@ cleanup() {
 root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 client_dir="$root_dir/client"
 python_bin="${PYTHON:-python3}"
-output_folder='' channels='' bias_control='' trim=0 pedestal=8192 plateau_margin=''
+output_folder='' channels='' bias_control='' trim=0 pedestal=8192 plateau_margin='' plateau_diff=''
 ip=127.0.0.1 port=9876 route=mezz/0 timeout_ms=30000
 waveform_count=1000 waveform_length=1024 trigger_source=external
 ssp_host=127.0.0.1 ssp_port=55001 ssp_config="$root_dir/configs/led_run_defaults.json"
@@ -364,7 +367,7 @@ led_range='' led_270_list='' led_367_list=''
 assume_yes=0 verbose=0 progress_inline=0 progress_open=0
 declare -A axis_option=() axis_value=()
 declare -a bias_window=() bias_units=() monitor_args=()
-declare -a pedestal_margin_args=()
+declare -a pedestal_plateau_args=()
 
 while (( $# )); do
     case "$1" in
@@ -390,6 +393,7 @@ while (( $# )); do
         --trim) trim="$2" ;;
         --pedestal) pedestal="$2" ;;
         --plateau-margin) plateau_margin="$2" ;;
+        --plateau-diff) plateau_diff="$2" ;;
         --ip) ip="$2" ;;
         --port) port="$2" ;;
         --route) route="$2" ;;
@@ -424,7 +428,12 @@ if [[ -n "$plateau_margin" ]]; then
     margin_magnitude="${plateau_margin#[+-]}"
     [[ "$margin_magnitude" =~ ^[0-9]{1,5}$ ]] && (( 10#$margin_magnitude <= 16383 )) ||
         fail "plateau margin must be an integer in -16383..16383 (got '$plateau_margin')"
-    pedestal_margin_args=(--plateau-margin "$plateau_margin")
+    pedestal_plateau_args+=(--plateau-margin "$plateau_margin")
+fi
+if [[ -n "$plateau_diff" ]]; then
+    [[ "$plateau_diff" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] ||
+        fail "plateau difference must be a nonnegative decimal (got '$plateau_diff')"
+    pedestal_plateau_args+=(--plateau-diff "$plateau_diff")
 fi
 case "$trigger_source" in
     external|timing|software|all) ;;
@@ -586,6 +595,7 @@ for (( round = 0; round < bias_rounds; round += 1 )); do
             printf 'vgain=%s\npedestal_target=%s\n' "$vgain" "$pedestal" > "$config_log"
             if [[ -n "$plateau_margin" ]]; then
                 printf 'pedestal_plateau_margin=%s\n' "$plateau_margin" >> "$config_log"
+                printf 'pedestal_plateau_diff=%s\n' "${plateau_diff:-10}" >> "$config_log"
             fi
             run_logged "$config_log" "configure AFE $afe VGAIN" \
                 "$python_bin" "$client_dir/protobuf_configure_vgain.py" "${common_args[@]}" -afe "$afe" -vgain_value "$vgain"
@@ -593,7 +603,7 @@ for (( round = 0; round < bias_rounds; round += 1 )); do
             run_logged "$config_log" "calibrate AFE $afe pedestal" \
                 "$python_bin" "$client_dir/protobuf_configure_pedestal_level.py" "${common_args[@]}" \
                 -channel "${afe_channel_list[@]}" --use-current-offset -target_pedestal "$pedestal" \
-                -method regula_falsi --auto -L "$waveform_length" "${pedestal_margin_args[@]}"
+                -method regula_falsi --auto -L "$waveform_length" "${pedestal_plateau_args[@]}"
         done
         for afe in "${round_afes[@]}"; do
             read -r -a afe_channel_list <<< "${afe_channels[$afe]}"

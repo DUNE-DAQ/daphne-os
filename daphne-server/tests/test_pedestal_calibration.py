@@ -189,6 +189,16 @@ class _StatefulOffsetClient:
 
 
 class PedestalCalibrationTests(unittest.TestCase):
+    def test_cli_plateau_diff_accepts_a_finite_nonnegative_difference(self):
+        parser = build_parser()
+        base = ["--target-pedestal", "2000", "--samples", "1024"]
+        self.assertEqual(parser.parse_args(base).plateau_diff, 10.0)
+        self.assertEqual(parser.parse_args(base + ["--plateau-diff", "8.5"]).plateau_diff, 8.5)
+        for invalid in ("-1", "nan", "inf"):
+            with self.subTest(invalid=invalid), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    parser.parse_args(base + ["--plateau-diff", invalid])
+
     def test_plateau_margin_preserves_original_target_on_reachable_channels(self):
         for calibrate, settings in (
             (calibrate_pedestals, dict(max_iterations=16, max_offset_step=128, tolerance=1)),
@@ -298,15 +308,21 @@ class PedestalCalibrationTests(unittest.TestCase):
                 return measured[offset]
             return min(ADC_MAX, 2424 + 4 * max(0, offset - 750))
 
-        hw = _SimulatedHardware({11: transfer})
-        hw.offsets[11] = 1356
-        result, = calibrate_pedestals_auto(
-            [11], 2000, "regula_falsi", 1, hw.write_offset, hw.measure,
-            report=None, initial_offsets={11: 1356}, plateau_margin=500,
-        )
-        self.assertTrue(result.converged)
-        self.assertAlmostEqual(result.plateau_target, 2910.222)
-        self.assertAlmostEqual(result.pedestal, result.plateau_target, delta=result.tolerance)
+        for settings, expected in (({}, True), ({"plateau_diff": 8}, False),
+                                   ({"plateau_diff": 8.5}, True)):
+            with self.subTest(settings=settings):
+                hw = _SimulatedHardware({11: transfer})
+                hw.offsets[11] = 1356
+                result, = calibrate_pedestals_auto(
+                    [11], 2000, "regula_falsi", 1, hw.write_offset, hw.measure,
+                    report=None, initial_offsets={11: 1356}, plateau_margin=500, **settings,
+                )
+                self.assertEqual(result.converged, expected)
+                if expected:
+                    self.assertAlmostEqual(result.plateau_target, 2910.222)
+                    self.assertAlmostEqual(result.pedestal, result.plateau_target, delta=result.tolerance)
+                else:
+                    self.assertIsNone(result.plateau_target)
 
     def test_plateau_margin_keeps_original_target_when_new_probe_brackets_it(self):
         hw = _SimulatedHardware({0: lambda offset: 2 * offset})

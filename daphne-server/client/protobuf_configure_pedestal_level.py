@@ -30,7 +30,7 @@ OFFSET_MAX = (1 << 12) - 1
 INITIAL_OFFSET = 2275
 PLATEAU_PROBE_SPACING = 32  # DAC codes between measurements near an OFFSET limit
 PLATEAU_EDGE_DRIFT = 16.0  # ADC counts; allow drift at the first probe
-PLATEAU_INTERIOR_DRIFT = 10.0  # ADC counts between the two interior probes
+DEFAULT_PLATEAU_DIFF = 10.0  # ADC counts between the two interior probes
 PEDESTAL_WAVEFORMS = 500
 MAX_ACQUISITION_BYTES = 48 * 1024 * 1024
 
@@ -101,6 +101,13 @@ def plateau_margin_code(value):
         raise argparse.ArgumentTypeError(
             f"expected an integer in {-ADC_MAX}..{ADC_MAX}"
         )
+    return parsed
+
+
+def plateau_diff_value(value):
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed < 0:
+        raise argparse.ArgumentTypeError("expected a finite, nonnegative ADC difference")
     return parsed
 
 
@@ -395,10 +402,12 @@ def _move_offset(
 
 def _plateau_level(
     state: ChannelState, offsets: Tuple[int, int, int], target: float, noise_limit: float,
+    plateau_diff: float,
 ) -> Optional[float]:
     edge, inner, outer = (state.observations[offset].pedestal for offset in offsets)
     level = state.best(target).pedestal
-    if max(edge, inner, outer, level) - min(edge, inner, outer, level) <= noise_limit:
+    if (max(edge, inner, outer, level) - min(edge, inner, outer, level)
+            <= min(noise_limit, plateau_diff)):
         return sorted((edge, inner, outer))[1]
 
     # The pedestal can drift at the DAC limit and still flatten just inside it.
@@ -415,7 +424,7 @@ def _plateau_level(
     # measured farther from the limit. Keep this independent of target tolerance.
     interior_change = abs(outer - inner)
     if (response * PLATEAU_PROBE_SPACING >= 4 * max(noise_limit, interior_change)
-            and interior_change <= PLATEAU_INTERIOR_DRIFT
+            and interior_change <= plateau_diff
             and abs(edge - outer) <= max(PLATEAU_EDGE_DRIFT, response * span / 2)):
         return level
     return None
@@ -432,6 +441,7 @@ def _resolve_plateaus(
     measure_pedestals: Callable[[Sequence[int]], Dict[int, float]],
     report: Optional[Callable[[str], None]],
     auto: bool = False,
+    plateau_diff: float = DEFAULT_PLATEAU_DIFF,
 ):
     """Check the target-facing DAC limit and tune any confirmed fallback targets."""
     probes = {}
@@ -483,7 +493,7 @@ def _resolve_plateaus(
         if (opposite not in state.observations
                 and abs(state.best(target).pedestal - target) > tolerances[channel]
                 and _bracket(state, target) is None
-                and _plateau_level(state, offsets, target, noise_limit) is None):
+                and _plateau_level(state, offsets, target, noise_limit, plateau_diff) is None):
             response_probes[channel] = opposite
     measure_offsets(response_probes)
     for channel, offsets in probes.items():
@@ -494,7 +504,7 @@ def _resolve_plateaus(
             objectives[channel] = target
             continue
 
-        plateau = _plateau_level(state, offsets, target, noise_limit)
+        plateau = _plateau_level(state, offsets, target, noise_limit, plateau_diff)
         if plateau is None:
             state.reason = f"{state.reason}, pedestal plateau not confirmed"
             continue
@@ -551,6 +561,7 @@ def calibrate_pedestals(
     report: Optional[Callable[[str], None]] = print,
     initial_offsets: Optional[Dict[int, int]] = None,
     plateau_margin: Optional[int] = None,
+    plateau_diff: float = DEFAULT_PLATEAU_DIFF,
 ) -> List[CalibrationResult]:
     """Calibrate selected channels concurrently and leave each at its best offset."""
     if method not in ("bisection", "regula_falsi"):
@@ -632,7 +643,7 @@ def calibrate_pedestals(
     if plateau_margin is not None:
         _resolve_plateaus(
             states, target, plateau_margin, tolerances, tolerance, max_offset_step,
-            write_offset, measure_pedestals, report,
+            write_offset, measure_pedestals, report, plateau_diff=plateau_diff,
         )
 
     results = []
@@ -701,6 +712,7 @@ def calibrate_pedestals_auto(
     report: Optional[Callable[[str], None]] = print,
     initial_offsets: Optional[Dict[int, int]] = None,
     plateau_margin: Optional[int] = None,
+    plateau_diff: float = DEFAULT_PLATEAU_DIFF,
 ) -> List[CalibrationResult]:
     """Measure channel sensitivity, then tune with fully automatic bounds."""
     if method not in ("bisection", "regula_falsi"):
@@ -933,7 +945,7 @@ def calibrate_pedestals_auto(
     if plateau_margin is not None:
         _resolve_plateaus(
             states, target, plateau_margin, tolerances, minimum_tolerance, OFFSET_MAX,
-            write_offset, measure_pedestals, report, auto=True,
+            write_offset, measure_pedestals, report, auto=True, plateau_diff=plateau_diff,
         )
 
     results = []
@@ -1204,6 +1216,14 @@ def build_parser():
               "Plateau checks may take additional measurements."),
     )
     parser.add_argument(
+        "--plateau-diff",
+        type=plateau_diff_value,
+        default=DEFAULT_PLATEAU_DIFF,
+        metavar="ADC_COUNTS",
+        help=("Maximum ADC difference between the interior plateau probes "
+              "when using --plateau-margin (default: %(default)g)."),
+    )
+    parser.add_argument(
         "--auto",
         action="store_true",
         help=(
@@ -1361,6 +1381,7 @@ def main(argv=None):
                     measure_pedestals=measure_pedestals,
                     initial_offsets=initial_offsets,
                     plateau_margin=args.plateau_margin,
+                    plateau_diff=args.plateau_diff,
                 )
             else:
                 results = calibrate_pedestals(
@@ -1374,6 +1395,7 @@ def main(argv=None):
                     measure_pedestals=measure_pedestals,
                     initial_offsets=initial_offsets,
                     plateau_margin=args.plateau_margin,
+                    plateau_diff=args.plateau_diff,
                 )
 
             signals.check()
