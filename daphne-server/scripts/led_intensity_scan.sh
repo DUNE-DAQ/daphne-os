@@ -4,7 +4,8 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage: bash scripts/led_intensity_scan.sh --output-folder DIR --channels '[0,1]'
-    --bias-control VALUE (--vbias VALUE | --vbias-list LIST | --vbias-range RANGE)
+    --bias-control VALUE (--vbias VALUE | --vbias-list LIST | --vbias-range RANGE |
+                          --vbias-list-afeN LIST [--vbias-list-afeM LIST ...])
     (--vgain VALUE | --vgain-list LIST | --vgain-range RANGE)
     (--pulse-bias-percent-range RANGE |
      --pulse-bias-percent-270nm-list LIST --pulse-bias-percent-367nm-list LIST)
@@ -14,7 +15,13 @@ Ranges use [start,step,end] and include the end when it falls on a step.
 A shared LED range sets both wavelengths to the same code at each step.
 The two explicit lists are paired by index and must have equal length.
 The SSP channel mask selects which outputs fire.
-Output is a new directory with bias_*/vgain_*/led_270nm_*_367nm_* points.
+With per-AFE selectors (--vbias-list-afeN or --vbias-range-afeN), supply
+one selector for each AFE represented in --channels. AFE N owns channels
+8*N through 8*N+7 (N=0..4). Each round captures the remaining AFEs together
+and saves data under AFE_N/bias_*/vgain_*/led_270nm_*_367nm_*.
+Global bias selectors select one AFE and keep the bias_*/vgain_*/led_*/ layout.
+Completed points have verified SHA256SUMS. The scan-wide SHA256SUMS is
+verified after SSP and bias/TRIM shutdown.
 
 Scan options:
   -y, --yes                                 Confirm the scan for unattended execution
@@ -23,7 +30,7 @@ Scan options:
 DAPHNE options:
   --ip HOST --port PORT --route ROUTE       Defaults: 127.0.0.1, 9876, mezz/0
   --timeout-ms MS                           Default: 30000
-  --trim VALUE|LIST                         TRIM DAC code per channel (default: 0)
+  --trim VALUE|LIST                         TRIM DAC codes in --channels order (default: 0)
   --bias-safe-window-mv MIN MAX             Required for nonzero TRIM
   --allow-unmonitored-bias                  Use nominal bias and DAC readback
   --set-as-dac                              Interpret bias and bias-control as DAC codes
@@ -106,16 +113,84 @@ require_unique() {
     done
 }
 
+point_checksum_files() {
+    local channel
+    local -a channels_for_afe
+    read -r -a channels_for_afe <<< "${afe_channels[$1]}"
+    point_files=(config.txt ssp.log acquire.log)
+    for channel in "${channels_for_afe[@]}"; do
+        point_files+=("channel_$channel.dat")
+    done
+}
+
+write_point_checksums() (
+    local folder="$1" afe="$2"
+    local -a point_files
+    point_checksum_files "$afe"
+    cd -- "$folder" &&
+        sha256sum -- "${point_files[@]}" > .SHA256SUMS.tmp &&
+        sha256sum --check --strict --quiet .SHA256SUMS.tmp &&
+        mv -- .SHA256SUMS.tmp SHA256SUMS
+)
+
+write_scan_checksum_entries() {
+    local afe prefix bias vgain led bias_dir vgain_dir point_dir file line
+    local hash_line='^([0-9a-f]{64})  (.+)$'
+    local -a biases point_files
+    sha256sum -- shutdown.log || return 1
+    for afe in "${afes[@]}"; do
+        prefix=''
+        if [[ "${afe_folder[$afe]}" != "$output_folder" ]]; then prefix="AFE_$afe/"; fi
+        read -r -a biases <<< "${afe_bias_values[$afe]}"
+        point_checksum_files "$afe"
+        for bias in "${biases[@]}"; do
+            bias_dir="${prefix}bias_$bias"
+            sha256sum -- "$bias_dir/bias_config.txt" || return 1
+            for vgain in "${vgain_list[@]}"; do
+                vgain_dir="$bias_dir/vgain_$vgain"
+                sha256sum -- "$vgain_dir/config.txt" || return 1
+                for led in "${led_folders[@]}"; do
+                    point_dir="$vgain_dir/$led"
+                    sha256sum -- "$point_dir/SHA256SUMS" "$point_dir/.scan_point_complete" || return 1
+                    # Reuse each point's hashes and require exactly the expected inventory.
+                    {
+                        for file in "${point_files[@]}"; do
+                            if ! IFS= read -r line || [[ ! "$line" =~ $hash_line || "${BASH_REMATCH[2]}" != "$file" ]]; then
+                                printf 'ERROR: invalid SHA-256 inventory in %s/SHA256SUMS (expected %s)\n' "$point_dir" "$file" >&2
+                                return 1
+                            fi
+                            printf '%s  %s/%s\n' "${BASH_REMATCH[1]}" "$point_dir" "$file" || return 1
+                        done
+                        if IFS= read -r line || [[ -n "$line" ]]; then
+                            printf 'ERROR: extra SHA-256 entries in %s/SHA256SUMS\n' "$point_dir" >&2
+                            return 1
+                        fi
+                    } < "$point_dir/SHA256SUMS" || return 1
+                done
+            done
+        done
+    done
+}
+
+write_scan_checksums() (
+    cd -- "$output_folder" &&
+        write_scan_checksum_entries > .SHA256SUMS.tmp &&
+        sha256sum --check --strict --quiet .SHA256SUMS.tmp &&
+        mv -- .SHA256SUMS.tmp SHA256SUMS
+)
+
 confirm_scan() {
-    local units='V' answer
+    local units='V' answer afe
     if (( ${#bias_units[@]} )); then units='DAC'; fi
     printf '\nLED intensity scan\n'
     printf '  Output folder       %s\n' "$output_folder"
     printf '  DAPHNE              %s:%s, route %s, timeout %s ms\n' "$ip" "$port" "$route" "$timeout_ms"
-    printf '  AFE / channels      %s / %s\n' "$afe" "${channel_list[*]}"
-    printf '  Bias (%s)            %s\n' "$units" "${bias_list[*]}"
     printf '  Bias control        %s %s\n' "$bias_control" "$units"
-    printf '  TRIM (channel:DAC)  %s\n' "${trim_map[*]}"
+    for afe in "${afes[@]}"; do
+        printf '  AFE %s               channels %s\n' "$afe" "${afe_channels[$afe]}"
+        printf '    Bias (%s)          %s\n' "$units" "${afe_bias_values[$afe]}"
+        printf '    TRIM (ch:DAC)     %s\n' "${afe_trim_map[$afe]}"
+    done
     if (( ${#bias_window[@]} )); then
         printf '  Safe bias window    %s to %s mV\n' "${bias_window[1]}" "${bias_window[2]}"
     fi
@@ -126,6 +201,7 @@ confirm_scan() {
     printf '  Pedestal            %s ADC per bias and VGAIN\n' "$pedestal"
     printf '  Acquisition         %s waveforms/channel, %s samples, trigger %s\n' \
         "$waveform_count" "$waveform_length" "$trigger_source"
+    printf '  Integrity           File size and SHA-256 per point, then scan-wide SHA-256\n'
     printf '  SSP                 %s:%s, config %s\n' "$ssp_host" "$ssp_port" "$ssp_config"
     printf '  SSP outputs         %s channels, mask %s, mode %s, width %s ticks\n' \
         "$ssp_channels" "$ssp_mask" "$ssp_mode" "$ssp_width"
@@ -134,8 +210,8 @@ confirm_scan() {
     else
         printf '  LED 270 nm / 367 nm %s / %s\n' "$led_270_list" "$led_367_list"
     fi
-    printf '  Points              %s (%s bias × %s VGAIN × %s LED)\n\n' \
-        "$total_points" "${#bias_list[@]}" "${#vgain_list[@]}" "${#led_folders[@]}"
+    printf '  Captures            %s (%s bias rounds × %s VGAIN × %s LED)\n\n' \
+        "$total_points" "$bias_rounds" "${#vgain_list[@]}" "${#led_folders[@]}"
 
     if (( assume_yes )); then
         printf 'Confirmation accepted by --yes.\n'
@@ -231,8 +307,14 @@ run_shutdown_step() {
     fi
 }
 
+set_bias_sequence_args() {
+    local afe="$1"
+    bias_sequence_args=("${common_args[@]}" --afe "$afe" --state-file "${afe_folder[$afe]}/.bias_trim_state.json"
+                        "${bias_window[@]}" "${monitor_args[@]}")
+}
+
 cleanup() {
-    local status="$1" cleanup_failed=0
+    local status="$1" cleanup_failed=0 afe
     trap - EXIT
     trap '' INT TERM HUP
     end_progress_line
@@ -241,16 +323,26 @@ cleanup() {
         wait "$active_child" 2>/dev/null || true
     fi
     run_shutdown_step 'stop SSP LED pulser' "${ssp_stop[@]}" || cleanup_failed=1
-    if (( bias_shutdown_pending )); then
-        run_shutdown_step 'shut down bias and TRIM' \
-            "$python_bin" "$client_dir/protobuf_vgain_bias.py" shutdown "${bias_sequence_args[@]}" || cleanup_failed=1
-    fi
+    for afe in "${afes[@]}"; do
+        if [[ "${bias_shutdown_pending[$afe]:-0}" == 1 ]]; then
+            set_bias_sequence_args "$afe"
+            run_shutdown_step "shut down AFE $afe bias and TRIM" \
+                "$python_bin" "$client_dir/protobuf_vgain_bias.py" shutdown "${bias_sequence_args[@]}" || cleanup_failed=1
+        fi
+    done
     if (( cleanup_failed )); then
         printf 'ERROR: hardware shutdown could not be confirmed. See %s\n' "$cleanup_log" >&2
         (( status != 0 )) || status=1
     fi
     if (( status == 0 )); then
-        printf 'LED intensity scan complete. Data in %s\n' "$output_folder"
+        trap - INT TERM HUP
+        printf 'Verifying scan-wide SHA-256 checksums.\n' >&2
+        if write_scan_checksums; then
+            printf 'LED intensity scan complete. Data in %s\n' "$output_folder"
+        else
+            printf 'ERROR: scan-wide SHA-256 verification failed in %s\n' "$output_folder" >&2
+            status=1
+        fi
     fi
     exit "$status"
 }
@@ -286,6 +378,7 @@ while (( $# )); do
         --output-folder) output_folder="$2" ;;
         --channels) channels="$2" ;;
         --vbias|--vbias-list|--vbias-range) set_axis vbias "$1" "$2" ;;
+        --vbias-list-afe[0-4]|--vbias-range-afe[0-4]) set_axis "afe${1##*afe}" "${1%-afe[0-4]}" "$2" ;;
         --vgain|--vgain-list|--vgain-range) set_axis vgain "$1" "$2" ;;
         --bias-control) bias_control="$2" ;;
         --trim) trim="$2" ;;
@@ -313,7 +406,8 @@ while (( $# )); do
 done
 
 [[ -n "$output_folder" && -n "$channels" && -n "$bias_control" ]] || fail 'provide --output-folder, --channels and --bias-control (see --help)'
-[[ -n "${axis_option[vbias]:-}" && -n "${axis_option[vgain]:-}" ]] || fail 'provide one bias and one VGAIN selector (see --help)'
+[[ -n "${axis_option[vgain]:-}" ]] || fail 'provide one VGAIN selector (see --help)'
+command -v sha256sum >/dev/null 2>&1 || fail 'sha256sum is required for scan file integrity verification'
 for value in "$port" "$ssp_port" "$timeout_ms" "$waveform_count" "$waveform_length"; do
     [[ "$value" =~ ^[1-9][0-9]{0,8}$ ]] || fail "expected a positive integer, got '$value'"
 done
@@ -327,26 +421,48 @@ esac
 values=$(expand_values --channels "$channels" 39) || exit 1
 mapfile -t channel_list <<< "$values"
 require_unique channel "${channel_list[@]}"
-afe=$((channel_list[0] / 8))
-for channel in "${channel_list[@]}"; do
-    (( channel / 8 == afe )) || fail 'select channels from a single AFE'
-done
 
 values=$(expand_values --trim "$trim" 4095) || exit 1
 mapfile -t trim_list <<< "$values"
 if (( ${#trim_list[@]} != 1 && ${#trim_list[@]} != ${#channel_list[@]} )); then
     fail 'provide a single TRIM value or one value per channel'
 fi
-trim_map=()
+declare -a afes=() afe_channels=() afe_trim_map=() afe_folder=() afe_bias_values=() afe_bias_count=()
 for index in "${!channel_list[@]}"; do
-    trim_map+=("${channel_list[index]}:${trim_list[index]:-${trim_list[0]}}")
+    channel=${channel_list[index]}
+    afe=$((channel / 8))
+    afe_channels[$afe]+="$channel "
+    afe_trim_map[$afe]+="$channel:${trim_list[index]:-${trim_list[0]}} "
 done
+afes=("${!afe_channels[@]}")
 
 bias_limit=''
 if (( ${#bias_units[@]} )); then bias_limit=4095; fi
-values=$(expand_values "${axis_option[vbias]}" "${axis_value[vbias]}" "$bias_limit") || exit 1
-mapfile -t bias_list <<< "$values"
-require_unique bias "${bias_list[@]}"
+bias_rounds=0
+if [[ -n "${axis_option[vbias]:-}" ]]; then
+    (( ${#afes[@]} == 1 )) || fail 'use per-AFE bias selectors when selecting channels from multiple AFEs'
+fi
+for afe in {0..4}; do
+    if [[ -n "${axis_option[afe$afe]:-}" ]]; then
+        [[ -n "${afe_channels[$afe]:-}" ]] || fail "bias specified for AFE $afe without selected channels"
+        [[ -z "${axis_option[vbias]:-}" ]] || fail 'choose a global bias selector or per-AFE selectors'
+    fi
+done
+for afe in "${afes[@]}"; do
+    axis="afe$afe"
+    afe_folder[$afe]="$output_folder/AFE_$afe"
+    if [[ -n "${axis_option[vbias]:-}" ]]; then
+        axis=vbias
+        afe_folder[$afe]="$output_folder"
+    fi
+    [[ -n "${axis_option[$axis]:-}" ]] || fail "missing bias selector for AFE $afe"
+    values=$(expand_values "${axis_option[$axis]}" "${axis_value[$axis]}" "$bias_limit") || exit 1
+    mapfile -t bias_list <<< "$values"
+    require_unique "AFE $afe bias" "${bias_list[@]}"
+    afe_bias_values[$afe]="${bias_list[*]}"
+    afe_bias_count[$afe]=${#bias_list[@]}
+    if (( afe_bias_count[afe] > bias_rounds )); then bias_rounds=${afe_bias_count[afe]}; fi
+done
 values=$(expand_values "${axis_option[vgain]}" "${axis_value[vgain]}" 4095) || exit 1
 mapfile -t vgain_list <<< "$values"
 require_unique VGAIN "${vgain_list[@]}"
@@ -372,9 +488,6 @@ done
 require_unique 'LED pair' "${led_folders[@]}"
 
 common_args=(-ip "$ip" -port "$port" --route "$route" --timeout-ms "$timeout_ms")
-bias_sequence_args=("${common_args[@]}" --afe "$afe" --state-file "$output_folder/.bias_trim_state.json"
-                    "${bias_window[@]}" "${monitor_args[@]}")
-bias_apply_args=("${bias_sequence_args[@]}" --bias-control "$bias_control" --trim-map "${trim_map[@]}" "${bias_units[@]}")
 ssp_connection=(--host "$ssp_host" --port "$ssp_port")
 ssp_run=(bash "$client_dir/ssp_led_run")
 ssp_run_args=("${ssp_connection[@]}" --config "$ssp_config" --number-channels "$ssp_channels"
@@ -393,17 +506,23 @@ try:
 except (OSError, TypeError, ValueError) as error:
     sys.exit(f"SSP configuration: {error}")
 PY
-"$python_bin" "$client_dir/protobuf_vgain_bias.py" validate "${bias_apply_args[@]}" --bias "${bias_list[@]}"
+for afe in "${afes[@]}"; do
+    set_bias_sequence_args "$afe"
+    read -r -a trim_map <<< "${afe_trim_map[$afe]}"
+    read -r -a bias_list <<< "${afe_bias_values[$afe]}"
+    "$python_bin" "$client_dir/protobuf_vgain_bias.py" validate "${bias_sequence_args[@]}" \
+        --bias-control "$bias_control" --trim-map "${trim_map[@]}" "${bias_units[@]}" --bias "${bias_list[@]}"
+done
 
 [[ ! -e "$output_folder" && ! -L "$output_folder" ]] || fail "output folder already exists: $output_folder"
-total_points=$((${#bias_list[@]} * ${#vgain_list[@]} * ${#led_folders[@]}))
+total_points=$((bias_rounds * ${#vgain_list[@]} * ${#led_folders[@]}))
 confirm_scan
 if (( verbose )); then export PYTHONUNBUFFERED=1; fi
 mkdir -p -- "$(dirname -- "$output_folder")"
 mkdir -- "$output_folder"
 
 active_child=''
-bias_shutdown_pending=0
+declare -a bias_shutdown_pending=()
 cleanup_log="$output_folder/shutdown.log"
 trap 'cleanup "$?"' EXIT
 trap 'exit 130' INT
@@ -417,60 +536,126 @@ show_progress
 
 run_logged "$cleanup_log" 'stop SSP before configuring DAPHNE' "${ssp_stop[@]}"
 
-for bias in "${bias_list[@]}"; do
-    bias_folder="$output_folder/bias_$bias"
-    mkdir -- "$bias_folder"
-    bias_log="$bias_folder/bias_config.txt"
-    printf 'bias=%s\nbias_control=%s\ntrim_map=%s\n' "$bias" "$bias_control" "${trim_map[*]}" > "$bias_log"
-    bias_shutdown_pending=1
-    run_logged "$bias_log" 'apply bias and TRIM' \
-        "$python_bin" "$client_dir/protobuf_vgain_bias.py" apply "${bias_apply_args[@]}" --bias "$bias"
-    run_logged "$bias_log" 'read back bias and TRIM' \
-        "$python_bin" "$client_dir/protobuf_read_configuration.py" "${common_args[@]}" \
-        -channel "${channel_list[@]}" -afe "$afe" --trim --bias --bias-control --compact
+declare -a round_afes=() active_channels=() bias_folder=() vgain_folder=() point_folder=()
+capture_folder="$output_folder/.capture"
+
+for (( round = 0; round < bias_rounds; round += 1 )); do
+    round_afes=()
+    active_channels=()
+    for afe in "${afes[@]}"; do
+        if (( round >= afe_bias_count[afe] )); then continue; fi
+        round_afes+=("$afe")
+        read -r -a afe_channel_list <<< "${afe_channels[$afe]}"
+        active_channels+=("${afe_channel_list[@]}")
+        read -r -a bias_list <<< "${afe_bias_values[$afe]}"
+        read -r -a trim_map <<< "${afe_trim_map[$afe]}"
+        bias=${bias_list[round]}
+        bias_folder[$afe]="${afe_folder[$afe]}/bias_$bias"
+        mkdir -p -- "${bias_folder[$afe]}"
+        bias_log="${bias_folder[$afe]}/bias_config.txt"
+        printf 'afe=%s\nround=%s\nbias=%s\nbias_control=%s\ntrim_map=%s\n' \
+            "$afe" "$((round + 1))" "$bias" "$bias_control" "${trim_map[*]}" > "$bias_log"
+        set_bias_sequence_args "$afe"
+        bias_shutdown_pending[$afe]=1
+        run_logged "$bias_log" "apply AFE $afe bias and TRIM" \
+            "$python_bin" "$client_dir/protobuf_vgain_bias.py" apply "${bias_sequence_args[@]}" \
+            --bias-control "$bias_control" --trim-map "${trim_map[@]}" "${bias_units[@]}" --bias "$bias"
+        run_logged "$bias_log" "read back AFE $afe bias and TRIM" \
+            "$python_bin" "$client_dir/protobuf_read_configuration.py" "${common_args[@]}" \
+            -channel "${afe_channel_list[@]}" -afe "$afe" --trim --bias --bias-control --compact
+    done
 
     for vgain in "${vgain_list[@]}"; do
-        vgain_folder="$bias_folder/vgain_$vgain"
-        mkdir -- "$vgain_folder"
-        config_log="$vgain_folder/config.txt"
-        printf 'vgain=%s\npedestal_target=%s\n' "$vgain" "$pedestal" > "$config_log"
-        run_logged "$config_log" 'configure VGAIN' \
-            "$python_bin" "$client_dir/protobuf_configure_vgain.py" "${common_args[@]}" -afe "$afe" -vgain_value "$vgain"
-        run_logged "$config_log" 'calibrate pedestal' \
-            "$python_bin" "$client_dir/protobuf_configure_pedestal_level.py" "${common_args[@]}" \
-            -channel "${channel_list[@]}" --use-current-offset -target_pedestal "$pedestal" \
-            -method regula_falsi --auto -L "$waveform_length"
+        for afe in "${round_afes[@]}"; do
+            vgain_folder[$afe]="${bias_folder[$afe]}/vgain_$vgain"
+            mkdir -- "${vgain_folder[$afe]}"
+            config_log="${vgain_folder[$afe]}/config.txt"
+            printf 'vgain=%s\npedestal_target=%s\n' "$vgain" "$pedestal" > "$config_log"
+            run_logged "$config_log" "configure AFE $afe VGAIN" \
+                "$python_bin" "$client_dir/protobuf_configure_vgain.py" "${common_args[@]}" -afe "$afe" -vgain_value "$vgain"
+            read -r -a afe_channel_list <<< "${afe_channels[$afe]}"
+            run_logged "$config_log" "calibrate AFE $afe pedestal" \
+                "$python_bin" "$client_dir/protobuf_configure_pedestal_level.py" "${common_args[@]}" \
+                -channel "${afe_channel_list[@]}" --use-current-offset -target_pedestal "$pedestal" \
+                -method regula_falsi --auto -L "$waveform_length"
+        done
+        for afe in "${round_afes[@]}"; do
+            read -r -a afe_channel_list <<< "${afe_channels[$afe]}"
+            run_logged "${vgain_folder[$afe]}/config.txt" "read back AFE $afe configuration after pedestal calibration" \
+                "$python_bin" "$client_dir/protobuf_read_configuration.py" "${common_args[@]}" \
+                -channel "${afe_channel_list[@]}" -afe "$afe" --offset --trim --bias --vgain --bias-control --compact
+        done
 
         for index in "${!led_folders[@]}"; do
-            point_folder="$vgain_folder/${led_folders[index]}"
-            mkdir -- "$point_folder"
             if (( verbose )); then
-                printf 'Acquiring bias=%s VGAIN=%s LED 270nm=%s 367nm=%s\n' \
-                    "$bias" "$vgain" "${led_270[index]}" "${led_367[index]}" >&2
+                printf 'Acquiring bias round %s, AFEs %s, VGAIN=%s LED 270nm=%s 367nm=%s\n' \
+                    "$((round + 1))" "${round_afes[*]}" "$vgain" "${led_270[index]}" "${led_367[index]}" >&2
             fi
-            run_logged "$point_folder/ssp.log" 'configure SSP LED intensity' \
+            for afe in "${round_afes[@]}"; do
+                point_folder[$afe]="${vgain_folder[$afe]}/${led_folders[index]}"
+                mkdir -- "${point_folder[$afe]}"
+            done
+
+            # The client writes one file per channel. Stage the shared capture
+            # until every channel has the expected number of samples.
+            first_afe=${round_afes[0]}
+            acquisition_folder=${point_folder[$first_afe]}
+            if (( ${#round_afes[@]} > 1 )); then
+                mkdir -- "$capture_folder"
+                acquisition_folder=$capture_folder
+            fi
+            run_logged "$acquisition_folder/ssp.log" 'configure SSP LED intensity' \
                 "${ssp_run[@]}" "${ssp_run_args[@]}" --channel-mask "$ssp_mask" \
                 --pulse-bias-percent-270nm "${led_270[index]}" --pulse-bias-percent-367nm "${led_367[index]}"
-            run_logged "$point_folder/acquire.log" 'acquire waveforms' \
+            run_logged "$acquisition_folder/acquire.log" 'acquire waveforms' \
                 "$python_bin" "$client_dir/protobuf_acquire_list_channels.py" \
                 -ip "$ip" -port "$port" --route "$route" --timeout_ms "$timeout_ms" \
-                -foldername "$point_folder" -channel_list "${channel_list[@]}" \
+                -foldername "$acquisition_folder" -channel_list "${active_channels[@]}" \
                 -N "$waveform_count" -L "$waveform_length" --trigger-source "$trigger_source"
-            for channel in "${channel_list[@]}"; do
-                data_file="$point_folder/channel_$channel.dat"
+            for channel in "${active_channels[@]}"; do
+                data_file="$acquisition_folder/channel_$channel.dat"
                 [[ -f "$data_file" ]] && (( $(wc -c < "$data_file") == 2 * waveform_count * waveform_length )) \
                     || fail "incomplete waveform data: $data_file"
             done
-            touch -- "$point_folder/.scan_point_complete"
+            if [[ "$acquisition_folder" == "$capture_folder" ]]; then
+                for channel in "${active_channels[@]}"; do
+                    mv -- "$capture_folder/channel_$channel.dat" "${point_folder[channel / 8]}/"
+                done
+                for afe in "${round_afes[@]}"; do
+                    cp -- "$capture_folder/ssp.log" "$capture_folder/acquire.log" "${point_folder[$afe]}/"
+                done
+                rm -- "$capture_folder/ssp.log" "$capture_folder/acquire.log"
+                rmdir -- "$capture_folder"
+            fi
+            for afe in "${round_afes[@]}"; do
+                cp -- "${vgain_folder[$afe]}/config.txt" "${point_folder[$afe]}/config.txt"
+                write_point_checksums "${point_folder[$afe]}" "$afe" \
+                    || fail "SHA-256 verification failed: ${point_folder[$afe]}"
+            done
+            complete_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            for afe in "${round_afes[@]}"; do
+                printf 'complete_utc=%s\n' "$complete_utc" > "${point_folder[$afe]}/.scan_point_complete"
+            done
             (( completed_points += 1 ))
             show_progress
         done
 
         # Keep the next bias/VGAIN transition and pedestal calibration in the dark.
         if (( completed_points < total_points )); then
-            run_logged "$config_log" 'disable SSP outputs before the next pedestal' \
+            run_logged "$cleanup_log" 'disable SSP outputs before the next pedestal' \
                 "${ssp_run[@]}" "${ssp_run_args[@]}" --channel-mask 0 \
                 --pulse-bias-percent-270nm 0 --pulse-bias-percent-367nm 0
         fi
     done
+
+    if (( round + 1 < bias_rounds )); then
+        for afe in "${round_afes[@]}"; do
+            if (( round + 1 == afe_bias_count[afe] )); then
+                set_bias_sequence_args "$afe"
+                run_logged "$cleanup_log" "shut down completed AFE $afe bias and TRIM" \
+                    "$python_bin" "$client_dir/protobuf_vgain_bias.py" shutdown "${bias_sequence_args[@]}"
+                bias_shutdown_pending[$afe]=0
+            fi
+        done
+    fi
 done
