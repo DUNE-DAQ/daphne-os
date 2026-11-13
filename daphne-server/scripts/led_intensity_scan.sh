@@ -240,9 +240,7 @@ cleanup() {
         kill -TERM "$active_child" 2>/dev/null || true
         wait "$active_child" 2>/dev/null || true
     fi
-    if (( ssp_stop_pending )); then
-        run_shutdown_step 'stop SSP LED pulser' "${ssp_stop[@]}" || cleanup_failed=1
-    fi
+    run_shutdown_step 'stop SSP LED pulser' "${ssp_stop[@]}" || cleanup_failed=1
     if (( bias_shutdown_pending )); then
         run_shutdown_step 'shut down bias and TRIM' \
             "$python_bin" "$client_dir/protobuf_vgain_bias.py" shutdown "${bias_sequence_args[@]}" || cleanup_failed=1
@@ -378,12 +376,13 @@ bias_sequence_args=("${common_args[@]}" --afe "$afe" --state-file "$output_folde
                     "${bias_window[@]}" "${monitor_args[@]}")
 bias_apply_args=("${bias_sequence_args[@]}" --bias-control "$bias_control" --trim-map "${trim_map[@]}" "${bias_units[@]}")
 ssp_connection=(--host "$ssp_host" --port "$ssp_port")
+ssp_run=(bash "$client_dir/ssp_led_run")
 ssp_run_args=("${ssp_connection[@]}" --config "$ssp_config" --number-channels "$ssp_channels"
-              --channel-mask "$ssp_mask" --pulse-mode "$ssp_mode" --pulse-width-ticks "$ssp_width")
+              --pulse-mode "$ssp_mode" --pulse-width-ticks "$ssp_width")
 ssp_stop=(bash "$client_dir/ssp_led_stop" "${ssp_connection[@]}")
 
 # Validate the effective SSP config with the same parser used by ssp_led_run.
-"$python_bin" -B - "$client_dir" "${ssp_run_args[@]}" <<'PY'
+"$python_bin" -B - "$client_dir" "${ssp_run_args[@]}" --channel-mask "$ssp_mask" <<'PY'
 import sys
 
 sys.path.insert(0, sys.argv[1])
@@ -404,7 +403,6 @@ mkdir -p -- "$(dirname -- "$output_folder")"
 mkdir -- "$output_folder"
 
 active_child=''
-ssp_stop_pending=1
 bias_shutdown_pending=0
 cleanup_log="$output_folder/shutdown.log"
 trap 'cleanup "$?"' EXIT
@@ -418,7 +416,6 @@ scan_started=$SECONDS
 show_progress
 
 run_logged "$cleanup_log" 'stop SSP before configuring DAPHNE' "${ssp_stop[@]}"
-ssp_stop_pending=0
 
 for bias in "${bias_list[@]}"; do
     bias_folder="$output_folder/bias_$bias"
@@ -451,17 +448,14 @@ for bias in "${bias_list[@]}"; do
                 printf 'Acquiring bias=%s VGAIN=%s LED 270nm=%s 367nm=%s\n' \
                     "$bias" "$vgain" "${led_270[index]}" "${led_367[index]}" >&2
             fi
-            ssp_stop_pending=1
-            run_logged "$point_folder/ssp.log" 'start SSP LED pulser' \
-                bash "$client_dir/ssp_led_run" "${ssp_run_args[@]}" \
+            run_logged "$point_folder/ssp.log" 'configure SSP LED intensity' \
+                "${ssp_run[@]}" "${ssp_run_args[@]}" --channel-mask "$ssp_mask" \
                 --pulse-bias-percent-270nm "${led_270[index]}" --pulse-bias-percent-367nm "${led_367[index]}"
             run_logged "$point_folder/acquire.log" 'acquire waveforms' \
                 "$python_bin" "$client_dir/protobuf_acquire_list_channels.py" \
                 -ip "$ip" -port "$port" --route "$route" --timeout_ms "$timeout_ms" \
                 -foldername "$point_folder" -channel_list "${channel_list[@]}" \
                 -N "$waveform_count" -L "$waveform_length" --trigger-source "$trigger_source"
-            run_logged "$point_folder/ssp.log" 'stop SSP LED pulser' "${ssp_stop[@]}"
-            ssp_stop_pending=0
             for channel in "${channel_list[@]}"; do
                 data_file="$point_folder/channel_$channel.dat"
                 [[ -f "$data_file" ]] && (( $(wc -c < "$data_file") == 2 * waveform_count * waveform_length )) \
@@ -471,5 +465,12 @@ for bias in "${bias_list[@]}"; do
             (( completed_points += 1 ))
             show_progress
         done
+
+        # Keep the next bias/VGAIN transition and pedestal calibration in the dark.
+        if (( completed_points < total_points )); then
+            run_logged "$config_log" 'disable SSP outputs before the next pedestal' \
+                "${ssp_run[@]}" "${ssp_run_args[@]}" --channel-mask 0 \
+                --pulse-bias-percent-270nm 0 --pulse-bias-percent-367nm 0
+        fi
     done
 done
