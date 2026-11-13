@@ -391,6 +391,33 @@ def _move_offset(
         state.current_offset = next_code
 
 
+def _plateau_level(
+    state: ChannelState, offsets: Tuple[int, int, int], target: float, noise_limit: float,
+) -> Optional[float]:
+    edge, inner, outer = (state.observations[offset].pedestal for offset in offsets)
+    level = state.best(target).pedestal
+    if max(edge, inner, outer, level) - min(edge, inner, outer, level) <= noise_limit:
+        return sorted((edge, inner, outer))[1]
+
+    # The pedestal can drift at the DAC limit and still flatten just inside it.
+    # Compare the interior slope with a measured slope farther into the DAC range.
+    direction = 1 if offsets[0] == OFFSET_MIN else -1
+    span = abs(offsets[2] - offsets[0])
+    response = max(
+        ((item.pedestal - outer) / (item.offset - offsets[2])
+         for item in state.observations.values()
+         if direction * (item.offset - offsets[2]) >= span),
+        default=0.0,
+    )
+    # Require a clear change in slope and bound the excursion at the limit.
+    inner_limit = max(noise_limit, min(8.0, response * PLATEAU_PROBE_SPACING / 4))
+    if response > 0 and abs(outer - inner) <= inner_limit and (
+        abs(edge - outer) <= response * span / 2
+    ):
+        return level
+    return None
+
+
 def _resolve_plateaus(
     states: Dict[int, ChannelState],
     target: float,
@@ -452,10 +479,8 @@ def _resolve_plateaus(
             objectives[channel] = target
             continue
 
-        readings = sorted(state.observations[offset].pedestal for offset in offsets)
-        plateau = readings[1]
-        if (readings[-1] - readings[0] > noise_limit
-                or abs(state.best(target).pedestal - plateau) > noise_limit):
+        plateau = _plateau_level(state, offsets, target, noise_limit)
+        if plateau is None:
             continue
 
         fallback = plateau + margin

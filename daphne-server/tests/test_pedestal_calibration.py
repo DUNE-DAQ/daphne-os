@@ -239,6 +239,32 @@ class PedestalCalibrationTests(unittest.TestCase):
         self.assertIsNone(result.plateau_target)
         self.assertEqual(hw.offsets[0], 0)
 
+    def test_plateau_margin_accepts_a_flat_region_with_dac_edge_drift(self):
+        # Channel 3 in the ColdBox scan showed edge drift and a minimum
+        # inside the DAC range before the pedestal started rising again.
+        measurements = {
+            0: 2324.984, 32: 2379.770, 64: 2376.764, 142: 2312.976,
+            271: 2301.336, 365: 2232.868, 1406: 4819.530, 1407: 4822.238,
+        }
+
+        def transfer(offset):
+            if offset in measurements:
+                return measurements[offset]
+            if offset < 365:
+                return 2324.984 - offset * (2324.984 - 2232.868) / 365
+            return min(ADC_MAX, 2232.868 + 2.485 * (offset - 365))
+
+        hw = _SimulatedHardware({0: transfer})
+        hw.offsets[0] = 1407
+        result, = calibrate_pedestals_auto(
+            [0], 2000, "regula_falsi", 1, hw.write_offset, hw.measure,
+            report=None, initial_offsets={0: 1407}, plateau_margin=300,
+        )
+        self.assertTrue(result.converged)
+        self.assertAlmostEqual(result.plateau_target, 2532.868)
+        self.assertAlmostEqual(result.pedestal, result.plateau_target, delta=result.tolerance)
+        self.assertEqual(hw.transfer_functions[0](hw.offsets[0]), result.pedestal)
+
     def test_plateau_margin_keeps_target_discovered_by_extra_probes(self):
         hw = _SimulatedHardware({0: lambda offset: 2 * offset})
         result, = calibrate_pedestals(
