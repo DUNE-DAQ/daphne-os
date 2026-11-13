@@ -16,6 +16,10 @@ The two explicit lists are paired by index and must have equal length.
 The SSP channel mask selects which outputs fire.
 Output is a new directory with bias_*/vgain_*/led_270nm_*_367nm_* points.
 
+Scan options:
+  -y, --yes                                 Confirm the scan for unattended execution
+  -v, --verbose                             Show commands and client output live
+
 DAPHNE options:
   --ip HOST --port PORT --route ROUTE       Defaults: 127.0.0.1, 9876, mezz/0
   --timeout-ms MS                           Default: 30000
@@ -102,8 +106,80 @@ require_unique() {
     done
 }
 
+confirm_scan() {
+    local units='V' answer
+    if (( ${#bias_units[@]} )); then units='DAC'; fi
+    printf '\nLED intensity scan\n'
+    printf '  Output folder       %s\n' "$output_folder"
+    printf '  DAPHNE              %s:%s, route %s, timeout %s ms\n' "$ip" "$port" "$route" "$timeout_ms"
+    printf '  AFE / channels      %s / %s\n' "$afe" "${channel_list[*]}"
+    printf '  Bias (%s)            %s\n' "$units" "${bias_list[*]}"
+    printf '  Bias control        %s %s\n' "$bias_control" "$units"
+    printf '  TRIM (channel:DAC)  %s\n' "${trim_map[*]}"
+    if (( ${#bias_window[@]} )); then
+        printf '  Safe bias window    %s to %s mV\n' "${bias_window[1]}" "${bias_window[2]}"
+    fi
+    if (( ${#monitor_args[@]} )); then
+        printf '  Bias verification   nominal voltage and DAC readback\n'
+    fi
+    printf '  VGAIN (DAC)         %s\n' "${vgain_list[*]}"
+    printf '  Pedestal            %s ADC per bias and VGAIN\n' "$pedestal"
+    printf '  Acquisition         %s waveforms/channel, %s samples, trigger %s\n' \
+        "$waveform_count" "$waveform_length" "$trigger_source"
+    printf '  SSP                 %s:%s, config %s\n' "$ssp_host" "$ssp_port" "$ssp_config"
+    printf '  SSP outputs         %s channels, mask %s, mode %s, width %s ticks\n' \
+        "$ssp_channels" "$ssp_mask" "$ssp_mode" "$ssp_width"
+    if [[ -n "$led_range" ]]; then
+        printf '  LED range (both)    %s\n' "$led_range"
+    else
+        printf '  LED 270 nm / 367 nm %s / %s\n' "$led_270_list" "$led_367_list"
+    fi
+    printf '  Points              %s (%s bias × %s VGAIN × %s LED)\n\n' \
+        "$total_points" "${#bias_list[@]}" "${#vgain_list[@]}" "${#led_folders[@]}"
+
+    if (( assume_yes )); then
+        printf 'Confirmation accepted by --yes.\n'
+        return
+    fi
+    [[ -t 0 ]] || fail 'interactive confirmation requires a terminal; use --yes for unattended execution'
+    if read -r -p 'Continue with this scan? [y/N] ' answer; then
+        case "${answer,,}" in
+            y|yes) return ;;
+        esac
+    fi
+    printf 'Scan cancelled.\n'
+    exit 1
+}
+
+show_progress() {
+    local width=24 filled remaining elapsed eta='--:--:--' bar gap
+    filled=$((completed_points * width / total_points))
+    printf -v bar '%*s' "$filled" ''
+    printf -v gap '%*s' "$((width - filled))" ''
+    if (( completed_points > 0 )); then
+        elapsed=$((SECONDS - scan_started))
+        remaining=$(((elapsed * (total_points - completed_points) + completed_points - 1) / completed_points))
+        printf -v eta '%02d:%02d:%02d' "$((remaining / 3600))" "$((remaining / 60 % 60))" "$((remaining % 60))"
+    fi
+    if (( progress_inline )); then printf '\r' >&2; fi
+    printf '[%s%s] %3d%%  %d/%d points  ETA %s' "${bar// /#}" "${gap// /-}" \
+        "$((completed_points * 100 / total_points))" "$completed_points" "$total_points" "$eta" >&2
+    if (( progress_inline )); then
+        progress_open=1
+    else
+        printf '\n' >&2
+    fi
+}
+
+end_progress_line() {
+    if (( progress_open )); then
+        printf '\n' >&2
+        progress_open=0
+    fi
+}
+
 run_logged() {
-    local logfile="$1" label="$2" status=0
+    local logfile="$1" label="$2" status=0 log_fd log_pid=''
     shift 2
     {
         printf '\n===== %s =====\n' "$label"
@@ -111,11 +187,26 @@ run_logged() {
         printf ' %q' "$@"
         printf '\n'
     } >> "$logfile" || return 1
-    "$@" >> "$logfile" 2>&1 &
+    if (( verbose )); then
+        printf '\n===== %s =====\n' "$label" >&2
+        printf 'command:' >&2
+        printf ' %q' "$@" >&2
+        printf '\n' >&2
+        exec {log_fd}> >(tee -a -- "$logfile" >&2)
+        log_pid=$!
+    else
+        exec {log_fd}>> "$logfile" || return 1
+    fi
+    "$@" >&"$log_fd" 2>&1 &
     active_child=$!
+    exec {log_fd}>&-
     wait "$active_child" || status=$?
     active_child=''
+    if [[ -n "$log_pid" ]] && ! wait "$log_pid"; then
+        (( status != 0 )) || status=1
+    fi
     if (( status != 0 )); then
+        end_progress_line
         printf 'ERROR: %s failed (exit %s), see %s\n' "$label" "$status" "$logfile" >&2
     fi
     return "$status"
@@ -127,7 +218,14 @@ run_shutdown_step() {
     printf '\n===== %s =====\n' "$label" >&2
     # Keep attempting shutdown if the output directory is no longer writable.
     if { : >> "$cleanup_log"; } 2>/dev/null; then
-        "$@" >> "$cleanup_log" 2>&1
+        if (( verbose )); then
+            printf 'command:' >&2
+            printf ' %q' "$@" >&2
+            printf '\n' >&2
+            "$@" 2>&1 | tee -a -- "$cleanup_log" >&2
+        else
+            "$@" >> "$cleanup_log" 2>&1
+        fi
     else
         "$@"
     fi
@@ -137,6 +235,7 @@ cleanup() {
     local status="$1" cleanup_failed=0
     trap - EXIT
     trap '' INT TERM HUP
+    end_progress_line
     if [[ -n "$active_child" ]]; then
         kill -TERM "$active_child" 2>/dev/null || true
         wait "$active_child" 2>/dev/null || true
@@ -167,12 +266,15 @@ waveform_count=1000 waveform_length=1024 trigger_source=external
 ssp_host=127.0.0.1 ssp_port=55001 ssp_config="$root_dir/configs/led_run_defaults.json"
 ssp_channels=12 ssp_mask=1 ssp_mode=single ssp_width=1
 led_range='' led_270_list='' led_367_list=''
+assume_yes=0 verbose=0 progress_inline=0 progress_open=0
 declare -A axis_option=() axis_value=()
 declare -a bias_window=() bias_units=() monitor_args=()
 
 while (( $# )); do
     case "$1" in
         -h|--help) usage; exit 0 ;;
+        -y|--yes) assume_yes=1; shift; continue ;;
+        -v|--verbose) verbose=1; shift; continue ;;
         --set-as-dac) bias_units=(--set-as-dac); shift; continue ;;
         --allow-unmonitored-bias) monitor_args=(--allow-unmonitored-bias); shift; continue ;;
         --bias-safe-window-mv)
@@ -295,6 +397,9 @@ PY
 "$python_bin" "$client_dir/protobuf_vgain_bias.py" validate "${bias_apply_args[@]}" --bias "${bias_list[@]}"
 
 [[ ! -e "$output_folder" && ! -L "$output_folder" ]] || fail "output folder already exists: $output_folder"
+total_points=$((${#bias_list[@]} * ${#vgain_list[@]} * ${#led_folders[@]}))
+confirm_scan
+if (( verbose )); then export PYTHONUNBUFFERED=1; fi
 mkdir -p -- "$(dirname -- "$output_folder")"
 mkdir -- "$output_folder"
 
@@ -306,6 +411,11 @@ trap 'cleanup "$?"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
+
+if [[ -t 2 ]] && (( ! verbose )); then progress_inline=1; fi
+completed_points=0
+scan_started=$SECONDS
+show_progress
 
 run_logged "$cleanup_log" 'stop SSP before configuring DAPHNE' "${ssp_stop[@]}"
 ssp_stop_pending=0
@@ -337,8 +447,10 @@ for bias in "${bias_list[@]}"; do
         for index in "${!led_folders[@]}"; do
             point_folder="$vgain_folder/${led_folders[index]}"
             mkdir -- "$point_folder"
-            printf 'Acquiring bias=%s VGAIN=%s LED 270nm=%s 367nm=%s\n' \
-                "$bias" "$vgain" "${led_270[index]}" "${led_367[index]}"
+            if (( verbose )); then
+                printf 'Acquiring bias=%s VGAIN=%s LED 270nm=%s 367nm=%s\n' \
+                    "$bias" "$vgain" "${led_270[index]}" "${led_367[index]}" >&2
+            fi
             ssp_stop_pending=1
             run_logged "$point_folder/ssp.log" 'start SSP LED pulser' \
                 bash "$client_dir/ssp_led_run" "${ssp_run_args[@]}" \
@@ -356,6 +468,8 @@ for bias in "${bias_list[@]}"; do
                     || fail "incomplete waveform data: $data_file"
             done
             touch -- "$point_folder/.scan_point_complete"
+            (( completed_points += 1 ))
+            show_progress
         done
     done
 done
