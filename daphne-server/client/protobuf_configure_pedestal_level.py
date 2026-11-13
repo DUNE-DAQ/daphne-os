@@ -28,6 +28,7 @@ ADC_MAX = ADC_CODE_COUNT - 1
 OFFSET_MIN = 0
 OFFSET_MAX = (1 << 12) - 1
 INITIAL_OFFSET = 2275
+PLATEAU_PROBE_SPACING = 32  # DAC codes between measurements near an OFFSET limit
 PEDESTAL_WAVEFORMS = 500
 MAX_ACQUISITION_BYTES = 48 * 1024 * 1024
 
@@ -46,6 +47,7 @@ class ChannelState:
     converged: bool = False
     reason: str = ""
     iterations: int = 0
+    plateau_target: Optional[float] = None
 
     def record(
         self,
@@ -79,6 +81,7 @@ class CalibrationResult:
     reason: str
     tolerance: float = 0.0
     sensitivity: Optional[float] = None
+    plateau_target: Optional[float] = None
 
 
 def adc_code(value):
@@ -86,6 +89,15 @@ def adc_code(value):
     if not ADC_MIN <= parsed <= ADC_MAX:
         raise argparse.ArgumentTypeError(
             f"expected an integer in {ADC_MIN}..{ADC_MAX}"
+        )
+    return parsed
+
+
+def plateau_margin_code(value):
+    parsed = int(value)
+    if not -ADC_MAX <= parsed <= ADC_MAX:
+        raise argparse.ArgumentTypeError(
+            f"expected an integer in {-ADC_MAX}..{ADC_MAX}"
         )
     return parsed
 
@@ -365,6 +377,127 @@ def next_offset(
     return candidate
 
 
+def _move_offset(
+    state: ChannelState,
+    offset: int,
+    max_offset_step: int,
+    write_offset: Callable[[int, int], None],
+):
+    while state.current_offset != offset:
+        delta = offset - state.current_offset
+        step = max(-max_offset_step, min(max_offset_step, delta))
+        next_code = state.current_offset + step
+        write_offset(state.channel, next_code)
+        state.current_offset = next_code
+
+
+def _resolve_plateaus(
+    states: Dict[int, ChannelState],
+    target: float,
+    margin: int,
+    tolerances: Dict[int, float],
+    minimum_tolerance: float,
+    max_offset_step: int,
+    write_offset: Callable[[int, int], None],
+    measure_pedestals: Callable[[Sequence[int]], Dict[int, float]],
+    report: Optional[Callable[[str], None]],
+    auto: bool = False,
+):
+    """Check the target-facing DAC limit and tune any confirmed fallback targets."""
+    probes = {}
+    for channel, state in states.items():
+        if state.converged or _bracket(state, target) is not None:
+            continue
+        low_limit = state.best(target).pedestal > target
+        limit = OFFSET_MIN if low_limit else OFFSET_MAX
+        step = PLATEAU_PROBE_SPACING if low_limit else -PLATEAU_PROBE_SPACING
+        probes[channel] = (limit, limit + step, limit + 2 * step)
+
+    def measure_offsets(offsets):
+        if not offsets:
+            return
+        selected = list(offsets)
+        for channel, offset in offsets.items():
+            _move_offset(states[channel], offset, max_offset_step, write_offset)
+        measured = measure_pedestals(selected)
+        if set(measured) != set(selected):
+            raise RuntimeError("plateau acquisition returned a different channel set")
+        for channel, offset in offsets.items():
+            pedestal = float(measured[channel])
+            if not ADC_MIN <= pedestal <= ADC_MAX:
+                raise RuntimeError(f"channel {channel} returned invalid 14-bit pedestal {pedestal}")
+            state = states[channel]
+            state.iterations += 1
+            state.observations[offset] = Observation(offset, pedestal)
+            if report is not None:
+                report(
+                    f"phase=plateau channel={channel:02d} "
+                    f"offset={offset:04d} pedestal={pedestal:.3f}"
+                )
+
+    for index in range(3):
+        measure_offsets({
+            channel: offsets[index] for channel, offsets in probes.items()
+            if offsets[index] not in states[channel].observations
+        })
+
+    objectives = {}
+    opposite_limits = {}
+    noise_limit = min(1.0, minimum_tolerance)
+    for channel, offsets in probes.items():
+        state = states[channel]
+        if _accept_best(state, target, tolerances[channel], "within tolerance at DAC limit"):
+            continue
+        if _bracket(state, target) is not None:
+            objectives[channel] = target
+            continue
+
+        readings = sorted(state.observations[offset].pedestal for offset in offsets)
+        plateau = readings[1]
+        if (readings[-1] - readings[0] > noise_limit
+                or abs(state.best(target).pedestal - plateau) > noise_limit):
+            continue
+
+        fallback = plateau + margin
+        low_plateau = offsets[0] == OFFSET_MIN
+        moves_past_plateau = margin < 0 if low_plateau else margin > 0
+        if not ADC_MIN <= fallback <= ADC_MAX or moves_past_plateau:
+            state.reason = f"plateau {plateau:.3f}: target {fallback:.3f} outside reachable range"
+            continue
+
+        state.plateau_target = fallback
+        tolerances[channel] = minimum_tolerance
+        objectives[channel] = fallback
+        if report is not None:
+            report(f"[PLATEAU] channel={channel:02d} pedestal={plateau:.3f} target={fallback:.3f}")
+        opposite = OFFSET_MAX if low_plateau else OFFSET_MIN
+        if (abs(state.best(fallback).pedestal - fallback) > tolerances[channel]
+                and _bracket(state, fallback) is None
+                and opposite not in state.observations):
+            opposite_limits[channel] = opposite
+
+    measure_offsets(opposite_limits)
+    while objectives:
+        candidates = {}
+        for channel, objective in objectives.items():
+            state = states[channel]
+            bracket = _bracket(state, objective)
+            if auto and bracket is not None and bracket[1].offset - bracket[0].offset == 1:
+                tolerances[channel] = max(
+                    minimum_tolerance, (bracket[1].pedestal - bracket[0].pedestal) / 2.0
+                )
+            fallback = state.plateau_target is not None
+            reason = "within plateau target tolerance" if fallback else "within target tolerance"
+            if _accept_best(state, objective, tolerances[channel], reason):
+                continue
+            if bracket is not None and bracket[1].offset - bracket[0].offset > 1:
+                candidates[channel] = next_offset(state, objective, "bisection", OFFSET_MAX)
+            else:
+                state.reason = "plateau target not reached" if fallback else "target not reached"
+        measure_offsets(candidates)
+        objectives = {channel: objectives[channel] for channel in candidates}
+
+
 def calibrate_pedestals(
     channels: Sequence[int],
     target: float,
@@ -376,6 +509,7 @@ def calibrate_pedestals(
     measure_pedestals: Callable[[Sequence[int]], Dict[int, float]],
     report: Optional[Callable[[str], None]] = print,
     initial_offsets: Optional[Dict[int, int]] = None,
+    plateau_margin: Optional[int] = None,
 ) -> List[CalibrationResult]:
     """Calibrate selected channels concurrently and leave each at its best offset."""
     if method not in ("bisection", "regula_falsi"):
@@ -453,15 +587,19 @@ def calibrate_pedestals(
     for channel in active:
         states[channel].reason = "maximum iterations reached"
 
+    tolerances = dict.fromkeys(channels, tolerance)
+    if plateau_margin is not None:
+        _resolve_plateaus(
+            states, target, plateau_margin, tolerances, tolerance, max_offset_step,
+            write_offset, measure_pedestals, report,
+        )
+
     results = []
     for channel in channels:
         state = states[channel]
-        best = state.best(target)
-        while state.current_offset != best.offset:
-            delta = best.offset - state.current_offset
-            step = max(-max_offset_step, min(max_offset_step, delta))
-            state.current_offset += step
-            write_offset(channel, state.current_offset)
+        objective = target if state.plateau_target is None else state.plateau_target
+        best = state.best(objective)
+        _move_offset(state, best.offset, max_offset_step, write_offset)
         results.append(
             CalibrationResult(
                 channel=channel,
@@ -470,7 +608,8 @@ def calibrate_pedestals(
                 converged=state.converged,
                 iterations=state.iterations,
                 reason=state.reason,
-                tolerance=tolerance,
+                tolerance=tolerances[channel],
+                plateau_target=state.plateau_target,
             )
         )
     return results
@@ -520,6 +659,7 @@ def calibrate_pedestals_auto(
     measure_pedestals: Callable[[Sequence[int]], Dict[int, float]],
     report: Optional[Callable[[str], None]] = print,
     initial_offsets: Optional[Dict[int, int]] = None,
+    plateau_margin: Optional[int] = None,
 ) -> List[CalibrationResult]:
     """Measure channel sensitivity, then tune with fully automatic bounds."""
     if method not in ("bisection", "regula_falsi"):
@@ -749,10 +889,17 @@ def calibrate_pedestals_auto(
     for channel in active:
         states[channel].reason = "automatic search limit reached"
 
+    if plateau_margin is not None:
+        _resolve_plateaus(
+            states, target, plateau_margin, tolerances, minimum_tolerance, OFFSET_MAX,
+            write_offset, measure_pedestals, report, auto=True,
+        )
+
     results = []
     for channel in channels:
         state = states[channel]
-        best = state.best(target)
+        objective = target if state.plateau_target is None else state.plateau_target
+        best = state.best(objective)
         if state.current_offset != best.offset:
             write_offset(channel, best.offset)
             state.current_offset = best.offset
@@ -766,6 +913,7 @@ def calibrate_pedestals_auto(
                 reason=state.reason,
                 tolerance=tolerances[channel],
                 sensitivity=sensitivities.get(channel),
+                plateau_target=state.plateau_target,
             )
         )
     return results
@@ -1007,6 +1155,14 @@ def build_parser():
         default="regula_falsi",
     )
     parser.add_argument(
+        "--plateau-margin",
+        type=plateau_margin_code,
+        metavar="ADC_COUNTS",
+        help=("If the requested target is unreachable and a pedestal plateau "
+              "is confirmed, tune to the plateau plus this signed ADC margin. "
+              "Plateau checks may take additional measurements."),
+    )
+    parser.add_argument(
         "--auto",
         action="store_true",
         help=(
@@ -1163,6 +1319,7 @@ def main(argv=None):
                     write_offset=write_offset,
                     measure_pedestals=measure_pedestals,
                     initial_offsets=initial_offsets,
+                    plateau_margin=args.plateau_margin,
                 )
             else:
                 results = calibrate_pedestals(
@@ -1175,6 +1332,7 @@ def main(argv=None):
                     write_offset=write_offset,
                     measure_pedestals=measure_pedestals,
                     initial_offsets=initial_offsets,
+                    plateau_margin=args.plateau_margin,
                 )
 
             signals.check()
@@ -1196,6 +1354,9 @@ def main(argv=None):
     failed = False
     for result in results:
         status = "PASS" if result.converged else "FAIL"
+        plateau_details = ""
+        if result.plateau_target is not None:
+            plateau_details = f" plateau_target={result.plateau_target:.3f}"
         auto_details = ""
         if args.auto:
             sensitivity = (
@@ -1208,7 +1369,7 @@ def main(argv=None):
             )
         print(
             f"[{status}] channel {result.channel:02d} offset={result.offset:04d} "
-            f"pedestal={result.pedestal:.3f} target={args.target_pedestal} "
+            f"pedestal={result.pedestal:.3f} target={args.target_pedestal}{plateau_details} "
             f"({result.reason}){auto_details}"
         )
         failed = failed or not result.converged

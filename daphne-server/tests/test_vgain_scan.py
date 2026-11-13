@@ -154,6 +154,19 @@ class VgainScanTests(unittest.TestCase):
             self.assertEqual(call[window_index + 1:window_index + 3], ["10000", "30000"])
         self.assertEqual(calls[-1][1], "shutdown")
 
+    def test_signed_plateau_margin_reaches_scan_points_and_survives_resume(self):
+        failed = self.run_scan("--plateau-margin", "-200", env=dict(self.env, SCAN_TEST_FAIL="1"))
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(self.metadata()["plateau_margin"], "-200")
+        self.assert_ok(self.run_scan(resume=True))
+        calls = self.calls("protobuf_configure_pedestal_level.py")
+        points = [row for row in calls if "--plateau-margin" in row]
+        self.assertEqual(len(points), 3)
+        for row in points:
+            self.assertEqual(row[row.index("--plateau-margin") + 1], "-200")
+        self.assertEqual(len(calls) - len(points), 2)
+        self.assertNotIn("--plateau-margin", calls[-1])
+
     def test_rejects_invalid_trim_before_starting_any_client(self):
         for trim, error in (("[100]", "one value per selected channel"),
                             ("[100,,200]", "invalid integer list"),

@@ -40,6 +40,8 @@ Configuration options:
                            without it they are interpreted as volts. TRIM and
                            VGAIN are always DAC codes.
   -pedestal VALUE          Target pedestal ADC code (default: 8192)
+  --plateau-margin ADC     Signed ADC margin added to a confirmed pedestal
+                           plateau when the scan target is unreachable
                            Tuning uses regula_falsi, --auto, and the current
                            OFFSET as its starting point.
 
@@ -436,6 +438,9 @@ write_scan_metadata() {
             echo "bias_safe_max_mv=$bias_safe_max_mv"
         fi
         echo "pedestal=$pedestal"
+        if [[ -n "$plateau_margin" ]]; then
+            echo "plateau_margin=$plateau_margin"
+        fi
         echo "ip_addr=$ip_addr"
         echo "port=$port"
         echo "waveform_count=$N"
@@ -497,6 +502,7 @@ load_scan_metadata() {
             bias_safe_min_mv) saved_bias_min_mv="$value" ;;
             bias_safe_max_mv) saved_bias_max_mv="$value" ;;
             pedestal) pedestal="$value" ;;
+            plateau_margin) plateau_margin="$value" ;;
             ip_addr) ip_addr="$value" ;;
             port) port="$value" ;;
             waveform_count) N="$value" ;;
@@ -654,6 +660,9 @@ confirm_scan_parameters() {
     fi
     echo "VGAIN values (DAC):   ${vgain_array[*]}"
     echo "Pedestal:             $pedestal ADC (regula_falsi, auto)"
+    if [[ -n "$plateau_margin" ]]; then
+        echo "Plateau margin:       $plateau_margin ADC"
+    fi
     echo "Waveforms / length:   $N / $L"
     echo "Connection:           $ip_addr:$port, route=$route, timeout=${timeout_ms}ms"
     echo "Trigger source:       $trigger_source"
@@ -774,7 +783,7 @@ scan_main() {
     local trigger_source_arg="" route="mezz/0" timeout_ms="30000"
     local backend=spybuffer capture_mode=persistent force_acq=false pretrigger=0
     local trigger_timeout_ms=10000 job_timeout_ms=0 pressure_timeout_ms=0 dma_option_seen=false
-    local pedestal="8192" set_as_dac=false legacy_software_trigger=false
+    local pedestal="8192" plateau_margin="" set_as_dac=false legacy_software_trigger=false
     local resume_mode=false assume_yes=false config_option_seen=false
     local metadata_file="" metadata_afe="" scan_created_utc=""
     local scan_status_text="in_progress" scan_already_complete=false restore_only_mode=false
@@ -835,6 +844,8 @@ scan_main() {
                 set_as_dac=true; config_option_seen=true; shift ;;
             -pedestal|--pedestal|-target_pedestal|--target-pedestal)
                 require_value "$@" || return 1; pedestal="$2"; config_option_seen=true; shift 2 ;;
+            --plateau-margin)
+                require_value "$@" || return 1; plateau_margin="$2"; config_option_seen=true; shift 2 ;;
             -ip|--ip)
                 require_value "$@" || return 1; ip_addr="$2"; config_option_seen=true; shift 2 ;;
             -port|--port)
@@ -909,6 +920,12 @@ scan_main() {
     validate_positive_integer "$timeout_ms" "timeout" || return 1
     if [[ ! "$pedestal" =~ ^[0-9]+$ ]] || (( pedestal < 0 || pedestal > 16383 )); then
         fail "pedestal must be an integer ADC code in 0..16383 (got '$pedestal')"
+        return 1
+    fi
+    local margin_magnitude="${plateau_margin#[+-]}"
+    if [[ -n "$plateau_margin" ]] &&
+        { [[ ! "$margin_magnitude" =~ ^[0-9]{1,5}$ ]] || (( 10#$margin_magnitude > 16383 )); }; then
+        fail "plateau margin must be an integer in -16383..16383 (got '$plateau_margin')"
         return 1
     fi
 
@@ -1260,6 +1277,9 @@ scan_main() {
                 echo "vgain_requested=$vgain"
                 echo "vgain_units=DAC"
                 echo "pedestal_target=$pedestal"
+                if [[ -n "$plateau_margin" ]]; then
+                    echo "pedestal_plateau_margin=$plateau_margin"
+                fi
                 echo "pedestal_method=regula_falsi"
                 echo "pedestal_mode=auto"
                 echo "pedestal_initial_offset=current"
@@ -1290,6 +1310,9 @@ scan_main() {
                 "$python_bin" "$client_dir/protobuf_configure_vgain.py" "${vgain_args[@]}" || return 1
 
             pedestal_args=("${common_connection_args[@]}" "${pedestal_backend_args[@]}" -channel "${channel_list[@]}" --use-current-offset -target_pedestal "$pedestal" -method regula_falsi --auto -L "$L")
+            if [[ -n "$plateau_margin" ]]; then
+                pedestal_args+=(--plateau-margin "$plateau_margin")
+            fi
             run_logged "$config_file" "configure pedestal OFFSETs" \
                 "$python_bin" "$client_dir/protobuf_configure_pedestal_level.py" "${pedestal_args[@]}" || return 1
 

@@ -189,6 +189,66 @@ class _StatefulOffsetClient:
 
 
 class PedestalCalibrationTests(unittest.TestCase):
+    def test_plateau_margin_preserves_original_target_on_reachable_channels(self):
+        for calibrate, settings in (
+            (calibrate_pedestals, dict(max_iterations=16, max_offset_step=128, tolerance=1)),
+            (calibrate_pedestals_auto, dict(minimum_tolerance=1)),
+        ):
+            with self.subTest(calibrate=calibrate.__name__):
+                hw = _SimulatedHardware({
+                    0: lambda offset: max(800, 2 * (offset - 500)),
+                    1: lambda offset: 2 * offset,
+                })
+                initial_offsets = {0: 100, 1: 100}
+                hw.offsets.update(initial_offsets)
+                fallback, original = calibrate(
+                    [0, 1], 500, "regula_falsi", plateau_margin=200,
+                    write_offset=hw.write_offset, measure_pedestals=hw.measure,
+                    initial_offsets=initial_offsets, report=None, **settings,
+                )
+                self.assertTrue(fallback.converged)
+                self.assertEqual(fallback.plateau_target, 1000)
+                self.assertEqual(fallback.pedestal, 1000)
+                self.assertEqual(hw.offsets[0], 1000)
+                self.assertTrue(original.converged)
+                self.assertIsNone(original.plateau_target)
+                self.assertEqual(original.pedestal, 500)
+                self.assertEqual(hw.offsets[1], 250)
+
+    def test_signed_margin_can_tune_below_an_upper_plateau(self):
+        for margin, expected in ((-200, 6800), (200, None)):
+            with self.subTest(margin=margin):
+                hw = _SimulatedHardware({0: lambda offset: min(7000, 2 * offset)})
+                result, = calibrate_pedestals_auto(
+                    [0], 8192, "regula_falsi", 1, hw.write_offset, hw.measure,
+                    report=None, plateau_margin=margin,
+                )
+                self.assertEqual(result.converged, expected is not None)
+                self.assertEqual(result.plateau_target, expected)
+                if expected is not None:
+                    self.assertEqual(result.pedestal, expected)
+                    self.assertEqual(hw.offsets[0], 3400)
+
+    def test_plateau_margin_does_not_fall_back_on_sloped_response(self):
+        hw = _SimulatedHardware({0: lambda offset: 800 + 2 * offset})
+        result, = calibrate_pedestals_auto(
+            [0], 500, "regula_falsi", 1, hw.write_offset, hw.measure,
+            report=None, plateau_margin=200,
+        )
+        self.assertFalse(result.converged)
+        self.assertIsNone(result.plateau_target)
+        self.assertEqual(hw.offsets[0], 0)
+
+    def test_plateau_margin_keeps_target_discovered_by_extra_probes(self):
+        hw = _SimulatedHardware({0: lambda offset: 2 * offset})
+        result, = calibrate_pedestals(
+            [0], 500, "regula_falsi", 1, 512, 1, hw.write_offset, hw.measure,
+            report=None, plateau_margin=200,
+        )
+        self.assertTrue(result.converged)
+        self.assertIsNone(result.plateau_target)
+        self.assertEqual(result.pedestal, 500)
+
     def test_dma_flags_are_explicit_and_force_requires_dma(self):
         base = ["-target_pedestal", "8192", "-L", "2048"]
         args = build_parser().parse_args(base)
